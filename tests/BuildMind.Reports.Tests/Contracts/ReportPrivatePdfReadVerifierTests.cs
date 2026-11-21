@@ -134,6 +134,61 @@ public sealed class ReportPrivatePdfReadVerifierTests
         Assert.Equal(1, stream.Reads);
     }
 
+    [Theory]
+    [InlineData("short")]
+    [InlineData("trailing")]
+    [InlineData("corrupt")]
+    public async Task UnsuccessfulPrivateReadZeroesTemporaryBuffer(string failure)
+    {
+        var inputBytes = failure switch
+        {
+            "short" => Pdf[..^1],
+            "trailing" => Pdf.Concat(new byte[] { 0x42 }).ToArray(),
+            _ => Pdf.Select((value, index) => index == Pdf.Length - 1
+                ? (byte)(value ^ 1) : value).ToArray()
+        };
+        using var stream = new CapturingStream(inputBytes);
+
+        var result = await ReportPrivatePdfReadVerifier.ReadVerifiedAsync(
+            stream, Metadata(Pdf), Pdf.Length);
+
+        Assert.Null(result);
+        Assert.True(stream.Captured.Length > 0);
+        Assert.All(stream.Captured.ToArray(), value => Assert.Equal((byte)0, value));
+    }
+
+    [Fact]
+    public async Task MidReadCancellationZeroesTemporaryBuffer()
+    {
+        using var cancellation = new CancellationTokenSource();
+        using var stream = new CapturingStream(Pdf, cancellation.Cancel);
+
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(() =>
+            ReportPrivatePdfReadVerifier.ReadVerifiedAsync(
+                stream, Metadata(Pdf), Pdf.Length, cancellation.Token));
+
+        Assert.True(stream.Captured.Length > 0);
+        Assert.All(stream.Captured.ToArray(), value => Assert.Equal((byte)0, value));
+    }
+
+    private sealed class CapturingStream(byte[] bytes, Action? afterFirstRead = null) : MemoryStream(bytes)
+    {
+        public Memory<byte> Captured { get; private set; }
+        private int reads;
+
+        public override async ValueTask<int> ReadAsync(
+            Memory<byte> buffer, CancellationToken cancellationToken = default)
+        {
+            if (reads == 0)
+                Captured = buffer;
+            var count = await base.ReadAsync(
+                buffer[..Math.Min(buffer.Length, 3)], cancellationToken).ConfigureAwait(false);
+            if (++reads == 1)
+                afterFirstRead?.Invoke();
+            return count;
+        }
+    }
+
     private sealed class ChunkedStream(byte[] bytes, Action? afterFirstRead = null) : MemoryStream(bytes)
     {
         public int Reads { get; private set; }

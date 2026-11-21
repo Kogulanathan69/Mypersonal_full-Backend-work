@@ -1,3 +1,4 @@
+using System.Security.Cryptography;
 using BuildMind.Domain.ValueObjects;
 
 namespace BuildMind.Application.Features.Reports.Services;
@@ -34,26 +35,37 @@ public static class ReportPrivatePdfReadVerifier
 
         var expectedLength = checked((int)metadata.ByteLength);
         var bytes = new byte[expectedLength];
-        var received = 0;
-        while (received < expectedLength)
+        var verified = false;
+        try
         {
-            cancellationToken.ThrowIfCancellationRequested();
-            var count = await input.ReadAsync(bytes.AsMemory(received), cancellationToken)
+            var received = 0;
+            while (received < expectedLength)
+            {
+                cancellationToken.ThrowIfCancellationRequested();
+                var count = await input.ReadAsync(bytes.AsMemory(received), cancellationToken)
+                    .ConfigureAwait(false);
+                if (count == 0)
+                    return null;
+                received += count;
+            }
+
+            // Reject trailing bytes, including when the metadata hash covers only a prefix.
+            var tail = new byte[1];
+            var trailing = await input.ReadAsync(tail.AsMemory(), cancellationToken)
                 .ConfigureAwait(false);
-            if (count == 0)
+            cancellationToken.ThrowIfCancellationRequested();
+            if (trailing != 0 || !ReportArtifactIntegrity.Matches(metadata, bytes, maximumBytes))
                 return null;
-            received += count;
+
+            verified = true;
+            return bytes;
         }
-
-        // Reject trailing bytes, including when the metadata hash covers only a prefix.
-        var tail = new byte[1];
-        var trailing = await input.ReadAsync(tail.AsMemory(), cancellationToken)
-            .ConfigureAwait(false);
-        cancellationToken.ThrowIfCancellationRequested();
-        if (trailing != 0)
-            return null;
-
-        return ReportArtifactIntegrity.Matches(metadata, bytes, maximumBytes)
-            ? bytes : null;
+        finally
+        {
+            // Best-effort zeroing of this temporary buffer on all unsuccessful exits.
+            // This does not erase copies held by the private store or runtime.
+            if (!verified)
+                CryptographicOperations.ZeroMemory(bytes);
+        }
     }
 }
