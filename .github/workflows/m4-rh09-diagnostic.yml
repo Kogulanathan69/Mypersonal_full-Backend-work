@@ -1,0 +1,57 @@
+name: M4 bounded RH-09 diagnostic
+on: workflow_dispatch
+permissions:
+  contents: read
+concurrency:
+  group: m4-rh09-diagnostic
+  cancel-in-progress: false
+jobs:
+  rh09:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    env:
+      TARGET_SHA: 851d6683e08414cc811076fcaa0fb19107f52859
+      MYSQL_IMAGE: mysql:8.4@sha256:a81d043930e51745522bd5c430961cf8286f0a23f0a9a2a6e0108f7ea71b0902
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          persist-credentials: false
+          path: control
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          persist-credentials: false
+          ref: ${{ env.TARGET_SHA }}
+          path: source
+      - uses: actions/setup-dotnet@67a3573c9a986a3f9c594539f4ab511d57bb3ce9
+        with:
+          dotnet-version: '10.0.x'
+      - name: Verify source and build test project
+        shell: bash
+        run: |
+          test "$(git -C source rev-parse HEAD)" = "$TARGET_SHA"
+          mkdir -p "$RUNNER_TEMP/rh09-public"
+          {
+            printf 'source_sha=%s\n' "$TARGET_SHA"
+            printf 'source_tree=%s\n' "$(git -C source rev-parse 'HEAD^{tree}')"
+            printf 'dotnet_sdk=%s\n' "$(dotnet --version)"
+          } | tee "$RUNNER_TEMP/rh09-public/source.txt"
+          dotnet build source/tests/BuildMind.Persistence.IntegrationTests/BuildMind.Persistence.IntegrationTests.csproj --configuration Release
+      - name: Probe TLS and run RH-09 only
+        shell: bash
+        run: python3 control/.github/scripts/m4-rh09-diagnostic.py run
+      - name: Verify teardown independently
+        if: always()
+        shell: bash
+        run: python3 control/.github/scripts/m4-rh09-diagnostic.py cleanup
+      - name: Upload allowlisted evidence
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: m4-rh09-sanitized
+          path: |
+            ${{ runner.temp }}/rh09-public/source.txt
+            ${{ runner.temp }}/rh09-public/tls.json
+            ${{ runner.temp }}/rh09-public/test.json
+            ${{ runner.temp }}/rh09-public/rh09.sanitized.trx
+            ${{ runner.temp }}/rh09-public/cleanup.json
+          retention-days: 7
