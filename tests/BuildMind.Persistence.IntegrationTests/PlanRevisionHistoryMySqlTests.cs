@@ -1,23 +1,152 @@
 using System.Data.Common;
+using System.Net;
+using System.Net.Http.Headers;
+using System.Security.Cryptography;
 using System.Text.Json;
+using BuildMind.API.Endpoints.PlanEditor;
+using BuildMind.API.Errors;
+using BuildMind.API.Security;
 using BuildMind.Application.Abstractions;
+using BuildMind.Application.Features.Auth.Abstractions;
 using BuildMind.Application.Features.PlanEditor.Contracts;
 using BuildMind.Application.Features.PlanEditor.Integration;
 using BuildMind.Application.Features.PlanEditor.Versioning;
+using BuildMind.Domain.Entities;
+using BuildMind.Infrastructure.Identity;
 using BuildMind.Infrastructure.Persistence;
 using BuildMind.Infrastructure.Persistence.Mapping;
 using BuildMind.Infrastructure.Persistence.Records.PlanEditor;
 using BuildMind.Infrastructure.Persistence.Repositories.PlanEditor;
 using BuildMind.Infrastructure.Persistence.Repositories.Projects;
+using BuildMind.Infrastructure.Persistence.Repositories.Identity;
+using BuildMind.Infrastructure.Persistence.Transactions;
 using BuildMind.Persistence.IntegrationTests.Support;
+using Microsoft.AspNetCore.Authentication.JwtBearer;
+using Microsoft.AspNetCore.Builder;
+using Microsoft.AspNetCore.Hosting;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Diagnostics;
+using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Logging;
 using MySql.Data.MySqlClient;
 
 namespace BuildMind.Persistence.IntegrationTests;
 
 public sealed class PlanRevisionHistoryMySqlTests
 {
+    [Fact]
+    public async Task Isolated_http_reads_use_real_jwt_session_and_mysql_ports()
+    {
+        await using var database = await DisposableMySqlDatabase.CreateAsync();
+        await using var writer = BuildMindMigrationTests.CreateContext(database.ConnectionString);
+        await writer.Database.MigrateAsync();
+        var (plan, owner) = await SeedPlanAsync(writer);
+        var revision = await AppendAsync(writer, plan, owner, 1);
+        var outsider = Guid.NewGuid();
+        await writer.Database.ExecuteSqlInterpolatedAsync($"""
+            INSERT INTO users (id, email, normalized_email, password_hash, is_active, created_at_utc)
+            VALUES ({outsider}, 'other@example.invalid', 'OTHER@EXAMPLE.INVALID', 'synthetic', 1, UTC_TIMESTAMP(6));
+            """);
+
+        var jwt = new JwtOptions
+        {
+            Issuer = "revision-history-isolated", Audience = "revision-history-isolated",
+            SigningKey = Convert.ToBase64String(RandomNumberGenerator.GetBytes(32))
+        };
+        var builder = WebApplication.CreateBuilder(new WebApplicationOptions { EnvironmentName = "Testing" });
+        builder.WebHost.UseUrls("http://127.0.0.1:0");
+        builder.Logging.ClearProviders();
+        builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme).AddJwtBearer(options =>
+        {
+            options.MapInboundClaims = false;
+            options.IncludeErrorDetails = false;
+            options.TokenValidationParameters = JwtValidationParametersFactory.Create(jwt);
+            options.Events = new JwtBearerEvents
+            {
+                OnTokenValidated = context =>
+                {
+                    if (!JwtSubjectValidator.IsValid(context.Principal))
+                        context.Fail("Invalid authentication identity.");
+                    return Task.CompletedTask;
+                }
+            };
+        });
+        builder.Services.AddAuthorization();
+        builder.Services.AddProblemDetails(options => options.CustomizeProblemDetails = ProblemDetailsDefaults.Apply);
+        builder.Services.AddHttpContextAccessor();
+        builder.Services.AddScoped<ICurrentUser, HttpContextCurrentUser>();
+        builder.Services.AddScoped(_ => BuildMindMigrationTests.CreateContext(database.ConnectionString));
+        builder.Services.AddScoped<IDbTransactionSource, DbContextTransactionSource>();
+        builder.Services.AddScoped<TransactionRunner>();
+        builder.Services.AddScoped<IUserSecurityStateReader, UserSessionStore>();
+        builder.Services.AddScoped<IProjectAuthorizationPort, ProjectAuthorizationReader>();
+        builder.Services.AddScoped<IPlanRevisionHistoryQueryPort, MySqlPlanRevisionHistoryQuery>();
+        builder.Services.AddScoped<IPlanRevisionHistoryService, PlanRevisionHistoryService>();
+
+        await using var app = builder.Build();
+        app.UseStatusCodePages();
+        app.UseAuthentication();
+        app.UseMiddleware<ActiveSessionMiddleware>();
+        app.UseAuthorization();
+        PlanEditorEndpointModule.MapRevisionHistoryEndpoints(app.MapGroup("/api/v1"));
+        await app.StartAsync();
+        using var client = new HttpClient { BaseAddress = new Uri(app.Urls.Single()) };
+        var planRoute = $"/api/v1/projects/{plan.ProjectId}/plans/{plan.PlanId}";
+        using var anonymous = await client.GetAsync(planRoute + "/versions");
+        Assert.Equal(HttpStatusCode.Unauthorized, anonymous.StatusCode);
+
+        Authenticate(owner);
+        using var page = await client.GetAsync(planRoute + "/versions?pageSize=1");
+        Assert.Equal(HttpStatusCode.OK, page.StatusCode);
+        Assert.DoesNotContain("\"geometry\":", await page.Content.ReadAsStringAsync());
+        using var exact = await client.GetAsync(planRoute + $"/versions/{revision.RevisionId}");
+        Assert.Equal(HttpStatusCode.OK, exact.StatusCode);
+        Assert.Contains("\"geometry\":", await exact.Content.ReadAsStringAsync());
+        using var inactive = await client.PostAsync(planRoute + "/candidates", null);
+        Assert.Equal(HttpStatusCode.NotFound, inactive.StatusCode);
+
+        Authenticate(outsider);
+        using var denied = await client.GetAsync(planRoute + $"/versions/{revision.RevisionId}");
+        Assert.Equal(HttpStatusCode.NotFound, denied.StatusCode);
+        Assert.DoesNotContain(revision.GeometryHash, await denied.Content.ReadAsStringAsync());
+
+        Authenticate(owner);
+        await writer.Database.ExecuteSqlInterpolatedAsync($"UPDATE users SET token_version = 2 WHERE id = {owner}");
+        using var revoked = await client.GetAsync(planRoute + "/versions");
+        Assert.Equal(HttpStatusCode.Unauthorized, revoked.StatusCode);
+
+        void Authenticate(Guid id)
+        {
+            var user = User.Restore(id, "token@example.invalid", "TOKEN@EXAMPLE.INVALID", "synthetic",
+                null, null, true, DateTimeOffset.UtcNow);
+            var issuer = new JwtAccessTokenIssuer(jwt, TimeProvider.System);
+            client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", issuer.Issue(user).AccessToken);
+        }
+    }
+
+    [Fact]
+    public async Task Project_lock_requires_transaction_and_checks_current_owner_and_version()
+    {
+        await using var database = await DisposableMySqlDatabase.CreateAsync();
+        await using var context = BuildMindMigrationTests.CreateContext(database.ConnectionString);
+        await context.Database.MigrateAsync();
+        var (plan, owner) = await SeedPlanAsync(context);
+        var gate = new ProjectMutationAuthorization(context);
+        await Assert.ThrowsAsync<InvalidOperationException>(() => gate.LockAndCheckAsync(plan.ProjectId, owner, 1, default));
+        await using var transaction = await context.Database.BeginTransactionAsync();
+        Assert.True(await gate.LockAndCheckAsync(plan.ProjectId, owner, 1, default));
+        Assert.False(await gate.LockAndCheckAsync(plan.ProjectId, Guid.NewGuid(), 1, default));
+        Assert.False(await gate.LockAndCheckAsync(plan.ProjectId, owner, 2, default));
+        Assert.False(await gate.LockAndCheckAsync(Guid.NewGuid(), owner, 1, default));
+        await Assert.ThrowsAsync<InvalidOperationException>(() => new ProjectAuthorizationReader(context)
+            .AuthorizeOwnerAsync(plan.ProjectId, owner, default));
+        Assert.Equal(2, await new ProjectAuthorizationVersionStore(context).TryIncrementAsync(plan.ProjectId, 1, default));
+        Assert.True(await gate.LockAndCheckAsync(plan.ProjectId, owner, 2, default));
+        await transaction.RollbackAsync();
+        var result = await new ProjectAuthorizationReader(context).AuthorizeOwnerAsync(plan.ProjectId, owner, default);
+        Assert.Equal(1, result.Snapshot!.Version.Value);
+    }
+
     [Fact]
     public async Task History_preserves_scope_payload_and_original_head_across_an_append()
     {

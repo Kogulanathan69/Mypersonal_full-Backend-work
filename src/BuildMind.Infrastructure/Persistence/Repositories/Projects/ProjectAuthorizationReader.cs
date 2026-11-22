@@ -20,6 +20,10 @@ internal sealed class ProjectAuthorizationReader(BuildMindDbContext context) : I
         if (projectId == Guid.Empty || authenticatedActorId == Guid.Empty)
             return new(ProjectAuthorizationStatus.Denied);
 
+        // A reused consistent snapshot could hide a committed revocation from the final history read.
+        if (context.Database.CurrentTransaction is not null || System.Transactions.Transaction.Current is not null)
+            throw new InvalidOperationException("Revision History authorization requires a fresh database read.");
+
         var version = await context.Set<ProjectRecord>().AsNoTracking()
             .Where(project => project.Id == projectId && project.OwnerId == authenticatedActorId)
             .Select(project => (long?)project.AuthorizationVersion)

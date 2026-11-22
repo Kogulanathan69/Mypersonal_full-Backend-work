@@ -54,6 +54,8 @@ public sealed class RevisionHistoryIntegrationHostTests
         var listBody = await list.Content.ReadAsStringAsync();
         using var exact = await client.GetAsync(RevisionRoute(revisions[0].RevisionId));
         var exactBody = await exact.Content.ReadAsStringAsync();
+        using var candidate = await client.PostAsync(HistoryRoute[..^"versions".Length] + "candidates", null);
+        Assert.Equal(HttpStatusCode.NotFound, candidate.StatusCode);
 
         Assert.Equal(HttpStatusCode.OK, list.StatusCode);
         Assert.Equal(HttpStatusCode.OK, exact.StatusCode);
@@ -323,7 +325,7 @@ public sealed class RevisionHistoryIntegrationHostTests
         app.UseStatusCodePages();
         app.UseAuthentication();
         app.UseAuthorization();
-        new PlanEditorEndpointModule().MapEndpoints(app.MapGroup("/api/v1"));
+        PlanEditorEndpointModule.MapRevisionHistoryEndpoints(app.MapGroup("/api/v1"));
         await app.StartAsync();
         return app;
     }

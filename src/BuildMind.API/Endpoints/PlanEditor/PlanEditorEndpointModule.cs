@@ -30,21 +30,23 @@ public sealed class PlanEditorEndpointModule : IApiEndpointModule
     {
         ArgumentNullException.ThrowIfNull(apiV1);
 
-        var plans = apiV1
-            .MapGroup("/projects/{projectId}/plans/{planId}")
-            .WithTags("Plan Editor")
-            .RequireAuthorization();
-
-        plans.MapGet("/versions", ListRevisionsAsync)
-            .WithName("ListPlanRevisions");
-        plans.MapGet("/versions/{revisionId}", GetRevisionAsync)
-            .WithName("GetPlanRevision");
+        var plans = MapRevisionHistoryEndpoints(apiV1);
         plans.MapPost("/candidates", CreateCandidateAsync)
             .WithName("CreatePlanEditCandidate");
         plans.MapPost("/candidates/{candidateId}/apply", ApplyCandidateAsync)
             .WithName("ApplyPlanEditCandidate");
         plans.MapPost("/candidates/{candidateId}/reject", RejectCandidateAsync)
             .WithName("RejectPlanEditCandidate");
+    }
+
+    internal static RouteGroupBuilder MapRevisionHistoryEndpoints(RouteGroupBuilder apiV1)
+    {
+        var plans = apiV1.MapGroup("/projects/{projectId}/plans/{planId}")
+            .WithTags("Plan Editor")
+            .RequireAuthorization();
+        plans.MapGet("/versions", ListRevisionsAsync).WithName("ListPlanRevisions");
+        plans.MapGet("/versions/{revisionId}", GetRevisionAsync).WithName("GetPlanRevision");
+        return plans;
     }
 
     private static async Task<IResult> ListRevisionsAsync(

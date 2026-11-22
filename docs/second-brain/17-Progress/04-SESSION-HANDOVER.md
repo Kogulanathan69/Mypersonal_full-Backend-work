@@ -281,3 +281,9 @@ Latest working branch/hash: UNKNOWN. Owner: confirm M4 + M7. Next active task: B
 - Generated forward and rollback SQL were reviewed offline, and EF model parity passed. The configured disposable MySQL 8.4 target was unavailable. Migration execution, provider SQL translation, query plans, concurrency and boundary round-trip remain open for the existing disposable job.
 - M1 still owns the revocation and version-write contract. M3 needs an aggregate payload budget and evidence for long-history cursor and exact-lookup costs. Production composition and M7 STEP 8B remain on hold.
 - Field mapping, commands and benchmark evidence are in the [M3 Revision History MySQL handover](../../proposals/m3-plan-editor/M3-REVISION-HISTORY-MYSQL-FIELD-MAPPING.md).
+
+## 2026-11-22 — Autonomous isolated backend integration
+
+- Added reads-only Revision History test composition, a fresh authorization guard, a transaction-bound project authorization primitive, a draft Requirements fingerprint and private Survey file storage. The normal host remains unchanged.
+- Release builds succeeded. Focused tests passed 99/99. New JWT/MySQL HTTP and project-lock fixtures compiled. Disposable MySQL acceptance remains open because the configured fixture was unavailable.
+- See the [isolated integration evidence](../../proposals/AUTONOMOUS-BACKEND-INTEGRATION-EVIDENCE.md) for commands, artifact location and cross-member decisions. Production integration remains NO-GO. M7 STEP 8B stays on hold.
