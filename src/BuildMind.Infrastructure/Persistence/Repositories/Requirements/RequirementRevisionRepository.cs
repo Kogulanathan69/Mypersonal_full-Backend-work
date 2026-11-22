@@ -3,6 +3,7 @@ using BuildMind.Domain.Entities;
 using BuildMind.Infrastructure.Persistence.Errors;
 using BuildMind.Infrastructure.Persistence.Mapping;
 using BuildMind.Infrastructure.Persistence.Records;
+using BuildMind.Infrastructure.Persistence.Repositories.Projects;
 using BuildMind.Infrastructure.Persistence.Transactions;
 using Microsoft.EntityFrameworkCore;
 
@@ -54,10 +55,22 @@ internal sealed class RequirementRevisionRepository(BuildMindDbContext context, 
         return record is null ? null : RequirementRevisionMapper.ToDomain(record);
     }
 
-    public async Task<RequirementSaveResult> TrySaveAtomicallyAsync(
+    public Task<RequirementSaveResult> TrySaveAtomicallyAsync(
         Guid? expectedRevisionId,
         RequirementRevision proposedRevision,
-        CancellationToken cancellationToken)
+        CancellationToken cancellationToken) =>
+        SaveCoreAsync(expectedRevisionId, proposedRevision, null, cancellationToken);
+
+    // Isolated entry point. Callers must supply server-derived actor and version evidence.
+    // The existing application port remains unchanged until the cross-owner write contract is approved.
+    internal Task<RequirementSaveResult> TrySaveAuthorizedAtomicallyAsync(
+        Guid trustedActorId, long expectedAuthorizationVersion, Guid? expectedRevisionId,
+        RequirementRevision proposedRevision, CancellationToken cancellationToken) =>
+        SaveCoreAsync(expectedRevisionId, proposedRevision, (trustedActorId, expectedAuthorizationVersion), cancellationToken);
+
+    private async Task<RequirementSaveResult> SaveCoreAsync(
+        Guid? expectedRevisionId, RequirementRevision proposedRevision,
+        (Guid Actor, long Version)? authorization, CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(proposedRevision);
         if (expectedRevisionId == Guid.Empty)
@@ -78,10 +91,13 @@ internal sealed class RequirementRevisionRepository(BuildMindDbContext context, 
             return await transactions.ExecuteAsync(
                 async token =>
                 {
-                    var projectExists = await context.Set<ProjectRecord>().AsNoTracking()
-                        .AnyAsync(p => p.Id == projectId, token)
-                        .ConfigureAwait(false);
-                    if (!projectExists)
+                    // In the protected path the project row is locked before observing or changing the head.
+                    var projectAccessible = authorization is { } access
+                        ? await new ProjectMutationAuthorization(context)
+                            .LockAndCheckAsync(projectId, access.Actor, access.Version, token).ConfigureAwait(false)
+                        : await context.Set<ProjectRecord>().AsNoTracking()
+                            .AnyAsync(p => p.Id == projectId, token).ConfigureAwait(false);
+                    if (!projectAccessible)
                     {
                         throw new SaveRejected(RequirementSaveStatus.ProjectNotFound);
                     }
@@ -148,7 +164,10 @@ internal sealed class RequirementRevisionRepository(BuildMindDbContext context, 
 
             // The transaction was rolled back by TransactionRunner (an unconfirmed rollback would have surfaced as
             // TransactionRollbackUncertainException instead). Only report a conflict if the head REALLY moved.
-            var headMoved = failure.Kind is PersistenceFailureKind.DuplicateKey or PersistenceFailureKind.Deadlock
+            // The protected path has released its project lock. Never inspect a new owner's head to
+            // classify the prior writer's failure. Only the legacy path keeps its existing recheck.
+            var headMoved = authorization is null &&
+                failure.Kind is (PersistenceFailureKind.DuplicateKey or PersistenceFailureKind.Deadlock)
                 && !await HeadIsAsync(projectId, expectedRevisionId, cancellationToken).ConfigureAwait(false);
 
             return ResolveSaveFailure(failure, headMoved) switch

@@ -38,6 +38,29 @@ public sealed class ProjectAuthorizationLiveTests
     }
 
     [Fact]
+    public async Task P10_metadata_update_rejects_changed_authorization_evidence_at_write_time()
+    {
+        await using var db = await SchemaAsync();
+        var (owner, projectId) = await SeedAsync(db);
+        await using var writer = Context(db);
+        var repository = new ProjectRepository(writer);
+        var snapshot = (await repository.GetByIdAndOwnerAsync(projectId, owner, default))!;
+        await using (var change = Context(db))
+        {
+            Assert.Equal(2, await new ProjectAuthorizationVersionStore(change).TryIncrementAsync(projectId, 1, default));
+        }
+
+        Assert.False(await repository.UpdateAsync(snapshot.WithUpdatedDetails("stale write", null, null, Now),
+            owner, snapshot.Revision, default));
+        var fresh = (await repository.GetByIdAndOwnerAsync(projectId, owner, default))!;
+        Assert.Equal(snapshot.Name, fresh.Name);
+        Assert.Equal(snapshot.Revision, fresh.Revision);
+        Assert.Equal(2, fresh.AuthorizationVersion);
+        Assert.True(await repository.UpdateAsync(fresh.WithUpdatedDetails("fresh write", null, null, Now),
+            owner, fresh.Revision, default));
+    }
+
+    [Fact]
     public async Task P02_concurrent_increments_with_the_same_expected_version_have_one_winner()
     {
         await using var db = await SchemaAsync();
@@ -218,9 +241,14 @@ public sealed class ProjectAuthorizationLiveTests
         }
 
         await using var context = Context(db);
-        var result = await new ProjectOwnerAuthorizationPort(context).AuthorizeOwnerAsync(projectId, ownerId, default);
-        Assert.Equal(ProjectAuthorizationStatus.Denied, result.Status);
-        Assert.Null(result.Snapshot);
+        IProjectAuthorizationPort[] ports = [new ProjectOwnerAuthorizationPort(context), new ProjectAuthorizationReader(context)];
+        foreach (var port in ports)
+        {
+            var denied = await port.AuthorizeOwnerAsync(projectId, Guid.NewGuid(), default);
+            Assert.Equal(ProjectAuthorizationStatus.Denied, denied.Status);
+            Assert.Null(denied.Snapshot);
+            await Assert.ThrowsAsync<InvalidDataException>(() => port.AuthorizeOwnerAsync(projectId, ownerId, default));
+        }
     }
 
     private static BuildMindDbContext Context(DisposableMySqlDatabase db)

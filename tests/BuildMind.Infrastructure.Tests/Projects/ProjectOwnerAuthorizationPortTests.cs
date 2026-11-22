@@ -1,7 +1,13 @@
+using System.Data.Common;
+using System.Transactions;
+using BuildMind.Application.Abstractions.Errors;
 using BuildMind.Application.Features.PlanEditor.Integration;
 using BuildMind.Infrastructure.Persistence;
+using BuildMind.Infrastructure.Persistence.Connections;
+using BuildMind.Infrastructure.Persistence.Errors;
 using BuildMind.Infrastructure.Persistence.Repositories.Projects;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.EntityFrameworkCore.Diagnostics;
 using Xunit;
 
 namespace BuildMind.Infrastructure.Tests.Projects;
@@ -48,6 +54,52 @@ public sealed class ProjectOwnerAuthorizationPortTests
 
         await Assert.ThrowsAnyAsync<OperationCanceledException>(() =>
             new ProjectOwnerAuthorizationPort(context).AuthorizeOwnerAsync(Project, Actor, cancelled.Token));
+    }
+
+    [Theory]
+    [MemberData(nameof(EmptyIdentities))]
+    public async Task Already_cancelled_token_takes_precedence_over_empty_identities(Guid projectId, Guid actorId)
+    {
+        await using var context = UnreachableContext();
+        var token = new CancellationToken(canceled: true);
+        var failure = await Assert.ThrowsAnyAsync<OperationCanceledException>(() =>
+            new ProjectOwnerAuthorizationPort(context).AuthorizeOwnerAsync(projectId, actorId, token));
+        Assert.Equal(token, failure.CancellationToken);
+    }
+
+    [Fact]
+    public async Task Authorization_rejects_an_ambient_transaction_before_database_access()
+    {
+        await using var context = UnreachableContext();
+        using var transaction = new TransactionScope(TransactionScopeOption.RequiresNew, TransactionScopeAsyncFlowOption.Enabled);
+        var failure = await Assert.ThrowsAsync<InvalidOperationException>(() =>
+            new ProjectOwnerAuthorizationPort(context).AuthorizeOwnerAsync(Project, Actor, default));
+        Assert.Equal("Revision History authorization requires a fresh database read.", failure.Message);
+    }
+
+    [Theory]
+    [InlineData(DependencyFailureKind.Unavailable)]
+    [InlineData(DependencyFailureKind.Timeout)]
+    public async Task Recognized_database_failures_are_classified_without_raw_details(DependencyFailureKind kind)
+    {
+        const string rawDetail = "synthetic provider details";
+        Exception injected = kind == DependencyFailureKind.Timeout
+            ? new DbUpdateException(rawDetail, new TimeoutException(rawDetail))
+            : new MySqlConnectionGateTimeoutException(TimeSpan.FromSeconds(1));
+        await using var context = UnreachableContext(new FailOnOpen(injected));
+        var failure = await Assert.ThrowsAsync<DependencyFailureException>(() =>
+            new ProjectOwnerAuthorizationPort(context).AuthorizeOwnerAsync(Project, Actor, default));
+        Assert.Equal(kind, failure.Kind);
+        Assert.Null(failure.InnerException);
+        Assert.DoesNotContain(rawDetail, failure.Message, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void MySql_lock_wait_timeout_is_distinct_from_command_timeout()
+    {
+        var failure = PersistenceErrorClassifier.FromProviderError(1205, null);
+        Assert.Equal(PersistenceFailureKind.LockTimeout, failure.Kind);
+        Assert.Equal(SharedErrorCodes.DependencyUnavailable, failure.DefaultCode);
     }
 
     [Fact]
@@ -106,10 +158,19 @@ public sealed class ProjectOwnerAuthorizationPortTests
         Assert.IsNotAssignableFrom<OperationCanceledException>(failure);
     }
 
-    private static BuildMindDbContext UnreachableContext()
+    private static BuildMindDbContext UnreachableContext(DbConnectionInterceptor? interceptor = null)
     {
         var builder = new DbContextOptionsBuilder<BuildMindDbContext>();
         MySqlContextOptions.Apply(builder, UnreachableConnection, 5);
+        if (interceptor is not null)
+            builder.AddInterceptors(interceptor);
         return new BuildMindDbContext(builder.Options);
+    }
+
+    private sealed class FailOnOpen(Exception failure) : DbConnectionInterceptor
+    {
+        public override ValueTask<InterceptionResult> ConnectionOpeningAsync(DbConnection connection,
+            ConnectionEventData eventData, InterceptionResult result, CancellationToken cancellationToken = default) =>
+            ValueTask.FromException<InterceptionResult>(failure);
     }
 }

@@ -7,6 +7,7 @@ using BuildMind.Infrastructure.Persistence.Repositories.Requirements;
 using BuildMind.Infrastructure.Persistence.Transactions;
 using BuildMind.Persistence.IntegrationTests.Support;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.EntityFrameworkCore.Diagnostics;
 using MySql.Data.MySqlClient;
 using Xunit.Abstractions;
 using BuildMind.Infrastructure.Persistence.Connections;
@@ -241,6 +242,131 @@ public sealed class RequirementRevisionRepositoryTests(ITestOutputHelper output)
         Assert.DoesNotContain("dup@example.invalid", failure.ToString(), StringComparison.Ordinal);
     }
 
+    [Fact]
+    public async Task Protected_save_rechecks_transfer_and_version_without_writing_or_disclosing()
+    {
+        await using var database = await SeededDatabaseAsync();
+        var projectId = await SeedProjectAsync(database);
+        await using var change = CreateContext(database.ConnectionString);
+        var project = await change.Set<ProjectRecord>().AsNoTracking().SingleAsync(p => p.Id == projectId);
+        var nextOwner = User("transfer-target@example.invalid");
+        change.Add(nextOwner);
+        await change.SaveChangesAsync();
+        // Synthetic transfer evidence only. This fixture does not define a product lifecycle writer.
+        await change.Set<ProjectRecord>().Where(p => p.Id == projectId).ExecuteUpdateAsync(update => update
+            .SetProperty(p => p.OwnerId, nextOwner.Id)
+            .SetProperty(p => p.AuthorizationVersion, p => p.AuthorizationVersion + 1));
+
+        foreach (var (actor, version) in new[] { (project.OwnerId, 1L), (nextOwner.Id, 1L), (Guid.NewGuid(), 2L) })
+        {
+            var denied = await Read(database, repository => repository.TrySaveAuthorizedAtomicallyAsync(
+                actor, version, null, Revision(projectId, 1), default));
+            Assert.Equal(RequirementSaveStatus.ProjectNotFound, denied.Status);
+            Assert.Null(denied.SavedRevision);
+        }
+        Assert.Equal(0, await CountAsync(database, "requirement_revisions"));
+        Assert.Equal(0, await CountAsync(database, "project_requirement_heads"));
+
+        var current = await Read(database, repository => repository.TrySaveAuthorizedAtomicallyAsync(
+            nextOwner.Id, 2, null, Revision(projectId, 1), default));
+        Assert.Equal(RequirementSaveStatus.Saved, current.Status);
+    }
+
+    [Fact]
+    public async Task Competing_protected_writes_have_one_winner_and_no_losing_revision()
+    {
+        await using var database = await SeededDatabaseAsync();
+        var projectId = await SeedProjectAsync(database);
+        await using var probe = CreateContext(database.ConnectionString);
+        var actor = await probe.Set<ProjectRecord>().Where(p => p.Id == projectId).Select(p => p.OwnerId).SingleAsync();
+        var start = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var contenders = Enumerable.Range(0, 2).Select(_ => Read(database, async repository =>
+        {
+            await start.Task;
+            return await repository.TrySaveAuthorizedAtomicallyAsync(actor, 1, null, Revision(projectId, 1), default);
+        })).ToArray();
+        start.SetResult();
+        var results = await Task.WhenAll(contenders);
+        Assert.Single(results, result => result.Status == RequirementSaveStatus.Saved);
+        Assert.Null(Assert.Single(results, result => result.Status == RequirementSaveStatus.RevisionConflict).SavedRevision);
+        Assert.Equal(1, await CountAsync(database, "requirement_revisions"));
+        Assert.Equal(1, await CountAsync(database, "project_requirement_heads"));
+    }
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task Protected_save_rolls_back_an_insert_when_failure_or_cancellation_follows(bool cancel)
+    {
+        await using var database = await SeededDatabaseAsync();
+        var projectId = await SeedProjectAsync(database);
+        using var cancellation = new CancellationTokenSource();
+        await using var context = CreateContext(database.ConnectionString, new AbortAfterInsert(cancellation, cancel));
+        var actor = await context.Set<ProjectRecord>().Where(p => p.Id == projectId).Select(p => p.OwnerId).SingleAsync();
+        var repository = new RequirementRevisionRepository(context, new TransactionRunner(new DbContextTransactionSource(context)));
+        Task<RequirementSaveResult> SaveProtected() => repository.TrySaveAuthorizedAtomicallyAsync(
+            actor, 1, null, Revision(projectId, 1), cancellation.Token);
+        if (cancel)
+            await Assert.ThrowsAnyAsync<OperationCanceledException>(SaveProtected);
+        else
+            await Assert.ThrowsAsync<DbUpdateException>(SaveProtected);
+
+        Assert.Equal(0, await CountAsync(database, "requirement_revisions"));
+        Assert.Equal(0, await CountAsync(database, "project_requirement_heads"));
+    }
+
+    [Fact]
+    public async Task Protected_save_holds_the_project_lock_before_the_first_feature_write()
+    {
+        await using var database = await SeededDatabaseAsync();
+        var projectId = await SeedProjectAsync(database);
+        await using var probe = CreateContext(database.ConnectionString);
+        var actor = await probe.Set<ProjectRecord>().Where(p => p.Id == projectId).Select(p => p.OwnerId).SingleAsync();
+        var interceptor = new BeforeInsert(async token =>
+        {
+            await using var transaction = await probe.Database.BeginTransactionAsync(token);
+            var failure = await Assert.ThrowsAsync<MySqlException>(() => probe.Database.SqlQuery<long>($"""
+                SELECT authorization_version AS `Value` FROM projects WHERE id = {projectId} FOR UPDATE NOWAIT
+                """).ToListAsync(token));
+            Assert.Equal(3572, failure.Number);
+        });
+        await using var context = CreateContext(database.ConnectionString, interceptor);
+        var repository = new RequirementRevisionRepository(context, new TransactionRunner(new DbContextTransactionSource(context)));
+        var result = await repository.TrySaveAuthorizedAtomicallyAsync(actor, 1, null, Revision(projectId, 1), default);
+        Assert.True(interceptor.Observed);
+        Assert.Equal(RequirementSaveStatus.Saved, result.Status);
+    }
+
+    private sealed class BeforeInsert(Func<CancellationToken, Task> probe) : SaveChangesInterceptor
+    {
+        public bool Observed { get; private set; }
+
+        public override async ValueTask<InterceptionResult<int>> SavingChangesAsync(DbContextEventData eventData,
+            InterceptionResult<int> result, CancellationToken cancellationToken = default)
+        {
+            if (!Observed)
+            {
+                await probe(cancellationToken);
+                Observed = true;
+            }
+            return result;
+        }
+    }
+
+    private sealed class AbortAfterInsert(CancellationTokenSource source, bool cancel) : SaveChangesInterceptor
+    {
+        public override ValueTask<int> SavedChangesAsync(SaveChangesCompletedEventData eventData, int result,
+            CancellationToken cancellationToken = default)
+        {
+            if (!cancel)
+                throw new DbUpdateException("Synthetic database failure after the revision insert.");
+
+            source.Cancel();
+            cancellationToken.ThrowIfCancellationRequested();
+            return ValueTask.FromResult(result);
+        }
+    }
+
     private static RequirementRevision Revision(Guid projectId, long number) => new(
         Guid.NewGuid(),
         projectId,
@@ -261,10 +387,12 @@ public sealed class RequirementRevisionRepositoryTests(ITestOutputHelper output)
         CreatedAtUtc = Now,
     };
 
-    private static BuildMindDbContext CreateContext(string connectionString)
+    private static BuildMindDbContext CreateContext(string connectionString, SaveChangesInterceptor? interceptor = null)
     {
         var builder = new DbContextOptionsBuilder<BuildMindDbContext>();
         MySqlContextOptions.Apply(builder, connectionString, 30);
+        if (interceptor is not null)
+            builder.AddInterceptors(interceptor);
         return new BuildMindDbContext(builder.Options);
     }
 

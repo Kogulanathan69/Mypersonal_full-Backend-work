@@ -81,8 +81,9 @@ public sealed class ProjectRepository(
         CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(project);
+        cancellationToken.ThrowIfCancellationRequested();
 
-        if (ownerId == Guid.Empty ||
+        if (ownerId == Guid.Empty || project.AuthorizationVersion <= 0 ||
             project.OwnerId != ownerId ||
             expectedRevision < 1 ||
             expectedRevision == long.MaxValue ||
@@ -91,10 +92,13 @@ public sealed class ProjectRepository(
             return false;
         }
 
+        // A single UPDATE acquires the project row lock and checks current authority and metadata CAS
+        // together. The project snapshot carries the expected version from the trusted service read.
         var affected = await context.Set<ProjectRecord>()
             .Where(p =>
                 p.Id == project.Id &&
                 p.OwnerId == ownerId &&
+                p.AuthorizationVersion == project.AuthorizationVersion &&
                 p.Revision == expectedRevision)
             .ExecuteUpdateAsync(setters => setters
                 .SetProperty(p => p.Name, project.Name)

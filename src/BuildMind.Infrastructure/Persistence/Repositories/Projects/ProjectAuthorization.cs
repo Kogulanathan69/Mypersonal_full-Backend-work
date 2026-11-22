@@ -22,29 +22,14 @@ internal sealed class ProjectAuthorizationVersionStore(BuildMindDbContext contex
 }
 
 /// <summary>
-/// M1/M4 implementation of M3's <see cref="IProjectAuthorizationPort"/>: the owner of the project is authorized and
-/// receives a snapshot bound to the current authorization version. Everyone else (and unknown projects) is denied
-/// without disclosure. Database failures and cancellation propagate unchanged, as the port contract requires.
+/// Option A entry point for the shared fresh, owner-scoped authorization read.
 /// </summary>
 /// <remarks>Not registered: the port stays inactive until M3, M1 and M4 approve its composition (decision 4).</remarks>
 internal sealed class ProjectOwnerAuthorizationPort(BuildMindDbContext context) : IProjectAuthorizationPort
 {
-    public async Task<ProjectAuthorizationResult> AuthorizeOwnerAsync(
-        Guid projectId, Guid authenticatedActorId, CancellationToken cancellationToken)
-    {
-        if (projectId == Guid.Empty || authenticatedActorId == Guid.Empty)
-            return new ProjectAuthorizationResult(ProjectAuthorizationStatus.Denied);
+    private readonly ProjectAuthorizationReader reader = new(context);
 
-        var row = await context.Set<ProjectRecord>()
-            .AsNoTracking()
-            .Where(p => p.Id == projectId && p.OwnerId == authenticatedActorId)
-            .Select(p => new { p.AuthorizationVersion })
-            .SingleOrDefaultAsync(cancellationToken);
-
-        return row is null || row.AuthorizationVersion < 1
-            ? new ProjectAuthorizationResult(ProjectAuthorizationStatus.Denied)
-            : new ProjectAuthorizationResult(
-                ProjectAuthorizationStatus.Authorized,
-                new ProjectAuthorizationSnapshot(projectId, authenticatedActorId, new AuthorizationVersion(row.AuthorizationVersion)));
-    }
+    public Task<ProjectAuthorizationResult> AuthorizeOwnerAsync(
+        Guid projectId, Guid authenticatedActorId, CancellationToken cancellationToken) =>
+        reader.AuthorizeOwnerAsync(projectId, authenticatedActorId, cancellationToken);
 }
