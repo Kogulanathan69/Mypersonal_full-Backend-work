@@ -76,6 +76,8 @@ public sealed class PlanRevisionHistoryService(
         catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested) { throw; }
         catch (Exception exception) when (exception is TimeoutException or OperationCanceledException)
         { return PlanRevisionHistoryPageResult.Failure(PlanRevisionHistoryStatus.DependencyTimeout); }
+        catch (DependencyFailureException exception)
+        { return PlanRevisionHistoryPageResult.Failure(MapDependencyFailure(exception)); }
         catch (HttpRequestException)
         { return PlanRevisionHistoryPageResult.Failure(PlanRevisionHistoryStatus.DependencyUnavailable); }
         catch (Exception)
@@ -150,6 +152,8 @@ public sealed class PlanRevisionHistoryService(
         catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested) { throw; }
         catch (Exception exception) when (exception is TimeoutException or OperationCanceledException)
         { return PlanRevisionHistoryLookupResult.Failure(PlanRevisionHistoryStatus.DependencyTimeout); }
+        catch (DependencyFailureException exception)
+        { return PlanRevisionHistoryLookupResult.Failure(MapDependencyFailure(exception)); }
         catch (HttpRequestException)
         { return PlanRevisionHistoryLookupResult.Failure(PlanRevisionHistoryStatus.DependencyUnavailable); }
         catch (Exception)
@@ -199,6 +203,12 @@ public sealed class PlanRevisionHistoryService(
         catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested) { throw; }
         catch (Exception exception) when (exception is TimeoutException or OperationCanceledException)
         { return new(AuthorizationReadStatus.DependencyTimeout); }
+        catch (DependencyFailureException exception)
+        {
+            return new(exception.Kind == DependencyFailureKind.Timeout
+                ? AuthorizationReadStatus.DependencyTimeout
+                : AuthorizationReadStatus.DependencyUnavailable);
+        }
         catch (HttpRequestException)
         { return new(AuthorizationReadStatus.DependencyUnavailable); }
         catch (Exception)
@@ -229,6 +239,11 @@ public sealed class PlanRevisionHistoryService(
     private static bool HasNoProtectedPagePayload(PlanRevisionHistorySourcePage source) =>
         source.Revisions is null && !source.HasMore && source.TraversalHead is null &&
         !source.CursorAnchorVerified;
+
+    private static PlanRevisionHistoryStatus MapDependencyFailure(DependencyFailureException exception) =>
+        exception.Kind == DependencyFailureKind.Timeout
+            ? PlanRevisionHistoryStatus.DependencyTimeout
+            : PlanRevisionHistoryStatus.DependencyUnavailable;
 
     private static bool ValidatePage(
         PlanRevisionHistoryQuery query,
@@ -282,7 +297,8 @@ public sealed class PlanRevisionHistoryService(
             (!hasMore || last.ParentRevisionId is { } parent && parent != Guid.Empty);
     }
 
-    private static bool ValidateSnapshot(
+    /// <summary>Validates persisted revision payloads before they cross the history read boundary.</summary>
+    public static bool ValidateSnapshot(
         PlanRevisionSnapshot? snapshot,
         Guid expectedProjectId,
         Guid expectedPlanId,

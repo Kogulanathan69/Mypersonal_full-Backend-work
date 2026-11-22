@@ -274,3 +274,10 @@ Latest working branch/hash: UNKNOWN. Owner: confirm M4 + M7. Next active task: B
 - Doc 34: DELIVERED for MVP development scope, NOT production-ready.
 - Open items by member are in doc 34 §4, including an M1 migration and JWT packages needing M4 and dependency review.
 - R-1/R-3, G06, G11 and G19 stay open.
+
+## 2026-11-22 — M4 Revision History fast-track isolated handover
+
+- Baseline `02674af5fee1d7c1aa6bb8e74950721c5fe7cf7d`, branch `feature/m4-mysql-revision-history`. The EF schema, bidirectional mapping, read adapters and disposable test cases are in the isolated working tree.
+- Generated forward and rollback SQL were reviewed offline, and EF model parity passed. The configured disposable MySQL 8.4 target was unavailable. Migration execution, provider SQL translation, query plans, concurrency and boundary round-trip remain open for the existing disposable job.
+- M1 still owns the revocation and version-write contract. M3 needs an aggregate payload budget and evidence for long-history cursor and exact-lookup costs. Production composition and M7 STEP 8B remain on hold.
+- Field mapping, commands and benchmark evidence are in the [M3 Revision History MySQL handover](../../proposals/m3-plan-editor/M3-REVISION-HISTORY-MYSQL-FIELD-MAPPING.md).

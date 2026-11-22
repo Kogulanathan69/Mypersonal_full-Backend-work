@@ -39,7 +39,8 @@ public sealed class DesignTimeFactoryTests
      {
         PersistenceRegistrationTests.InitialMigrationId,
         PersistenceRegistrationTests.AuthorizationMigrationId,
-        PersistenceRegistrationTests.SessionSecurityMigrationId
+        PersistenceRegistrationTests.SessionSecurityMigrationId,
+        PersistenceRegistrationTests.PlanRevisionHistoryMigrationId
      },
      context.Database.GetMigrations());
     }

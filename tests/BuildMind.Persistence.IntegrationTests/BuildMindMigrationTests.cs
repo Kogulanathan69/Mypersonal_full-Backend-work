@@ -17,7 +17,8 @@ namespace BuildMind.Persistence.IntegrationTests;
 /// <item><c>20261118133137_InitialFeatureSchema</c> (STEP 06-E3): users, projects, requirement revisions/heads;</item>
 /// <item><c>20261119092022_AddProjectAuthorizationVersion</c> (M1): <c>projects.authorization_version</c>;</item>
 /// <item><c>20261120202215_AddSessionSecurity</c> (M4, STEP 05 decisions 1-3/7): <c>users.token_version</c>,
-/// <c>refresh_tokens</c>, <c>password_reset_tokens</c>.</item>
+/// <c>refresh_tokens</c>, <c>password_reset_tokens</c>;</item>
+/// <item><c>AddPlanRevisionHistory</c> (M4 STEP 22): plans and immutable revision snapshots.</item>
 /// </list>
 /// Every step must apply, roll back only its own changes, and reapply. These tests FAIL (never skip) when no
 /// migration exists.
@@ -28,12 +29,16 @@ public sealed class BuildMindMigrationTests(ITestOutputHelper output)
     private const string AddProjectAuthorizationVersion = "20261119092022_AddProjectAuthorizationVersion";
     private const string AddSessionSecurity = "20261120202215_AddSessionSecurity";
 
-    private static readonly string[] ExpectedMigrations = [InitialFeatureSchema, AddProjectAuthorizationVersion, AddSessionSecurity];
+    private const string AddPlanRevisionHistory = "20261122080431_AddPlanRevisionHistory";
+    private static readonly string[] ExpectedMigrations = [InitialFeatureSchema, AddProjectAuthorizationVersion, AddSessionSecurity, AddPlanRevisionHistory];
 
     private static readonly string[] InitialTables = ["project_requirement_heads", "projects", "requirement_revisions", "users"];
 
-    private static readonly string[] Tables =
+    private static readonly string[] SessionSecurityTables =
         ["password_reset_tokens", "project_requirement_heads", "projects", "refresh_tokens", "requirement_revisions", "users"];
+
+    private static readonly string[] Tables =
+        ["password_reset_tokens", "plan_revisions", "plans", "project_requirement_heads", "projects", "refresh_tokens", "requirement_revisions", "users"];
 
     [Fact]
     public async Task M01_migrations_exist_in_order_and_match_the_model()
@@ -62,17 +67,22 @@ public sealed class BuildMindMigrationTests(ITestOutputHelper output)
         var deleteRules = await ListAsync(database,
             "SELECT CONCAT(constraint_name, '=', delete_rule) FROM information_schema.referential_constraints WHERE constraint_schema = DATABASE() ORDER BY constraint_name;");
         output.WriteLine("FK delete rules: " + string.Join(", ", deleteRules));
+        // InnoDB's implicit NO ACTION and explicit RESTRICT both reject deletion of a referenced row.
+        Assert.Contains(deleteRules, rule => rule is "fk_plan_revisions_parent=NO ACTION" or "fk_plan_revisions_parent=RESTRICT");
         Assert.Equal(
             new[]
             {
                 "fk_password_reset_tokens_users_user_id=RESTRICT",
+                "fk_plan_revisions_plans=RESTRICT",
+                "fk_plans_plan_revisions_head=RESTRICT",
+                "fk_plans_projects=RESTRICT",
                 "fk_project_requirement_heads_projects_project_id=RESTRICT",
                 "fk_project_requirement_heads_requirement_revisions_current=RESTRICT",
                 "fk_projects_users_owner_id=RESTRICT",
                 "fk_refresh_tokens_users_user_id=RESTRICT",
                 "fk_requirement_revisions_projects_project_id=RESTRICT",
             },
-            deleteRules);
+            deleteRules.Where(rule => !rule.StartsWith("fk_plan_revisions_parent=", StringComparison.Ordinal)));
 
         var indexes = await ListAsync(database,
             "SELECT DISTINCT CONCAT(table_name, '.', index_name, '=', non_unique) FROM information_schema.statistics WHERE table_schema = DATABASE() AND index_name <> 'PRIMARY' ORDER BY 1;");
@@ -83,6 +93,13 @@ public sealed class BuildMindMigrationTests(ITestOutputHelper output)
         Assert.Contains("refresh_tokens.ux_refresh_tokens_token_hash=0", indexes);
         Assert.Contains("refresh_tokens.ix_refresh_tokens_user_id=1", indexes);
         Assert.Contains("refresh_tokens.ix_refresh_tokens_family_id=1", indexes);
+        Assert.Contains("plans.ix_plans_head_revision=1", indexes);
+        Assert.Contains("plan_revisions.ix_plan_revisions_parent=1", indexes);
+        Assert.Contains("plan_revisions.ux_plan_revisions_version=0", indexes);
+        Assert.Equal("mediumtext", await ColumnTypeAsync(database, "plan_revisions", "geometry_json"));
+        Assert.Equal("varbinary(32)", await ColumnTypeAsync(database, "plan_revisions", "geometry_hash"));
+        Assert.Equal("varbinary(32)", await ColumnTypeAsync(database, "plan_revisions", "validation_geometry_hash"));
+        Assert.Equal("tinyint(1)|YES|NULL", await ColumnShapeAsync(database, "plan_revisions", "requirements_match"));
 
         // One outstanding reset token per user: the primary key is the user id.
         Assert.Equal(new[] { "user_id" }, await ListAsync(database,
@@ -95,6 +112,7 @@ public sealed class BuildMindMigrationTests(ITestOutputHelper output)
                      ("requirement_revisions", "created_at_utc"),
                      ("refresh_tokens", "created_at_utc"), ("refresh_tokens", "expires_at_utc"), ("refresh_tokens", "absolute_expires_at_utc"),
                      ("password_reset_tokens", "created_at_utc"), ("password_reset_tokens", "expires_at_utc"),
+                     ("plan_revisions", "created_at_utc"), ("plan_revisions", "validated_at_utc"),
                  })
         {
             Assert.Equal("datetime(6)", await ColumnTypeAsync(database, table, column));
@@ -125,6 +143,13 @@ public sealed class BuildMindMigrationTests(ITestOutputHelper output)
         var userId = Guid.NewGuid().ToString("D");
         await ExecuteAsync(database,
             $"INSERT INTO users (id, email, normalized_email, password_hash, is_active, created_at_utc, token_version) VALUES ('{userId}', 'rollback@example.invalid', 'ROLLBACK@EXAMPLE.INVALID', 'synthetic-hash', 1, UTC_TIMESTAMP(6), 1);");
+
+        await migrator.MigrateAsync(AddSessionSecurity);
+        Assert.Equal(SessionSecurityTables, await FeatureTablesAsync(database));
+        Assert.Equal(ExpectedMigrations[..^1], await context.Database.GetAppliedMigrationsAsync());
+        Assert.Equal(new[] { userId }, await ListAsync(database, "SELECT id FROM users;"));
+        await migrator.MigrateAsync(AddPlanRevisionHistory);
+        Assert.Equal(Tables, await FeatureTablesAsync(database));
 
         await migrator.MigrateAsync(AddProjectAuthorizationVersion);
         Assert.Equal(InitialTables, await FeatureTablesAsync(database));
@@ -179,7 +204,7 @@ public sealed class BuildMindMigrationTests(ITestOutputHelper output)
         await ExecuteAsync(database,
             $"INSERT INTO users (id, email, normalized_email, password_hash, is_active, created_at_utc) VALUES ('{userId}', 'upgrade@example.invalid', 'UPGRADE@EXAMPLE.INVALID', 'synthetic-hash', 1, UTC_TIMESTAMP(6));");
 
-        var script = migrator.GenerateScript(InitialFeatureSchema, AddSessionSecurity);
+        var script = migrator.GenerateScript(InitialFeatureSchema, AddPlanRevisionHistory);
         Assert.DoesNotContain("CREATE TABLE `users`", script, StringComparison.Ordinal);
         Assert.DoesNotContain("IF NOT EXISTS(SELECT", script, StringComparison.Ordinal);
 

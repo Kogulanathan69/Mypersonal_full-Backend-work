@@ -298,6 +298,31 @@ internal static class RevisionHistoryContractScenarios
                 "Repository timeout escaped or disclosed data.");
         });
 
+        run("RH database dependency failures preserve timeout and unavailable without payload", () =>
+        {
+            foreach (var (kind, status) in new[]
+            {
+                (DependencyFailureKind.Unavailable, PlanRevisionHistoryStatus.DependencyUnavailable),
+                (DependencyFailureKind.Timeout, PlanRevisionHistoryStatus.DependencyTimeout)
+            })
+            {
+                var failure = new DependencyFailureException("mysql", kind);
+                var context = Context();
+                context.Port.PageFailure = failure;
+                context.Port.RevisionFailure = failure;
+                var page = context.Service.ListAsync(new(context.ProjectId, context.PlanId, 10)).Result;
+                var exact = context.Service.GetAsync(context.ProjectId, context.PlanId, Guid.NewGuid()).Result;
+                Check(page.Status == status && page.Revisions is null && exact.Status == status && exact.Revision is null,
+                    "A database dependency failure disclosed data or lost its failure kind.");
+
+                context = Context();
+                context.Authorization.Failure = failure;
+                var unauthorizedPage = context.Service.ListAsync(new(context.ProjectId, context.PlanId, 10)).Result;
+                Check(unauthorizedPage.Status == status && unauthorizedPage.Revisions is null,
+                    "A database authorization dependency failure was treated as denial or disclosed data.");
+            }
+        });
+
         run("RH-20 malformed repository results fail closed", () =>
         {
             foreach (var malformed in new PlanRevisionHistorySourcePage?[]

@@ -1,6 +1,7 @@
 using BuildMind.Infrastructure.Persistence;
 using BuildMind.Infrastructure.Persistence.DesignTime;
 using BuildMind.Infrastructure.Persistence.Records;
+using BuildMind.Infrastructure.Persistence.Records.PlanEditor;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
 using Microsoft.EntityFrameworkCore.Metadata;
@@ -33,7 +34,7 @@ public sealed class SchemaModelTests
     public void Model_maps_only_infrastructure_records_never_domain_types()
     {
         Assert.All(Model().GetEntityTypes(), e =>
-            Assert.Equal("BuildMind.Infrastructure.Persistence.Records", e.ClrType.Namespace));
+            Assert.Contains(e.ClrType.Namespace, new[] { typeof(ProjectRecord).Namespace, typeof(PlanRecord).Namespace }));
     }
 
     [Fact]
@@ -78,6 +79,10 @@ public sealed class SchemaModelTests
             new[]
             {
                 "fk_password_reset_tokens_users_user_id",
+                "fk_plan_revisions_parent",
+                "fk_plan_revisions_plans",
+                "fk_plans_plan_revisions_head",
+                "fk_plans_projects",
                 "fk_project_requirement_heads_projects_project_id",
                 "fk_project_requirement_heads_requirement_revisions_current",
                 "fk_projects_users_owner_id",
@@ -85,7 +90,9 @@ public sealed class SchemaModelTests
                 "fk_requirement_revisions_projects_project_id",
             },
             foreignKeys.Select(fk => fk.GetConstraintName()).OrderBy(n => n, StringComparer.Ordinal));
-        Assert.All(foreignKeys, fk => Assert.Equal(DeleteBehavior.Restrict, fk.DeleteBehavior));
+        Assert.All(foreignKeys, fk => Assert.Equal(
+            fk.GetConstraintName() == "fk_plan_revisions_parent" ? DeleteBehavior.ClientNoAction : DeleteBehavior.Restrict,
+            fk.DeleteBehavior));
     }
 
     [Fact]

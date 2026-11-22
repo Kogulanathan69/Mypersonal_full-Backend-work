@@ -22,8 +22,9 @@ public sealed class PersistenceRegistrationTests
     "20261119092022_AddProjectAuthorizationVersion";
     /// <summary>STEP 05 Batch 2A session-security schema (pending M4 migration approval).</summary>
     internal const string SessionSecurityMigrationId = "20261120202215_AddSessionSecurity";
+    internal const string PlanRevisionHistoryMigrationId = "20261122080431_AddPlanRevisionHistory";
     internal static readonly string[] ApprovedTables =
-        ["password_reset_tokens", "project_requirement_heads", "projects", "refresh_tokens", "requirement_revisions", "users"];
+        ["password_reset_tokens", "plan_revisions", "plans", "project_requirement_heads", "projects", "refresh_tokens", "requirement_revisions", "users"];
 
     [Fact]
     public async Task Shipped_configuration_starts_with_the_database_disabled()
@@ -155,7 +156,7 @@ public sealed class PersistenceRegistrationTests
         // The committed, reviewed migration is discoverable but never applied at start-up: the connection above
         // is still closed after the host started, so nothing connected to (let alone migrated) the database.
         Assert.Equal(
-            new[] { InitialMigrationId, AuthorizationMigrationId, SessionSecurityMigrationId },
+            new[] { InitialMigrationId, AuthorizationMigrationId, SessionSecurityMigrationId, PlanRevisionHistoryMigrationId },
             context.Database.GetMigrations());
         Assert.All(factory.Logs.Entries, e => Assert.DoesNotContain(Secret, e.AllText, StringComparison.Ordinal));
     }

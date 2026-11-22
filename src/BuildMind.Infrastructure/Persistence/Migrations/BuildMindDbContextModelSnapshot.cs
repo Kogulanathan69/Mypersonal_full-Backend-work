@@ -50,6 +50,152 @@ namespace BuildMind.Infrastructure.Persistence.Migrations
                     b.ToTable("password_reset_tokens", (string)null);
                 });
 
+            modelBuilder.Entity("BuildMind.Infrastructure.Persistence.Records.PlanEditor.PlanRecord", b =>
+                {
+                    b.Property<Guid>("ProjectId")
+                        .HasColumnType("char(36)")
+                        .HasColumnName("project_id");
+
+                    b.Property<Guid>("PlanId")
+                        .HasColumnType("char(36)")
+                        .HasColumnName("plan_id");
+
+                    b.Property<Guid?>("HeadRevisionId")
+                        .HasColumnType("char(36)")
+                        .HasColumnName("head_revision_id");
+
+                    b.HasKey("ProjectId", "PlanId")
+                        .HasName("pk_plans");
+
+                    b.HasIndex("ProjectId", "PlanId", "HeadRevisionId")
+                        .HasDatabaseName("ix_plans_head_revision");
+
+                    b.ToTable("plans", (string)null);
+                });
+
+            modelBuilder.Entity("BuildMind.Infrastructure.Persistence.Records.PlanEditor.PlanRevisionRecord", b =>
+                {
+                    b.Property<Guid>("ProjectId")
+                        .HasColumnType("char(36)")
+                        .HasColumnName("project_id");
+
+                    b.Property<Guid>("PlanId")
+                        .HasColumnType("char(36)")
+                        .HasColumnName("plan_id");
+
+                    b.Property<Guid>("RevisionId")
+                        .HasColumnType("char(36)")
+                        .HasColumnName("revision_id");
+
+                    b.Property<string>("ChangeSummary")
+                        .HasMaxLength(1024)
+                        .HasColumnType("varchar(1024)")
+                        .HasColumnName("change_summary");
+
+                    b.Property<DateTime>("CreatedAtUtc")
+                        .HasColumnType("datetime(6)")
+                        .HasColumnName("created_at_utc");
+
+                    b.Property<Guid>("CreatedBy")
+                        .HasColumnType("char(36)")
+                        .HasColumnName("created_by");
+
+                    b.Property<Guid?>("EditCommandId")
+                        .HasColumnType("char(36)")
+                        .HasColumnName("edit_command_id");
+
+                    b.Property<byte[]>("GeometryHash")
+                        .IsRequired()
+                        .HasColumnType("varbinary(32)")
+                        .HasColumnName("geometry_hash");
+
+                    b.Property<string>("GeometryJson")
+                        .IsRequired()
+                        .HasColumnType("mediumtext")
+                        .HasColumnName("geometry_json")
+                        .HasAnnotation("MySQL:Charset", "utf8mb4");
+
+                    b.Property<string>("GeometrySchemaVersion")
+                        .IsRequired()
+                        .HasMaxLength(64)
+                        .HasColumnType("varchar(64)")
+                        .HasColumnName("geometry_schema_version");
+
+                    b.Property<bool>("GeometryValid")
+                        .HasColumnType("tinyint(1)")
+                        .HasColumnName("geometry_valid");
+
+                    b.Property<bool>("HasBlockingIssues")
+                        .HasColumnType("tinyint(1)")
+                        .HasColumnName("has_blocking_issues");
+
+                    b.Property<Guid>("LandRevisionId")
+                        .HasColumnType("char(36)")
+                        .HasColumnName("land_revision_id");
+
+                    b.Property<Guid?>("ParentRevisionId")
+                        .HasColumnType("char(36)")
+                        .HasColumnName("parent_revision_id");
+
+                    b.Property<string>("RegulatoryEvidenceStatus")
+                        .IsRequired()
+                        .HasMaxLength(64)
+                        .HasColumnType("varchar(64)")
+                        .HasColumnName("regulatory_evidence_status");
+
+                    b.Property<bool?>("RequirementsMatch")
+                        .HasColumnType("tinyint(1)")
+                        .HasColumnName("requirements_match");
+
+                    b.Property<Guid>("RequirementsRevisionId")
+                        .HasColumnType("char(36)")
+                        .HasColumnName("requirements_revision_id");
+
+                    b.Property<DateTime>("ValidatedAtUtc")
+                        .HasColumnType("datetime(6)")
+                        .HasColumnName("validated_at_utc");
+
+                    b.Property<byte[]>("ValidationGeometryHash")
+                        .IsRequired()
+                        .HasColumnType("varbinary(32)")
+                        .HasColumnName("validation_geometry_hash");
+
+                    b.Property<Guid>("ValidationId")
+                        .HasColumnType("char(36)")
+                        .HasColumnName("validation_id");
+
+                    b.Property<string>("ValidatorVersion")
+                        .IsRequired()
+                        .HasMaxLength(64)
+                        .HasColumnType("varchar(64)")
+                        .HasColumnName("validator_version");
+
+                    b.Property<long>("VersionNumber")
+                        .HasColumnType("bigint")
+                        .HasColumnName("version_number");
+
+                    b.HasKey("ProjectId", "PlanId", "RevisionId")
+                        .HasName("pk_plan_revisions");
+
+                    b.HasIndex("ProjectId", "PlanId", "ParentRevisionId")
+                        .HasDatabaseName("ix_plan_revisions_parent");
+
+                    b.HasIndex("ProjectId", "PlanId", "VersionNumber")
+                        .IsUnique()
+                        .HasDatabaseName("ux_plan_revisions_version");
+
+                    b.ToTable("plan_revisions", null, t =>
+                        {
+                            t.HasCheckConstraint("ck_plan_revisions_digest_sizes", "OCTET_LENGTH(geometry_hash) = 32 AND OCTET_LENGTH(validation_geometry_hash) = 32");
+
+                            t.HasCheckConstraint("ck_plan_revisions_geometry_size", "OCTET_LENGTH(geometry_json) BETWEEN 1 AND 262144");
+
+                            t.HasCheckConstraint("ck_plan_revisions_parent", "(version_number = 1 AND parent_revision_id IS NULL) OR (version_number > 1 AND parent_revision_id IS NOT NULL AND parent_revision_id <> revision_id)");
+
+                            t.HasCheckConstraint("ck_plan_revisions_version", "version_number BETWEEN 1 AND 9223372036854775806");
+                        });
+                });
+
             modelBuilder.Entity("BuildMind.Infrastructure.Persistence.Records.ProjectRecord", b =>
                 {
                     b.Property<Guid>("Id")
@@ -314,6 +460,38 @@ namespace BuildMind.Infrastructure.Persistence.Migrations
                         .OnDelete(DeleteBehavior.Restrict)
                         .IsRequired()
                         .HasConstraintName("fk_password_reset_tokens_users_user_id");
+                });
+
+            modelBuilder.Entity("BuildMind.Infrastructure.Persistence.Records.PlanEditor.PlanRecord", b =>
+                {
+                    b.HasOne("BuildMind.Infrastructure.Persistence.Records.ProjectRecord", null)
+                        .WithMany()
+                        .HasForeignKey("ProjectId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired()
+                        .HasConstraintName("fk_plans_projects");
+
+                    b.HasOne("BuildMind.Infrastructure.Persistence.Records.PlanEditor.PlanRevisionRecord", null)
+                        .WithMany()
+                        .HasForeignKey("ProjectId", "PlanId", "HeadRevisionId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .HasConstraintName("fk_plans_plan_revisions_head");
+                });
+
+            modelBuilder.Entity("BuildMind.Infrastructure.Persistence.Records.PlanEditor.PlanRevisionRecord", b =>
+                {
+                    b.HasOne("BuildMind.Infrastructure.Persistence.Records.PlanEditor.PlanRecord", null)
+                        .WithMany()
+                        .HasForeignKey("ProjectId", "PlanId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired()
+                        .HasConstraintName("fk_plan_revisions_plans");
+
+                    b.HasOne("BuildMind.Infrastructure.Persistence.Records.PlanEditor.PlanRevisionRecord", null)
+                        .WithMany()
+                        .HasForeignKey("ProjectId", "PlanId", "ParentRevisionId")
+                        .OnDelete(DeleteBehavior.ClientNoAction)
+                        .HasConstraintName("fk_plan_revisions_parent");
                 });
 
             modelBuilder.Entity("BuildMind.Infrastructure.Persistence.Records.ProjectRecord", b =>
