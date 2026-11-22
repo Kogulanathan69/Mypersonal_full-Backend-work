@@ -26,6 +26,10 @@ using Microsoft.AspNetCore.Routing;
 
 namespace BuildMind.Infrastructure.Tests.Api;
 
+/// <summary>
+/// Database-free HTTP contract coverage. These tests do not verify MySQL predicates, locking,
+/// transaction isolation, or snapshot consistency; those guarantees require M4's real adapter.
+/// </summary>
 public sealed class PlanEditorEndpointContractTests
 {
     private static readonly Guid ActorId = Guid.Parse("71000000-0000-0000-0000-000000000001");
@@ -706,6 +710,60 @@ public sealed class PlanEditorEndpointContractTests
         Assert.Equal(0, history.ListCalls);
     }
 
+    [Theory]
+    [InlineData(null, PlanRevisionHistoryService.DefaultPageSize)]
+    [InlineData("?pageSize=50", PlanRevisionHistoryService.MaximumPageSize)]
+    public async Task Revision_history_forwards_default_and_maximum_page_sizes(
+        string? query,
+        int expectedPageSize)
+    {
+        var history = new StubRevisionHistoryService
+        {
+            PageResult = new PlanRevisionHistoryPageResult(
+                PlanRevisionHistoryStatus.Succeeded,
+                []),
+        };
+        await using var app = await Host(new StubActionFacade(), history: history);
+        using var client = AuthenticatedClient(app);
+
+        using var response = await client.GetAsync(HistoryRoute + query);
+
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        Assert.Equal(1, history.ListCalls);
+        Assert.Equal(expectedPageSize, history.LastQuery!.PageSize);
+        Assert.Null(history.LastQuery.Cursor);
+    }
+
+    [Theory]
+    [InlineData(true)]
+    [InlineData(false)]
+    public async Task Revision_history_rejects_cross_scope_cursor_before_service(bool wrongProject)
+    {
+        var cursor = new PlanRevisionHistoryCursor(
+            wrongProject ? Guid.NewGuid() : ProjectId,
+            wrongProject ? PlanId : Guid.NewGuid(),
+            2,
+            RevisionId,
+            2,
+            RevisionId,
+            BaseRevisionId);
+        var history = new StubRevisionHistoryService();
+        await using var app = await Host(new StubActionFacade(), history: history);
+        using var client = AuthenticatedClient(app);
+
+        using var response = await client.GetAsync(
+            HistoryRoute + "?cursor=" + Uri.EscapeDataString(EncodeCursorForTest(cursor)));
+        var body = await response.Content.ReadAsStringAsync();
+
+        Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
+        Assert.Equal(0, history.ListCalls);
+        Assert.DoesNotContain("geometryHash", body, StringComparison.OrdinalIgnoreCase);
+        Assert.DoesNotContain("landRevisionId", body, StringComparison.OrdinalIgnoreCase);
+        Assert.DoesNotContain("requirementsRevisionId", body, StringComparison.OrdinalIgnoreCase);
+        Assert.DoesNotContain("revisionId", body, StringComparison.OrdinalIgnoreCase);
+        Assert.DoesNotContain("revisions", body, StringComparison.OrdinalIgnoreCase);
+    }
+
     [Fact]
     public async Task Exact_revision_lookup_returns_verified_geometry()
     {
@@ -760,6 +818,29 @@ public sealed class PlanEditorEndpointContractTests
     [InlineData(PlanRevisionHistoryStatus.DeniedOrNotFound, HttpStatusCode.NotFound)]
     [InlineData(PlanRevisionHistoryStatus.DependencyUnavailable, HttpStatusCode.ServiceUnavailable)]
     [InlineData(PlanRevisionHistoryStatus.DependencyTimeout, HttpStatusCode.GatewayTimeout)]
+    public async Task Exact_revision_failures_are_safe(
+        PlanRevisionHistoryStatus status,
+        HttpStatusCode expected)
+    {
+        var history = new StubRevisionHistoryService
+        {
+            LookupResult = PlanRevisionHistoryLookupResult.Failure(status),
+        };
+        await using var app = await Host(new StubActionFacade(), history: history);
+        using var client = AuthenticatedClient(app);
+
+        using var response = await client.GetAsync(RevisionRoute);
+        var body = await response.Content.ReadAsStringAsync();
+
+        Assert.Equal(expected, response.StatusCode);
+        Assert.True(response.Headers.CacheControl?.NoStore);
+        AssertNoProtectedPayload(body);
+    }
+
+    [Theory]
+    [InlineData(PlanRevisionHistoryStatus.DeniedOrNotFound, HttpStatusCode.NotFound)]
+    [InlineData(PlanRevisionHistoryStatus.DependencyUnavailable, HttpStatusCode.ServiceUnavailable)]
+    [InlineData(PlanRevisionHistoryStatus.DependencyTimeout, HttpStatusCode.GatewayTimeout)]
     public async Task Revision_history_failures_are_safe(
         PlanRevisionHistoryStatus status,
         HttpStatusCode expected)
@@ -777,6 +858,40 @@ public sealed class PlanEditorEndpointContractTests
         Assert.Equal(expected, response.StatusCode);
         Assert.True(response.Headers.CacheControl?.NoStore);
         AssertNoProtectedPayload(body);
+    }
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task Revision_history_cancellation_reaches_service(bool exactLookup)
+    {
+        var entered = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var history = new StubRevisionHistoryService
+        {
+            ListHandler = async (_, cancellationToken) =>
+            {
+                entered.SetResult();
+                await Task.Delay(Timeout.InfiniteTimeSpan, cancellationToken);
+                throw new InvalidOperationException("The cancellation wait unexpectedly completed.");
+            },
+            GetHandler = async (_, _, _, cancellationToken) =>
+            {
+                entered.SetResult();
+                await Task.Delay(Timeout.InfiniteTimeSpan, cancellationToken);
+                throw new InvalidOperationException("The cancellation wait unexpectedly completed.");
+            },
+        };
+        await using var app = await Host(new StubActionFacade(), history: history);
+        using var client = AuthenticatedClient(app);
+        using var cancellation = new CancellationTokenSource();
+
+        var request = client.GetAsync(exactLookup ? RevisionRoute : HistoryRoute, cancellation.Token);
+        await entered.Task.WaitAsync(TimeSpan.FromSeconds(5));
+        await cancellation.CancelAsync();
+
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(() => request);
+        Assert.Equal(exactLookup ? 0 : 1, history.ListCalls);
+        Assert.Equal(exactLookup ? 1 : 0, history.GetCalls);
     }
 
     [Theory]
@@ -1032,6 +1147,8 @@ public sealed class PlanEditorEndpointContractTests
         public int GetCalls { get; private set; }
         public PlanRevisionHistoryQuery? LastQuery { get; private set; }
         public (Guid ProjectId, Guid PlanId, Guid RevisionId)? LastLookup { get; private set; }
+        public Func<PlanRevisionHistoryQuery, CancellationToken, Task<PlanRevisionHistoryPageResult>>? ListHandler { get; init; }
+        public Func<Guid, Guid, Guid, CancellationToken, Task<PlanRevisionHistoryLookupResult>>? GetHandler { get; init; }
 
         public Task<PlanRevisionHistoryPageResult> ListAsync(
             PlanRevisionHistoryQuery query,
@@ -1040,7 +1157,9 @@ public sealed class PlanEditorEndpointContractTests
             cancellationToken.ThrowIfCancellationRequested();
             ListCalls++;
             LastQuery = query;
-            return Task.FromResult(PageResult);
+            return ListHandler is null
+                ? Task.FromResult(PageResult)
+                : ListHandler(query, cancellationToken);
         }
 
         public Task<PlanRevisionHistoryLookupResult> GetAsync(
@@ -1052,7 +1171,9 @@ public sealed class PlanEditorEndpointContractTests
             cancellationToken.ThrowIfCancellationRequested();
             GetCalls++;
             LastLookup = (projectId, planId, revisionId);
-            return Task.FromResult(LookupResult);
+            return GetHandler is null
+                ? Task.FromResult(LookupResult)
+                : GetHandler(projectId, planId, revisionId, cancellationToken);
         }
     }
 
