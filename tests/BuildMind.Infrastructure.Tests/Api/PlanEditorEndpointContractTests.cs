@@ -56,6 +56,27 @@ public sealed class PlanEditorEndpointContractTests
     }
 
     [Fact]
+    public async Task Unauthenticated_reject_is_denied_without_invocation_or_protected_payload()
+    {
+        var actions = new StubActionFacade();
+        await using var app = await Host(actions);
+
+        using var response = await app.GetTestClient().PostAsync(RejectRoute, null);
+        var body = await response.Content.ReadAsStringAsync();
+
+        Assert.Equal(HttpStatusCode.Unauthorized, response.StatusCode);
+        Assert.Equal(0, actions.ApplyCalls);
+        Assert.Equal(0, actions.RejectCalls);
+        Assert.DoesNotContain("\"candidate\":", body, StringComparison.OrdinalIgnoreCase);
+        Assert.DoesNotContain("\"ownerId\":", body, StringComparison.OrdinalIgnoreCase);
+        Assert.DoesNotContain("\"geometry\":", body, StringComparison.OrdinalIgnoreCase);
+        Assert.DoesNotContain("\"geometryHash\":", body, StringComparison.OrdinalIgnoreCase);
+        Assert.DoesNotContain("\"revision\":", body, StringComparison.OrdinalIgnoreCase);
+        Assert.DoesNotContain("\"revisionId\":", body, StringComparison.OrdinalIgnoreCase);
+        Assert.DoesNotContain("\"validation\":", body, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
     public async Task Non_persisting_validation_route_is_not_mapped()
     {
         var actions = new StubActionFacade();
