@@ -118,3 +118,17 @@ C# tests run only in CI, because Smart App Control blocks local execution.
 3. one composition-root line in `Program.cs` (M4).
 
 Tests: `RegulationRetrievalEndpointTests`.
+
+**Registration path (2026-11-22, default off):**
+- `AddRegulationRetrievalFeature(configuration, authenticationEnabled)` is called by `Program.cs` and registers the module **only** when `Regulations:Retrieval:Enabled=true`.
+- When the flag is on, start-up is refused unless end-user authentication and `Services:Rag:Enabled` are both on.
+- Authentication is still Development-only, so the endpoint cannot be exposed in any other environment.
+- Turning the flag on is the lead's contract decision.
+- Tests: `RegulationRetrievalRegistrationTests` (real composition root with M1 authentication):
+  - 404 when off;
+  - 401 anonymous, 200 signed-in (citations, `legalStatusVerified=false`);
+  - 503 on RAG failure;
+  - per-user expensive limit 429;
+  - refusals without authentication or RAG.
+- **Single registration (fail closed):** both registration paths go through one guard. A second registration (same path twice, or isolated + flag path) is refused at start-up rather than silently ignored, because a duplicate module would map the route twice.
+- **Production/Staging with the flag on refuse start-up:** with authentication requested, the Development-only sign-in guard refuses; without it, the M7 guard refuses. Both are covered by tests.

@@ -1,5 +1,6 @@
 using BuildMind.API;
 using BuildMind.API.Documentation;
+using BuildMind.API.Endpoints.Regulations;
 using BuildMind.API.Health;
 using BuildMind.API.Routing;
 using BuildMind.API.Security;
@@ -28,6 +29,10 @@ if (m1AuthEnabled)
 {
     builder.Services.AddDashboardFeature();
 }
+
+// M7 public regulation evidence retrieval: OFF unless Regulations:Retrieval:Enabled (lead contract approval pending).
+// Fails closed: when enabled it requires authentication and the internal RAG service.
+builder.Services.AddRegulationRetrievalFeature(builder.Configuration, m1AuthEnabled);
 
 // C7 (proposed): OpenAPI document and Swagger UI, Development only. Bearer scheme only when authentication is enabled.
 builder.AddBuildMindDevelopmentSwagger(bearerAuthenticationEnabled: m1AuthEnabled);

@@ -207,6 +207,42 @@ public sealed record RegulationPassageHttpResponse(
 
 public static class RegulationRetrievalFeatureRegistration
 {
+    /// <summary>Explicit opt-in for the public endpoint. Default off; enabling it is a lead decision (contract approval).</summary>
+    public const string EnabledKey = "Regulations:Retrieval:Enabled";
+
+    private const string RagEnabledKey = "Services:Rag:Enabled";
+
+    /// <summary>
+    /// Production-capable registration path, fail closed and <b>off by default</b>. Registers the module only when
+    /// <see cref="EnabledKey"/> is true; then start-up is refused unless end-user authentication is active (the
+    /// endpoint requires it) and the internal RAG service is enabled (otherwise every call would be a 503).
+    /// Authentication itself is currently Development-only, so this path cannot expose the endpoint elsewhere.
+    /// </summary>
+    /// <returns>True when the endpoint module was registered.</returns>
+    public static bool AddRegulationRetrievalFeature(this IServiceCollection services, IConfiguration configuration, bool authenticationEnabled)
+    {
+        ArgumentNullException.ThrowIfNull(services);
+        ArgumentNullException.ThrowIfNull(configuration);
+        if (!configuration.GetValue<bool>(EnabledKey))
+        {
+            return false;
+        }
+
+        if (!authenticationEnabled)
+        {
+            throw new InvalidOperationException(
+                $"{EnabledKey} requires end-user authentication (Authentication:Enabled); the endpoint is never exposed anonymously.");
+        }
+
+        if (!configuration.GetValue<bool>(RagEnabledKey))
+        {
+            throw new InvalidOperationException($"{EnabledKey} requires the internal RAG service ({RagEnabledKey}).");
+        }
+
+        RegisterModuleOnce(services);
+        return true;
+    }
+
     /// <summary>
     /// Fail-closed opt-in for Testing hosts only. Production registration requires lead approval of the public contract
     /// and M1 authentication in the composition root (an endpoint with authorization metadata needs that middleware).
@@ -221,7 +257,25 @@ public static class RegulationRetrievalFeatureRegistration
                 "Regulation retrieval registration is restricted to isolated Testing hosts pending contract approval and M1 authentication.");
         }
 
-        services.AddSingleton<IApiEndpointModule, RegulationRetrievalEndpointModule>();
+        RegisterModuleOnce(services);
         return services;
+    }
+
+    /// <summary>
+    /// Fail closed on double registration: two copies of the module would map the same route twice and every request
+    /// would fail with an ambiguous match. A second registration is a composition error, so it is refused loudly at
+    /// start-up instead of being silently ignored.
+    /// </summary>
+    private static void RegisterModuleOnce(IServiceCollection services)
+    {
+        if (services.Any(descriptor => descriptor.ServiceType == typeof(IApiEndpointModule)
+                && (descriptor.ImplementationType == typeof(RegulationRetrievalEndpointModule)
+                    || descriptor.ImplementationInstance is RegulationRetrievalEndpointModule)))
+        {
+            throw new InvalidOperationException(
+                "The regulation retrieval endpoint module is already registered; use exactly one registration path.");
+        }
+
+        services.AddSingleton<IApiEndpointModule, RegulationRetrievalEndpointModule>();
     }
 }
