@@ -64,6 +64,7 @@ public sealed class ProjectRepository(
             LocationReference = project.LocationReference,
             Status = project.Status,
             Revision = project.Revision,
+            AuthorizationVersion = project.AuthorizationVersion,
             CreatedAtUtc = project.CreatedAtUtc,
             UpdatedAtUtc = project.UpdatedAtUtc
         };
@@ -117,6 +118,7 @@ public sealed class ProjectRepository(
             row.Status,
             row.Revision,
             row.CreatedAtUtc,
-            row.UpdatedAtUtc);
+            row.UpdatedAtUtc,
+            row.AuthorizationVersion);
     }
 }

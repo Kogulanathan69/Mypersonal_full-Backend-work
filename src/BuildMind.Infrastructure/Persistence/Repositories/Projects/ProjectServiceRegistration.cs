@@ -21,6 +21,12 @@ public static class ProjectServiceRegistration
 
         services.TryAddScoped<ProjectService>();
 
+        // STEP 05 decision 4: the atomic version writer is available to future authorization-changing operations.
+        // ProjectOwnerAuthorizationPort (M3's IProjectAuthorizationPort) is intentionally NOT registered yet.
+        services.TryAddScoped<
+            Application.Features.Projects.Abstractions.IProjectAuthorizationVersionStore,
+            ProjectAuthorizationVersionStore>();
+
         return services;
     }
 }

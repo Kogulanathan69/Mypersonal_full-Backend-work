@@ -16,6 +16,13 @@ public sealed class Project
 
     public long Revision { get; private set; } = 1;
 
+    /// <summary>
+    /// Authorization generation (STEP 05 decision 4). Changes only when who may act on the project changes
+    /// (ownership, sharing/consent, access-relevant status) — never for metadata edits, which change
+    /// <see cref="Revision"/>. Authorization evidence bound to an older value is stale.
+    /// </summary>
+    public long AuthorizationVersion { get; private set; } = 1;
+
     public DateTimeOffset CreatedAtUtc { get; init; }
         = DateTimeOffset.UtcNow;
 
@@ -30,7 +37,8 @@ public sealed class Project
         string status,
         long revision,
         DateTimeOffset createdAtUtc,
-        DateTimeOffset? updatedAtUtc)
+        DateTimeOffset? updatedAtUtc,
+        long authorizationVersion = 1)
     {
         if (id == Guid.Empty || ownerId == Guid.Empty)
             throw new ArgumentException("Invalid project identity.");
@@ -41,6 +49,9 @@ public sealed class Project
         if (revision < 1)
             throw new ArgumentOutOfRangeException(nameof(revision));
 
+        if (authorizationVersion < 1)
+            throw new ArgumentOutOfRangeException(nameof(authorizationVersion));
+
         return new Project
         {
             Id = id,
@@ -50,6 +61,7 @@ public sealed class Project
             LocationReference = locationReference,
             Status = status,
             Revision = revision,
+            AuthorizationVersion = authorizationVersion,
             CreatedAtUtc = createdAtUtc,
             UpdatedAtUtc = updatedAtUtc
         };
@@ -70,6 +82,7 @@ public sealed class Project
             Status,
             checked(Revision + 1),
             CreatedAtUtc,
-            updatedAtUtc);
+            updatedAtUtc,
+            AuthorizationVersion);   // metadata edits never change authorization
     }
 }
