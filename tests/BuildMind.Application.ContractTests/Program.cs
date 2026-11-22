@@ -1473,6 +1473,7 @@ MutationFingerprintContractScenarios.Register(Run);
 AtomicPlanMutationContractScenarios.Register(Run);
 AtomicPlanMutationConsumerContractScenarios.Register(Run);
 FinalPlanConfirmationJsonSecurityContractScenarios.Register(Run);
+MySqlAdapterPreparationContractScenarios.Register(Run);
 DiagnosticContractScenarios.Register(Run);
 PersistenceContractScenarios.Register(Run);
 AdvancedGeometryContractScenarios.Register(Run);
