@@ -31,7 +31,60 @@ internal sealed class UserRecord
 
     public bool IsActive { get; set; }
 
+    /// <summary>
+    /// STEP 05 decision 2: issued access tokens carry this value; any increment (password reset, disabling,
+    /// logout-all, security changes) makes every earlier token invalid on its next request.
+    /// </summary>
+    public long TokenVersion { get; set; } = 1;
+
     public DateTimeOffset CreatedAtUtc { get; set; }
+}
+
+/// <summary>Row of <c>refresh_tokens</c> (STEP 05 decision 3). Only the SHA-256 of the token is stored.</summary>
+internal sealed class RefreshTokenRecord
+{
+    public const int TokenHashLength = 64;           // SHA-256, upper-case hex
+    public const int RevocationReasonMaxLength = 32;
+
+    public Guid Id { get; set; }
+
+    public Guid UserId { get; set; }
+
+    /// <summary>All tokens produced by rotation from one login share a family; replay revokes the family.</summary>
+    public Guid FamilyId { get; set; }
+
+    public string TokenHash { get; set; } = string.Empty;
+
+    public DateTimeOffset CreatedAtUtc { get; set; }
+
+    public DateTimeOffset ExpiresAtUtc { get; set; }
+
+    /// <summary>Absolute session limit copied unchanged through rotation.</summary>
+    public DateTimeOffset AbsoluteExpiresAtUtc { get; set; }
+
+    public DateTimeOffset? ConsumedAtUtc { get; set; }
+
+    public Guid? ReplacedByTokenId { get; set; }
+
+    public DateTimeOffset? RevokedAtUtc { get; set; }
+
+    public string? RevocationReason { get; set; }
+}
+
+/// <summary>Row of <c>password_reset_tokens</c> (STEP 05 decision 7): at most one outstanding token per user.</summary>
+internal sealed class PasswordResetRecord
+{
+    public const int TokenHashLength = 64;           // SHA-256, upper-case hex
+
+    public Guid UserId { get; set; }
+
+    public string TokenHash { get; set; } = string.Empty;
+
+    public DateTimeOffset CreatedAtUtc { get; set; }
+
+    public DateTimeOffset ExpiresAtUtc { get; set; }
+
+    public DateTimeOffset? ConsumedAtUtc { get; set; }
 }
 
 /// <summary>Row of <c>projects</c>, shaped after M1 <c>BuildMind.Domain.Entities.Project</c>.</summary>
@@ -60,6 +113,8 @@ internal sealed class ProjectRecord
     public string Status { get; set; } = string.Empty;
 
     public long Revision { get; set; }
+
+    public long AuthorizationVersion { get; set; } = 1;
 
     public DateTimeOffset CreatedAtUtc { get; set; }
 

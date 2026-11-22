@@ -19,11 +19,49 @@ namespace BuildMind.Infrastructure.Persistence.Migrations
                 .HasAnnotation("ProductVersion", "10.0.12")
                 .HasAnnotation("Relational:MaxIdentifierLength", 64);
 
+            modelBuilder.Entity("BuildMind.Infrastructure.Persistence.Records.PasswordResetRecord", b =>
+                {
+                    b.Property<Guid>("UserId")
+                        .HasColumnType("char(36)")
+                        .HasColumnName("user_id");
+
+                    b.Property<DateTime?>("ConsumedAtUtc")
+                        .HasColumnType("datetime(6)")
+                        .HasColumnName("consumed_at_utc");
+
+                    b.Property<DateTime>("CreatedAtUtc")
+                        .HasColumnType("datetime(6)")
+                        .HasColumnName("created_at_utc");
+
+                    b.Property<DateTime>("ExpiresAtUtc")
+                        .HasColumnType("datetime(6)")
+                        .HasColumnName("expires_at_utc");
+
+                    b.Property<string>("TokenHash")
+                        .IsRequired()
+                        .HasMaxLength(64)
+                        .HasColumnType("char(64)")
+                        .HasColumnName("token_hash")
+                        .IsFixedLength();
+
+                    b.HasKey("UserId")
+                        .HasName("pk_password_reset_tokens");
+
+                    b.ToTable("password_reset_tokens", (string)null);
+                });
+
             modelBuilder.Entity("BuildMind.Infrastructure.Persistence.Records.ProjectRecord", b =>
                 {
                     b.Property<Guid>("Id")
                         .HasColumnType("char(36)")
                         .HasColumnName("id");
+
+                    b.Property<long>("AuthorizationVersion")
+                        .IsConcurrencyToken()
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("bigint")
+                        .HasDefaultValue(1L)
+                        .HasColumnName("authorization_version");
 
                     b.Property<DateTime>("CreatedAtUtc")
                         .HasColumnType("datetime(6)")
@@ -71,6 +109,72 @@ namespace BuildMind.Infrastructure.Persistence.Migrations
                         .HasDatabaseName("ix_projects_owner_id_created_at_utc");
 
                     b.ToTable("projects", (string)null);
+                });
+
+            modelBuilder.Entity("BuildMind.Infrastructure.Persistence.Records.RefreshTokenRecord", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .HasColumnType("char(36)")
+                        .HasColumnName("id");
+
+                    b.Property<DateTime>("AbsoluteExpiresAtUtc")
+                        .HasColumnType("datetime(6)")
+                        .HasColumnName("absolute_expires_at_utc");
+
+                    b.Property<DateTime?>("ConsumedAtUtc")
+                        .HasColumnType("datetime(6)")
+                        .HasColumnName("consumed_at_utc");
+
+                    b.Property<DateTime>("CreatedAtUtc")
+                        .HasColumnType("datetime(6)")
+                        .HasColumnName("created_at_utc");
+
+                    b.Property<DateTime>("ExpiresAtUtc")
+                        .HasColumnType("datetime(6)")
+                        .HasColumnName("expires_at_utc");
+
+                    b.Property<Guid>("FamilyId")
+                        .HasColumnType("char(36)")
+                        .HasColumnName("family_id");
+
+                    b.Property<Guid?>("ReplacedByTokenId")
+                        .HasColumnType("char(36)")
+                        .HasColumnName("replaced_by_token_id");
+
+                    b.Property<string>("RevocationReason")
+                        .HasMaxLength(32)
+                        .HasColumnType("varchar(32)")
+                        .HasColumnName("revocation_reason");
+
+                    b.Property<DateTime?>("RevokedAtUtc")
+                        .HasColumnType("datetime(6)")
+                        .HasColumnName("revoked_at_utc");
+
+                    b.Property<string>("TokenHash")
+                        .IsRequired()
+                        .HasMaxLength(64)
+                        .HasColumnType("char(64)")
+                        .HasColumnName("token_hash")
+                        .IsFixedLength();
+
+                    b.Property<Guid>("UserId")
+                        .HasColumnType("char(36)")
+                        .HasColumnName("user_id");
+
+                    b.HasKey("Id")
+                        .HasName("pk_refresh_tokens");
+
+                    b.HasIndex("FamilyId")
+                        .HasDatabaseName("ix_refresh_tokens_family_id");
+
+                    b.HasIndex("TokenHash")
+                        .IsUnique()
+                        .HasDatabaseName("ux_refresh_tokens_token_hash");
+
+                    b.HasIndex("UserId")
+                        .HasDatabaseName("ix_refresh_tokens_user_id");
+
+                    b.ToTable("refresh_tokens", (string)null);
                 });
 
             modelBuilder.Entity("BuildMind.Infrastructure.Persistence.Records.RequirementHeadRecord", b =>
@@ -186,6 +290,12 @@ namespace BuildMind.Infrastructure.Persistence.Migrations
                         .HasColumnType("varchar(16)")
                         .HasColumnName("phone_number");
 
+                    b.Property<long>("TokenVersion")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("bigint")
+                        .HasDefaultValue(1L)
+                        .HasColumnName("token_version");
+
                     b.HasKey("Id")
                         .HasName("pk_users");
 
@@ -196,6 +306,16 @@ namespace BuildMind.Infrastructure.Persistence.Migrations
                     b.ToTable("users", (string)null);
                 });
 
+            modelBuilder.Entity("BuildMind.Infrastructure.Persistence.Records.PasswordResetRecord", b =>
+                {
+                    b.HasOne("BuildMind.Infrastructure.Persistence.Records.UserRecord", null)
+                        .WithOne()
+                        .HasForeignKey("BuildMind.Infrastructure.Persistence.Records.PasswordResetRecord", "UserId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired()
+                        .HasConstraintName("fk_password_reset_tokens_users_user_id");
+                });
+
             modelBuilder.Entity("BuildMind.Infrastructure.Persistence.Records.ProjectRecord", b =>
                 {
                     b.HasOne("BuildMind.Infrastructure.Persistence.Records.UserRecord", null)
@@ -204,6 +324,16 @@ namespace BuildMind.Infrastructure.Persistence.Migrations
                         .OnDelete(DeleteBehavior.Restrict)
                         .IsRequired()
                         .HasConstraintName("fk_projects_users_owner_id");
+                });
+
+            modelBuilder.Entity("BuildMind.Infrastructure.Persistence.Records.RefreshTokenRecord", b =>
+                {
+                    b.HasOne("BuildMind.Infrastructure.Persistence.Records.UserRecord", null)
+                        .WithMany()
+                        .HasForeignKey("UserId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired()
+                        .HasConstraintName("fk_refresh_tokens_users_user_id");
                 });
 
             modelBuilder.Entity("BuildMind.Infrastructure.Persistence.Records.RequirementHeadRecord", b =>

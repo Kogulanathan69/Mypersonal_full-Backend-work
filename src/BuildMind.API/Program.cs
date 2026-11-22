@@ -18,8 +18,19 @@ builder.Services
 // C6 (proposed): exact-origin CORS allowlist from configuration. No origins configured => no CORS policy at all.
 var corsEnabled = builder.Services.AddBuildMindCors(builder.Configuration, builder.Environment);
 
-// C7 (proposed): OpenAPI document and Swagger UI, Development only. No bearer scheme until end-user auth exists.
-builder.AddBuildMindDevelopmentSwagger(bearerAuthenticationEnabled: false);
+// M1 end-user authentication (JWT bearer). Off unless Authentication:Enabled; activation outside Development is refused
+// at start-up until approved. Returns whether authentication middleware must run.
+var m1AuthEnabled = builder.AddM1AuthenticationApi();
+
+// M5 customer dashboard: its production dependencies (ICurrentUser from JWT, IProjectRepository from M1) exist only
+// when M1 authentication is active, so the module is never registered without them.
+if (m1AuthEnabled)
+{
+    builder.Services.AddDashboardFeature();
+}
+
+// C7 (proposed): OpenAPI document and Swagger UI, Development only. Bearer scheme only when authentication is enabled.
+builder.AddBuildMindDevelopmentSwagger(bearerAuthenticationEnabled: m1AuthEnabled);
 
 // S4-B: rate limiting (global chained limiter + auth-strict policy + expensive-operation concurrency).
 builder.Services.AddBuildMindRateLimiting(builder.Configuration);
@@ -36,19 +47,29 @@ app.UseStatusCodePages();
 // Development only; a no-op in every other environment.
 app.UseBuildMindDevelopmentSwagger();
 
-// Order: routing -> CORS (answers preflight before any future authentication).
+// Order: routing -> CORS -> authentication -> rate limiting -> account-state check -> authorization.
+// CORS answers preflights before authentication; authentication runs BEFORE the rate limiter so authenticated callers
+// get per-user partitions; authorization runs last. Feature modules must not call UseRateLimiter() themselves.
 app.UseRouting();
 if (corsEnabled)
 {
     app.UseCors(CorsConfiguration.PolicyName);
 }
 
-// S4-B: the single rate-limiter middleware. After routing (endpoint policies and markers are visible) and after CORS
-// (preflights are not counted); Swagger and the exception/status-code pages run earlier. When end-user authentication
-// is integrated it goes here: UseAuthentication() BEFORE UseRateLimiter() (per-user partitions), and the per-request
-// account-state check AFTER it, so floods are throttled before they reach the database. Feature modules must not
-// call UseRateLimiter() themselves.
+if (m1AuthEnabled)
+{
+    app.UseAuthentication();
+}
+
 app.UseRateLimiter();
+
+if (m1AuthEnabled)
+{
+    // Per-request account-state check (disabled accounts, revoked token versions; fail closed). After the rate limiter,
+    // so floods are throttled before they reach the database; before authorization, so revoked sessions never authorize.
+    app.UseMiddleware<ActiveSessionMiddleware>();
+    app.UseAuthorization();
+}
 
 // Liveness only: reports that the API process is running. It does not check MySQL, Python or RAG.
 app.MapGet("/health", () => Results.Ok(new { service = "buildmind-api", status = "ok" }));

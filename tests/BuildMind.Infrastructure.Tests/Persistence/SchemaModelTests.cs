@@ -26,7 +26,7 @@ public sealed class SchemaModelTests
     {
         var tables = Model().GetEntityTypes().Select(e => e.GetTableName()).OrderBy(t => t, StringComparer.Ordinal);
 
-        Assert.Equal(new[] { "project_requirement_heads", "projects", "requirement_revisions", "users" }, tables);
+        Assert.Equal(PersistenceRegistrationTests.ApprovedTables, tables);
     }
 
     [Fact]
@@ -77,9 +77,11 @@ public sealed class SchemaModelTests
         Assert.Equal(
             new[]
             {
+                "fk_password_reset_tokens_users_user_id",
                 "fk_project_requirement_heads_projects_project_id",
                 "fk_project_requirement_heads_requirement_revisions_current",
                 "fk_projects_users_owner_id",
+                "fk_refresh_tokens_users_user_id",
                 "fk_requirement_revisions_projects_project_id",
             },
             foreignKeys.Select(fk => fk.GetConstraintName()).OrderBy(n => n, StringComparer.Ordinal));

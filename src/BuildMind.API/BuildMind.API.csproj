@@ -27,6 +27,7 @@
   <ItemGroup>
     <!-- Design-time only: makes this project the dotnet-ef startup project. PrivateAssets keeps it out of
          consumers; EF Core design assemblies are not used by the application at run time. -->
+    <PackageReference Include="Microsoft.AspNetCore.Authentication.JwtBearer" Version="10.0.15" />
     <PackageReference Include="Microsoft.EntityFrameworkCore.Design" Version="10.0.12">
       <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
       <PrivateAssets>all</PrivateAssets>

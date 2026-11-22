@@ -34,6 +34,13 @@ public sealed class DesignTimeFactoryTests
 
         Assert.StartsWith("MySql", context.Database.ProviderName, StringComparison.Ordinal);
         Assert.Equal(ConnectionState.Closed, context.Database.GetDbConnection().State);
-        Assert.Equal(new[] { PersistenceRegistrationTests.InitialMigrationId }, context.Database.GetMigrations());
+        Assert.Equal(
+     new[]
+     {
+        PersistenceRegistrationTests.InitialMigrationId,
+        PersistenceRegistrationTests.AuthorizationMigrationId,
+        PersistenceRegistrationTests.SessionSecurityMigrationId
+     },
+     context.Database.GetMigrations());
     }
 }

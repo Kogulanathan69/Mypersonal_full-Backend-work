@@ -18,7 +18,12 @@ internal sealed class ProjectRecordConfiguration : IEntityTypeConfiguration<Proj
         builder.Property(p => p.Status).HasColumnName("status").HasMaxLength(ProjectRecord.StatusMaxLength).IsRequired();
         // IProjectRepository.UpdateAsync(project, ownerId, expectedRevision) is a compare-and-set on this column.
         builder.Property(p => p.Revision).HasColumnName("revision").IsRequired().IsConcurrencyToken();
-        builder.Property(p => p.CreatedAtUtc).HasColumnName("created_at_utc").IsRequired();
+        builder.Property(p => p.AuthorizationVersion)
+       .HasColumnName("authorization_version")
+       .HasColumnType("bigint")
+       .HasDefaultValue(1L)
+       .IsRequired()
+       .IsConcurrencyToken(); builder.Property(p => p.CreatedAtUtc).HasColumnName("created_at_utc").IsRequired();
         builder.Property(p => p.UpdatedAtUtc).HasColumnName("updated_at_utc");
 
         builder.HasOne<UserRecord>()

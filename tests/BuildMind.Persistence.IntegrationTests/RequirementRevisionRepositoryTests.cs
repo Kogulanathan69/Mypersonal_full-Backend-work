@@ -39,7 +39,12 @@ public sealed class RequirementRevisionRepositoryTests(ITestOutputHelper output)
         output.WriteLine("Tables: " + string.Join(", ", tables));
         output.WriteLine("FK/unique: " + string.Join(", ", constraints));
 
-        Assert.Equal(new[] { "project_requirement_heads", "projects", "requirement_revisions", "users" }, tables);
+        Assert.Equal(new[] { "password_reset_tokens", "project_requirement_heads", "projects", "refresh_tokens", "requirement_revisions", "users" }, tables);
+        Assert.Contains("fk_refresh_tokens_users_user_id", constraints);
+        Assert.Contains("ux_refresh_tokens_token_hash", constraints);
+        Assert.Contains("fk_password_reset_tokens_users_user_id", constraints);
+        Assert.Equal("bigint", await ColumnTypeAsync(database, "users", "token_version"));
+        Assert.Equal("bigint", await ColumnTypeAsync(database, "projects", "authorization_version"));
         Assert.Contains("fk_projects_users_owner_id", constraints);
         Assert.Contains("fk_requirement_revisions_projects_project_id", constraints);
         Assert.Contains("fk_project_requirement_heads_requirement_revisions_current", constraints);

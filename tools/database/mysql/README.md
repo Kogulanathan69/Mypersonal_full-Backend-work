@@ -33,9 +33,17 @@
 
 **Committed migrations** (`src/BuildMind.Infrastructure/Persistence/Migrations`):
 
-| Migration | Content | Ranged script for an empty database |
+| Migration | Content | Ranged script (from the previous migration) |
 |---|---|---|
 | `20261118133137_InitialFeatureSchema` | `users`, `projects`, `requirement_revisions`, `project_requirement_heads` (BE-M4-D03) | `migrations script 0 20261118133137_InitialFeatureSchema …` |
+| `20261119092022_AddProjectAuthorizationVersion` | `projects.authorization_version` `bigint NOT NULL DEFAULT 1` (M1). Down drops only that column | `migrations script 20261118133137_InitialFeatureSchema 20261119092022_AddProjectAuthorizationVersion …` |
+| `20261120202215_AddSessionSecurity` | `users.token_version` `bigint NOT NULL DEFAULT 1`; `refresh_tokens`; `password_reset_tokens` (hashes only; FKs to `users` RESTRICT) (M4, STEP 05). Down drops only those tables and that column | `migrations script 20261119092022_AddProjectAuthorizationVersion 20261120202215_AddSessionSecurity …` |
+
+**Empty database:** `migrations script 0 20261120202215_AddSessionSecurity`.
+
+**Existing database at `InitialFeatureSchema`:** one ranged script `20261118133137_InitialFeatureSchema 20261120202215_AddSessionSecurity`. Existing users receive `token_version = 1` from the column default, so no data fix is needed. Tokens issued before the upgrade carry no `tv` claim and are rejected by the session check; users sign in again.
+
+**Live coverage:** `BuildMindMigrationTests` M01–M05.
 
 **Rollback is destructive.** `Down` drops tables and **every row in them**. Never run a down migration on a database with data you need. Recover from the backup (step 4) instead, unless the M4 lead explicitly authorizes the rollback.
 
