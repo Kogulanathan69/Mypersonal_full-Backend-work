@@ -6,6 +6,19 @@ using BuildMind.Application.Features.PlanEditor.Integration;
 
 namespace BuildMind.Application.Features.PlanEditor.Versioning;
 
+public interface IPlanRevisionHistoryService
+{
+    Task<PlanRevisionHistoryPageResult> ListAsync(
+        PlanRevisionHistoryQuery query,
+        CancellationToken cancellationToken = default);
+
+    Task<PlanRevisionHistoryLookupResult> GetAsync(
+        Guid projectId,
+        Guid planId,
+        Guid revisionId,
+        CancellationToken cancellationToken = default);
+}
+
 /// <summary>
 /// Owner-scoped, read-only revision history boundary. Authentication comes only from <see cref="ICurrentUser"/>.
 /// Authorization is rechecked after the bounded read so revoked or changed authority never releases snapshots.
@@ -14,7 +27,7 @@ namespace BuildMind.Application.Features.PlanEditor.Versioning;
 public sealed class PlanRevisionHistoryService(
     ICurrentUser currentUser,
     IProjectAuthorizationPort authorization,
-    IPlanRevisionHistoryQueryPort history)
+    IPlanRevisionHistoryQueryPort history) : IPlanRevisionHistoryService
 {
     public const int DefaultPageSize = 20;
     public const int MaximumPageSize = 50;

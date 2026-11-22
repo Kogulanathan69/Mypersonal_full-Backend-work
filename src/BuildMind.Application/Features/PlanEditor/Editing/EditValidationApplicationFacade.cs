@@ -3,6 +3,13 @@ using BuildMind.Application.Abstractions.Errors;
 
 namespace BuildMind.Application.Features.PlanEditor.Editing;
 
+public interface IEditValidationApplicationFacade
+{
+    Task<CandidatePreviewResult> ValidateAsync(
+        CreateCandidatePreviewCommand command,
+        CancellationToken cancellationToken = default);
+}
+
 /// <summary>
 /// Unregistered application boundary that supplies the trusted current actor to the existing candidate-preview
 /// orchestration. It deliberately defines no HTTP contract and does not change whether that orchestration persists
@@ -10,7 +17,7 @@ namespace BuildMind.Application.Features.PlanEditor.Editing;
 /// </summary>
 public sealed class EditValidationApplicationFacade(
     ICurrentUser currentUser,
-    CandidatePreviewService candidatePreviews)
+    CandidatePreviewService candidatePreviews) : IEditValidationApplicationFacade
 {
     private readonly ICurrentUser currentUser =
         currentUser ?? throw new ArgumentNullException(nameof(currentUser));

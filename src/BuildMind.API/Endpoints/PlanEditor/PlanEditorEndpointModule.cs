@@ -8,6 +8,7 @@ using BuildMind.Application.Features.PlanEditor.Contracts;
 using BuildMind.Application.Features.PlanEditor.Diagnostics;
 using BuildMind.Application.Features.PlanEditor.Editing;
 using BuildMind.Application.Features.PlanEditor.Versioning;
+using Microsoft.AspNetCore.WebUtilities;
 
 namespace BuildMind.API.Endpoints.PlanEditor;
 
@@ -34,10 +35,136 @@ public sealed class PlanEditorEndpointModule : IApiEndpointModule
             .WithTags("Plan Editor")
             .RequireAuthorization();
 
+        plans.MapGet("/versions", ListRevisionsAsync)
+            .WithName("ListPlanRevisions");
+        plans.MapGet("/versions/{revisionId}", GetRevisionAsync)
+            .WithName("GetPlanRevision");
+        plans.MapPost("/candidates", CreateCandidateAsync)
+            .WithName("CreatePlanEditCandidate");
         plans.MapPost("/candidates/{candidateId}/apply", ApplyCandidateAsync)
             .WithName("ApplyPlanEditCandidate");
         plans.MapPost("/candidates/{candidateId}/reject", RejectCandidateAsync)
             .WithName("RejectPlanEditCandidate");
+    }
+
+    private static async Task<IResult> ListRevisionsAsync(
+        string projectId,
+        string planId,
+        int? pageSize,
+        string? cursor,
+        HttpContext context,
+        ICurrentUser currentUser,
+        IPlanRevisionHistoryService history,
+        CancellationToken cancellationToken)
+    {
+        NoStore(context);
+        if (!TryReadScope(projectId, planId, out var project, out var plan, out var scopeFailure))
+            return scopeFailure!;
+        if (!TryReadActor(currentUser, out _, out var actorFailure))
+            return actorFailure!;
+
+        var size = pageSize ?? PlanRevisionHistoryService.DefaultPageSize;
+        if (size is < 1 or > PlanRevisionHistoryService.MaximumPageSize)
+            return InvalidRequest(
+                "pageSize",
+                $"pageSize must be between 1 and {PlanRevisionHistoryService.MaximumPageSize}.");
+        if (!TryDecodeCursor(cursor, out var decodedCursor))
+            return InvalidRequest("cursor", "A valid revision-history cursor is required.");
+        if (decodedCursor is { } scopedCursor &&
+            (scopedCursor.ProjectId != project || scopedCursor.PlanId != plan))
+            return InvalidRequest("cursor", "The cursor does not belong to this plan.");
+
+        var result = await history.ListAsync(
+            new PlanRevisionHistoryQuery(project, plan, size, decodedCursor),
+            cancellationToken).ConfigureAwait(false);
+
+        return MapHistoryPage(result, project, plan);
+    }
+
+    private static async Task<IResult> GetRevisionAsync(
+        string projectId,
+        string planId,
+        string revisionId,
+        HttpContext context,
+        ICurrentUser currentUser,
+        IPlanRevisionHistoryService history,
+        CancellationToken cancellationToken)
+    {
+        NoStore(context);
+        if (!TryReadScope(projectId, planId, out var project, out var plan, out var scopeFailure))
+            return scopeFailure!;
+        if (!TryReadIdentity(revisionId, "revisionId", out var revision, out var revisionFailure))
+            return revisionFailure!;
+        if (!TryReadActor(currentUser, out _, out var actorFailure))
+            return actorFailure!;
+
+        var result = await history.GetAsync(
+            project, plan, revision, cancellationToken).ConfigureAwait(false);
+        if (result is null || !Enum.IsDefined(result.Status))
+            return InvalidDependency();
+        if (result.Status == PlanRevisionHistoryStatus.Succeeded)
+        {
+            return TryMapRevision(result.Revision, project, plan, revision, out var response)
+                ? Results.Ok(response)
+                : InvalidDependency();
+        }
+        if (result.Revision is not null)
+            return InvalidDependency();
+
+        return MapHistoryFailure(result.Status);
+    }
+
+    private static async Task<IResult> CreateCandidateAsync(
+        string projectId,
+        string planId,
+        HttpContext context,
+        ICurrentUser currentUser,
+        IEditValidationApplicationFacade facade,
+        CancellationToken cancellationToken)
+    {
+        NoStore(context);
+        if (!TryReadScope(projectId, planId, out var project, out var plan, out var scopeFailure))
+            return scopeFailure!;
+        if (!TryReadActor(currentUser, out var actor, out var actorFailure))
+            return actorFailure!;
+        if (!context.Request.HasJsonContentType())
+            return Problem(StatusCodes.Status415UnsupportedMediaType, SharedErrorCodes.UnsupportedMediaType);
+
+        PlanEditRequestDto? request;
+        try
+        {
+            request = await context.Request
+                .ReadFromJsonAsync<PlanEditRequestDto>(StrictJson, cancellationToken)
+                .ConfigureAwait(false);
+            if (request is not null)
+                PlanEditorContractValidator.Validate(request);
+        }
+        catch (Exception exception) when (exception is JsonException or NotSupportedException or ArgumentException)
+        {
+            return InvalidRequest("request", "A complete valid candidate request is required.");
+        }
+
+        if (request is null)
+            return InvalidRequest("request", "A complete candidate request is required.");
+        if (request.ProjectId != project || request.PlanId != plan)
+            return InvalidRequest("request", "Body project and plan identities must match the route.");
+
+        var result = await facade.ValidateAsync(
+            new CreateCandidatePreviewCommand(
+                project,
+                plan,
+                request.BaseRevisionId,
+                request.Command,
+                context.TraceIdentifier),
+            cancellationToken).ConfigureAwait(false);
+
+        return MapCandidateCreation(
+            result,
+            actor,
+            project,
+            plan,
+            request.BaseRevisionId,
+            request.Command.CommandId);
     }
 
     private static async Task<IResult> ApplyCandidateAsync(
@@ -107,6 +234,266 @@ public sealed class PlanEditorEndpointModule : IApiEndpointModule
             cancellationToken).ConfigureAwait(false);
 
         return MapActionResult(result, actor, project, plan, candidate, CandidateActionStatus.Rejected);
+    }
+
+    private static IResult MapHistoryPage(
+        PlanRevisionHistoryPageResult? result,
+        Guid expectedProjectId,
+        Guid expectedPlanId)
+    {
+        if (result is null || !Enum.IsDefined(result.Status))
+            return InvalidDependency();
+        if (result.Status != PlanRevisionHistoryStatus.Succeeded)
+        {
+            if (result.Revisions is not null || result.NextCursor is not null)
+                return InvalidDependency();
+            return MapHistoryFailure(result.Status);
+        }
+        if (result.Revisions is null)
+            return InvalidDependency();
+
+        var revisions = new List<PlanRevisionSummaryHttpResponse>(result.Revisions.Count);
+        var seen = new HashSet<Guid>();
+        long? previousVersion = null;
+        foreach (var revision in result.Revisions)
+        {
+            if (!TryMapRevision(
+                    revision,
+                    expectedProjectId,
+                    expectedPlanId,
+                    expectedRevisionId: null,
+                    out var detail) ||
+                !seen.Add(detail!.RevisionId) ||
+                previousVersion is { } previous && detail.VersionNumber >= previous)
+                return InvalidDependency();
+
+            previousVersion = detail.VersionNumber;
+            revisions.Add(new PlanRevisionSummaryHttpResponse(
+                detail.RevisionId,
+                detail.ParentRevisionId,
+                detail.VersionNumber,
+                detail.GeometrySchemaVersion,
+                detail.GeometryHash,
+                detail.LandRevisionId,
+                detail.RequirementsRevisionId,
+                detail.Validation.ValidationId,
+                detail.CreatedBy,
+                detail.CreatedAtUtc,
+                detail.ChangeSummary));
+        }
+
+        string? nextCursor = null;
+        if (result.NextCursor is { } cursor)
+        {
+            if (!cursor.IsValid || cursor.ProjectId != expectedProjectId || cursor.PlanId != expectedPlanId ||
+                revisions.Count == 0)
+                return InvalidDependency();
+            nextCursor = EncodeCursor(cursor);
+        }
+
+        return Results.Ok(new PlanRevisionHistoryPageHttpResponse(revisions, nextCursor));
+    }
+
+    private static IResult MapHistoryFailure(PlanRevisionHistoryStatus status) => status switch
+    {
+        PlanRevisionHistoryStatus.DeniedOrNotFound =>
+            Problem(StatusCodes.Status404NotFound, SharedErrorCodes.NotFound),
+        PlanRevisionHistoryStatus.InvalidRequest =>
+            InvalidRequest("request", "A valid revision-history request is required."),
+        PlanRevisionHistoryStatus.InvalidCursor =>
+            Problem(
+                StatusCodes.Status409Conflict,
+                PlanEditorErrorCodes.RevisionConflict,
+                "The revision-history cursor is stale or invalid."),
+        PlanRevisionHistoryStatus.DependencyUnavailable =>
+            Problem(
+                StatusCodes.Status503ServiceUnavailable,
+                PlanEditorErrorCodes.DependencyUnavailable,
+                "Revision history is temporarily unavailable."),
+        PlanRevisionHistoryStatus.DependencyTimeout =>
+            Problem(
+                StatusCodes.Status504GatewayTimeout,
+                PlanEditorErrorCodes.DependencyTimeout,
+                "Revision history timed out."),
+        PlanRevisionHistoryStatus.InvalidDependencyResponse or
+        PlanRevisionHistoryStatus.UnexpectedInternalFailure => InvalidDependency(),
+        _ => InvalidDependency(),
+    };
+
+    private static IResult MapCandidateCreation(
+        CandidatePreviewResult? result,
+        Guid expectedActorId,
+        Guid expectedProjectId,
+        Guid expectedPlanId,
+        Guid expectedBaseRevisionId,
+        Guid expectedCommandId)
+    {
+        if (result is null || !Enum.IsDefined(result.Status))
+            return InvalidDependency();
+        if (result.Status == CandidatePreviewResultStatus.Created)
+        {
+            if (result.Diagnostics is null ||
+                !TryValidateCandidate(
+                    result.Candidate,
+                    expectedActorId,
+                    expectedProjectId,
+                    expectedPlanId,
+                    expectedCandidateId: null,
+                    expectedBaseRevisionId,
+                    expectedCommandId,
+                    CandidatePreviewStatus.Pending,
+                    out var geometry))
+                return InvalidDependency();
+
+            var candidate = result.Candidate!;
+            return Results.Json(
+                new CandidateCreationHttpResponse(
+                    candidate.CandidateId,
+                    candidate.ProjectId,
+                    candidate.PlanId,
+                    candidate.BaseRevisionId,
+                    candidate.GeometryHash,
+                    geometry!,
+                    candidate.Validation,
+                    result.Diagnostics.ToArray(),
+                    candidate.CreatedAtUtc,
+                    candidate.ExpiresAtUtc),
+                statusCode: StatusCodes.Status201Created);
+        }
+
+        if (result.Candidate is not null &&
+            result.Status != CandidatePreviewResultStatus.PersistenceOutcomeUnknown)
+            return InvalidDependency();
+
+        if (result.Status is CandidatePreviewResultStatus.Unauthorized or
+            CandidatePreviewResultStatus.RevisionNotFound)
+            return Problem(StatusCodes.Status404NotFound, SharedErrorCodes.NotFound);
+
+        var diagnostic = PlanEditorFailureMapper.FromCandidatePreview(result.Status);
+        var status = result.Status switch
+        {
+            CandidatePreviewResultStatus.InvalidCommand => StatusCodes.Status400BadRequest,
+            CandidatePreviewResultStatus.StaleBaseRevision or CandidatePreviewResultStatus.StaleInputs =>
+                StatusCodes.Status409Conflict,
+            CandidatePreviewResultStatus.CandidateRejected or CandidatePreviewResultStatus.ValidationRejected =>
+                StatusCodes.Status422UnprocessableEntity,
+            CandidatePreviewResultStatus.DependencyUnavailable or CandidatePreviewResultStatus.ValidationUnavailable =>
+                StatusCodes.Status503ServiceUnavailable,
+            CandidatePreviewResultStatus.DependencyTimeout => StatusCodes.Status504GatewayTimeout,
+            _ => StatusCodes.Status500InternalServerError,
+        };
+        return Problem(status, diagnostic.Code, diagnostic.SafeMessage);
+    }
+
+    private static bool TryMapRevision(
+        PlanRevisionSnapshot? revision,
+        Guid expectedProjectId,
+        Guid expectedPlanId,
+        Guid? expectedRevisionId,
+        out PlanRevisionDetailHttpResponse? response)
+    {
+        response = null;
+        if (revision is null || revision.RevisionId == Guid.Empty ||
+            expectedRevisionId is { } revisionId && revision.RevisionId != revisionId ||
+            revision.ProjectId != expectedProjectId || revision.PlanId != expectedPlanId ||
+            revision.VersionNumber <= 0 || revision.VersionNumber == long.MaxValue ||
+            string.IsNullOrWhiteSpace(revision.GeometrySchemaVersion) ||
+            string.IsNullOrWhiteSpace(revision.GeometryJson) ||
+            string.IsNullOrWhiteSpace(revision.GeometryHash) ||
+            revision.LandRevisionId == Guid.Empty || revision.RequirementsRevisionId == Guid.Empty ||
+            revision.CreatedBy == Guid.Empty || revision.Validation is null ||
+            revision.Validation.ValidationId == Guid.Empty ||
+            !string.Equals(revision.Validation.GeometryHash, revision.GeometryHash, StringComparison.Ordinal) ||
+            !string.Equals(
+                PlanRevisionService.ComputeGeometryHash(revision.GeometryJson),
+                revision.GeometryHash,
+                StringComparison.Ordinal))
+            return false;
+
+        try
+        {
+            var geometry = JsonSerializer.Deserialize<PlanGeometryDto>(revision.GeometryJson, StrictJson);
+            if (geometry is null)
+                return false;
+            PlanEditorContractValidator.Validate(geometry);
+            if (geometry.ProjectId != expectedProjectId || geometry.PlanId != expectedPlanId ||
+                geometry.LandRevisionId != revision.LandRevisionId ||
+                geometry.RequirementsRevisionId != revision.RequirementsRevisionId ||
+                !string.Equals(geometry.SchemaVersion, revision.GeometrySchemaVersion, StringComparison.Ordinal))
+                return false;
+
+            response = new PlanRevisionDetailHttpResponse(
+                revision.RevisionId,
+                revision.ProjectId,
+                revision.PlanId,
+                revision.ParentRevisionId,
+                revision.VersionNumber,
+                revision.GeometrySchemaVersion,
+                revision.GeometryHash,
+                geometry,
+                revision.LandRevisionId,
+                revision.RequirementsRevisionId,
+                revision.Validation,
+                revision.EditCommandId,
+                revision.CreatedBy,
+                revision.CreatedAtUtc,
+                revision.ChangeSummary);
+            return true;
+        }
+        catch (Exception exception) when (exception is JsonException or ArgumentException or NotSupportedException)
+        {
+            return false;
+        }
+    }
+
+    private static bool TryDecodeCursor(
+        string? value,
+        out PlanRevisionHistoryCursor? cursor)
+    {
+        cursor = null;
+        if (string.IsNullOrWhiteSpace(value))
+            return value is null;
+        if (value.Length > 1024)
+            return false;
+
+        try
+        {
+            var bytes = WebEncoders.Base64UrlDecode(value);
+            if (bytes.Length is 0 or > 512)
+                return false;
+            var token = JsonSerializer.Deserialize<RevisionHistoryCursorToken>(bytes, StrictJson);
+            if (token is null)
+                return false;
+            var decoded = new PlanRevisionHistoryCursor(
+                token.ProjectId,
+                token.PlanId,
+                token.HeadVersionNumber,
+                token.HeadRevisionId,
+                token.AfterVersionNumber,
+                token.AfterRevisionId,
+                token.ExpectedNextRevisionId);
+            if (!decoded.IsValid)
+                return false;
+            cursor = decoded;
+            return true;
+        }
+        catch (Exception exception) when (exception is FormatException or JsonException or NotSupportedException)
+        {
+            return false;
+        }
+    }
+
+    private static string EncodeCursor(PlanRevisionHistoryCursor cursor)
+    {
+        var token = new RevisionHistoryCursorToken(
+            cursor.ProjectId,
+            cursor.PlanId,
+            cursor.HeadVersionNumber,
+            cursor.HeadRevisionId,
+            cursor.AfterVersionNumber,
+            cursor.AfterRevisionId,
+            cursor.ExpectedNextRevisionId);
+        return WebEncoders.Base64UrlEncode(JsonSerializer.SerializeToUtf8Bytes(token, StrictJson));
     }
 
     private static IResult MapActionResult(
@@ -407,7 +794,62 @@ public sealed class PlanEditorEndpointModule : IApiEndpointModule
 
     private static void NoStore(HttpContext context) =>
         context.Response.Headers.CacheControl = "no-store";
+
+    private sealed record RevisionHistoryCursorToken(
+        Guid ProjectId,
+        Guid PlanId,
+        long HeadVersionNumber,
+        Guid HeadRevisionId,
+        long AfterVersionNumber,
+        Guid AfterRevisionId,
+        Guid ExpectedNextRevisionId);
 }
+
+public sealed record PlanRevisionHistoryPageHttpResponse(
+    IReadOnlyList<PlanRevisionSummaryHttpResponse> Revisions,
+    string? NextCursor);
+
+public sealed record PlanRevisionSummaryHttpResponse(
+    Guid RevisionId,
+    Guid? ParentRevisionId,
+    long VersionNumber,
+    string GeometrySchemaVersion,
+    string GeometryHash,
+    Guid LandRevisionId,
+    Guid RequirementsRevisionId,
+    Guid ValidationId,
+    Guid CreatedBy,
+    DateTimeOffset CreatedAtUtc,
+    string? ChangeSummary);
+
+public sealed record PlanRevisionDetailHttpResponse(
+    Guid RevisionId,
+    Guid ProjectId,
+    Guid PlanId,
+    Guid? ParentRevisionId,
+    long VersionNumber,
+    string GeometrySchemaVersion,
+    string GeometryHash,
+    PlanGeometryDto Geometry,
+    Guid LandRevisionId,
+    Guid RequirementsRevisionId,
+    PlanValidationReferenceDto Validation,
+    Guid? EditCommandId,
+    Guid CreatedBy,
+    DateTimeOffset CreatedAtUtc,
+    string? ChangeSummary);
+
+public sealed record CandidateCreationHttpResponse(
+    Guid CandidateId,
+    Guid ProjectId,
+    Guid PlanId,
+    Guid BaseRevisionId,
+    string GeometryHash,
+    PlanGeometryDto CandidateGeometry,
+    PlanValidationReferenceDto Validation,
+    IReadOnlyList<PlanEditDiagnosticDto> Diagnostics,
+    DateTimeOffset CreatedAtUtc,
+    DateTimeOffset ExpiresAtUtc);
 
 public sealed record ApplyCandidateHttpRequest(
     [property: JsonPropertyName("acknowledgedWarnings")] bool AcknowledgedWarnings);
