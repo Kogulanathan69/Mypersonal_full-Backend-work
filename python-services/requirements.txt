@@ -3,3 +3,5 @@ uvicorn>=0.34,<1
 pydantic>=2.10,<3
 # M6 D02 buildable footprint geometry (runtime import). Exact pin = M6-verified environment (GEOS 3.13.1).
 shapely==2.1.2
+
+pypdf==7.1.1
