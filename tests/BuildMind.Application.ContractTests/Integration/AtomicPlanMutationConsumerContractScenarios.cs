@@ -291,6 +291,73 @@ internal static class AtomicPlanMutationConsumerContractScenarios
                 CheckExactInvocation(item, authorization, port);
             }
         });
+
+        run("FC-RI-01 final confirmation rejects each mismatched protected response binding", () =>
+        {
+            foreach (var variant in Enum.GetValues<ConfirmationResponseVariant>())
+            {
+                var request = ConfirmRequest(Actor, version: 7);
+                var authorization = Authorized(Project, Actor, version: 7);
+                var port = new AtomicMutationPortDouble
+                {
+                    ResponseMode = AtomicResponseMode.Succeeded,
+                    ConfirmationResponseVariant = variant,
+                };
+                var consumer = new AtomicPlanMutationConsumer(
+                    new CurrentUserDouble(Actor), authorization, port);
+
+                var response = consumer
+                    .ConfirmFinalPlanAsync(request, CancellationToken.None)
+                    .GetAwaiter().GetResult();
+
+                CheckConfirmationVariantDiffers(
+                    variant,
+                    RequirePayload<AtomicFinalConfirmationPayload>(
+                        port.LastProducedPrimaryPayload,
+                        $"{variant} provider confirmation"),
+                    request,
+                    port.LastProducedConfirmationScope);
+                CheckFailure(
+                    new Observation(response.Result, response.Confirmation),
+                    AtomicMutationStatus.InvalidDependencyResponse,
+                    $"Final Confirmation {variant}");
+                Check(authorization.Calls == 1 &&
+                      port.Calls(ProvisionalMutationOperation.FinalPlanConfirmation) == 1 &&
+                      port.TotalMutationCalls == 1 &&
+                      port.WriteAttempts == 1 &&
+                      port.RetryCalls == 0 &&
+                      port.ReconcileCalls == 0,
+                    $"Final Confirmation {variant} changed the single-call/no-retry boundary.");
+            }
+        });
+
+        run("FC-RI-02 final confirmation fingerprint conflict exposes no protected payload", () =>
+        {
+            var request = ConfirmRequest(Actor, version: 7);
+            var authorization = Authorized(Project, Actor, version: 7);
+            var port = new AtomicMutationPortDouble
+            {
+                Status = AtomicMutationStatus.FingerprintConflict,
+            };
+            var consumer = new AtomicPlanMutationConsumer(
+                new CurrentUserDouble(Actor), authorization, port);
+
+            var response = consumer
+                .ConfirmFinalPlanAsync(request, CancellationToken.None)
+                .GetAwaiter().GetResult();
+
+            CheckFailure(
+                new Observation(response.Result, response.Confirmation),
+                AtomicMutationStatus.FingerprintConflict,
+                "Final Confirmation fingerprint conflict");
+            Check(authorization.Calls == 1 &&
+                  port.Calls(ProvisionalMutationOperation.FinalPlanConfirmation) == 1 &&
+                  port.TotalMutationCalls == 1 &&
+                  port.WriteAttempts == 1 &&
+                  port.RetryCalls == 0 &&
+                  port.ReconcileCalls == 0,
+                "Final Confirmation fingerprint conflict was retried or reconciled.");
+        });
     }
 
     private static OperationCase[] Cases(Guid actorId, long version = 7)
@@ -496,15 +563,72 @@ internal static class AtomicPlanMutationConsumerContractScenarios
 
     private static FinalPlanConfirmationMutationRequest ConfirmRequest(Guid actorId, long version)
     {
-        var scope = Scope(ProvisionalMutationOperation.FinalPlanConfirmation, actorId, version);
         var geometry = Geometry();
+        return ConfirmRequest(
+            Project, Plan, Operation, actorId, version, Revision,
+            geometry.GeometryHash, ValidationId, Land, Requirements,
+            warningAcknowledged: true);
+    }
+
+    private static FinalPlanConfirmationMutationRequest ConfirmRequest(
+        Guid projectId,
+        Guid planId,
+        Guid operationId,
+        Guid actorId,
+        long version,
+        Guid revisionId,
+        string geometryHash,
+        Guid validationEvidenceId,
+        Guid landRevisionId,
+        Guid requirementsRevisionId,
+        bool warningAcknowledged)
+    {
+        var scope = AtomicMutationScope.Create(
+            projectId, planId, operationId,
+            ProvisionalMutationOperation.FinalPlanConfirmation,
+            actorId, new AuthorizationVersion(version));
         var prepared = PreparedConfirmationSnapshot.Create(
-            Revision, geometry.GeometryHash, ValidationId, Land, Requirements, true);
+            revisionId, geometryHash, validationEvidenceId,
+            landRevisionId, requirementsRevisionId, warningAcknowledged);
         var fingerprint = MutationFingerprintProfileV1.Compute(new FinalPlanConfirmationFingerprintInput(
-            FingerprintScope(scope), Revision, geometry.GeometryHash,
-            ValidationId, Land, Requirements, true));
+            FingerprintScope(scope), revisionId, geometryHash,
+            validationEvidenceId, landRevisionId, requirementsRevisionId,
+            warningAcknowledged));
         return FinalPlanConfirmationMutationRequest.Create(
             scope, Authorization(scope), Identity(scope, fingerprint), prepared);
+    }
+
+    private static FinalPlanConfirmationMutationRequest VariantConfirmationRequest(
+        ConfirmationResponseVariant variant,
+        long version)
+    {
+        var geometryHash = Geometry().GeometryHash;
+        return variant switch
+        {
+            ConfirmationResponseVariant.Project => ConfirmRequest(
+                OtherProject, Plan, Operation, Actor, version, Revision,
+                geometryHash, ValidationId, Land, Requirements, true),
+            ConfirmationResponseVariant.Plan => ConfirmRequest(
+                Project, OtherPlan, Operation, Actor, version, Revision,
+                geometryHash, ValidationId, Land, Requirements, true),
+            ConfirmationResponseVariant.ExactRevision => ConfirmRequest(
+                Project, Plan, Operation, Actor, version, OtherRevision,
+                geometryHash, ValidationId, Land, Requirements, true),
+            ConfirmationResponseVariant.GeometryHash => ConfirmRequest(
+                Project, Plan, Operation, Actor, version, Revision,
+                Geometry(OtherProject, OtherPlan, OtherLand, OtherRequirements).GeometryHash,
+                ValidationId, Land, Requirements, true),
+            ConfirmationResponseVariant.ValidationEvidence => ConfirmRequest(
+                Project, Plan, Operation, Actor, version, Revision,
+                geometryHash, OtherValidationId, Land, Requirements, true),
+            ConfirmationResponseVariant.WarningAcknowledgement => ConfirmRequest(
+                Project, Plan, Operation, Actor, version, Revision,
+                geometryHash, ValidationId, Land, Requirements, false),
+            ConfirmationResponseVariant.AuthorizationVersion => ConfirmRequest(
+                Project, Plan, Operation, Actor, checked(version + 1), Revision,
+                geometryHash, ValidationId, Land, Requirements, true),
+            _ => throw new ArgumentOutOfRangeException(nameof(variant)),
+        };
     }
 
     private static PreparedRevisionSnapshot PreparedRevision(
@@ -769,6 +893,38 @@ internal static class AtomicPlanMutationConsumerContractScenarios
         }
     }
 
+    private static void CheckConfirmationVariantDiffers(
+        ConfirmationResponseVariant variant,
+        AtomicFinalConfirmationPayload actual,
+        FinalPlanConfirmationMutationRequest expected,
+        AtomicMutationScope? actualScope)
+    {
+        var differs = variant switch
+        {
+            ConfirmationResponseVariant.Project =>
+                actual.ProjectId != expected.Scope.ProjectId,
+            ConfirmationResponseVariant.Plan =>
+                actual.PlanId != expected.Scope.PlanId,
+            ConfirmationResponseVariant.ExactRevision =>
+                actual.ExactRevisionId != expected.Confirmation.ExactRevisionId,
+            ConfirmationResponseVariant.GeometryHash =>
+                !string.Equals(
+                    actual.GeometryHash,
+                    expected.Confirmation.GeometryHash,
+                    StringComparison.Ordinal),
+            ConfirmationResponseVariant.ValidationEvidence =>
+                actual.ValidationEvidenceId != expected.Confirmation.ValidationEvidenceId,
+            ConfirmationResponseVariant.WarningAcknowledgement =>
+                actual.WarningAcknowledged != expected.Confirmation.WarningAcknowledged,
+            ConfirmationResponseVariant.AuthorizationVersion =>
+                actualScope is not null &&
+                actualScope.AuthorizationVersion != expected.Scope.AuthorizationVersion,
+            _ => false,
+        };
+
+        Check(differs, $"Final Confirmation {variant} did not produce a distinct provider response.");
+    }
+
     private static void CheckMatchingDuplicate(
         Observation observation,
         OperationCase item,
@@ -1004,6 +1160,17 @@ internal static class AtomicPlanMutationConsumerContractScenarios
         OutcomeUnknown,
     }
 
+    private enum ConfirmationResponseVariant
+    {
+        Project,
+        Plan,
+        ExactRevision,
+        GeometryHash,
+        ValidationEvidence,
+        WarningAcknowledgement,
+        AuthorizationVersion,
+    }
+
     private sealed class CurrentUserDouble(Guid? userId) : ICurrentUser
     {
         public bool IsAuthenticated => userId.HasValue;
@@ -1052,6 +1219,7 @@ internal static class AtomicPlanMutationConsumerContractScenarios
         public AtomicMutationStatus Status { get; set; } = AtomicMutationStatus.PersistenceFailure;
         public AtomicResponseMode ResponseMode { get; set; }
         public bool ReturnForeignBinding { get; set; }
+        public ConfirmationResponseVariant? ConfirmationResponseVariant { get; set; }
         public bool ReturnNullResponse { get; set; }
         public bool CancelBeforeFirstWrite { get; set; }
         public CancellationTokenSource? CancelSource { get; set; }
@@ -1063,6 +1231,7 @@ internal static class AtomicPlanMutationConsumerContractScenarios
         public object? LastRequest { get; private set; }
         public AtomicMutationScope? LastScope { get; private set; }
         public MutationIdentity? LastMutation { get; private set; }
+        public AtomicMutationScope? LastProducedConfirmationScope { get; private set; }
         public object? LastProducedPrimaryPayload { get; private set; }
         public object? LastProducedSecondaryPayload { get; private set; }
 
@@ -1222,8 +1391,12 @@ internal static class AtomicPlanMutationConsumerContractScenarios
             {
                 var bound = ReturnForeignBinding
                     ? ConfirmRequest(OtherActor, request.Scope.AuthorizationVersion.Value)
-                    : request;
+                    : ConfirmationResponseVariant is { } variant
+                        ? VariantConfirmationRequest(
+                            variant, request.Scope.AuthorizationVersion.Value)
+                        : request;
                 var confirmation = ConfirmationPayload(bound);
+                LastProducedConfirmationScope = bound.Scope;
                 LastProducedPrimaryPayload = confirmation;
                 LastProducedSecondaryPayload = null;
                 return ResponseMode switch
