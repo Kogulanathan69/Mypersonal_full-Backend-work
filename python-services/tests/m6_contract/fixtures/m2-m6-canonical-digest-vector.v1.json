@@ -1,0 +1,6 @@
+{
+  "schemaVersion": "m2-m6-canonical-digest-vector/1.0",
+  "digestDomain": "BuildMind.M2M6.LandGeometry.v1\u0000",
+  "coordinateQuantumM": "0.000001",
+  "expectedSha256": "892d432eb17f49a7899198eb82f7a4b0e0586b30c776928faf75695d639bcec7"
+}
