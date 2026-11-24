@@ -30,3 +30,24 @@ Baseline, `dotnet build BuildMind.sln -c Release`: 0 warnings, 0 errors.
 The worktree has no venvs, so the Python suites ran with the existing `python-services/.venv` (Python 3.13) against the worktree sources.
 
 Gap map: see BACKEND-IMPLEMENTATION-MATRIX.
+
+## Phase 1 — composition and endpoint registration
+
+Implemented the **Captain local-integration profile** (`CaptainIntegration:Enabled`). It is Development only and requires M1 authentication. Its start-up guards fail closed. Production activation is not approved.
+
+| File | Change |
+|---|---|
+| `src/BuildMind.API/Composition/CaptainLocalIntegration.cs` | Profile guard. Registers Requirements (existing M5 services and modules) and the revision-history GET routes. |
+| `src/BuildMind.API/Program.cs` | One call to `AddCaptainLocalIntegration(m1AuthEnabled)` |
+| `src/BuildMind.Infrastructure/CaptainIntegration/CaptainIntegrationInfrastructure.cs` | Registers adapters: owner authorization port, MySQL history query, protected requirement repository, catalogue provider |
+| `.../OwnerProtectedRequirementRevisionRepository.cs` | Adapter for the unchanged port. Fresh owner read, then `TrySaveAuthorizedAtomicallyAsync` (project row lock + owner + version in the save transaction) |
+| `.../ConfiguredRequirementCatalogueProvider.cs` | Policy loaded from the operator file `CaptainIntegration:RequirementCatalogueFile`. No compiled-in values; an invalid file means unavailable (fail closed). |
+| `docs/captain-development/samples/requirement-catalogue.synthetic.json` | Labeled synthetic policy `synthetic-fixture-v1`, matching the M6 generation vocabulary |
+| `tests/.../CaptainIntegration/CaptainLocalIntegrationTests.cs` | 18 tests |
+
+Existing gates are unchanged:
+- `AddIsolatedRequirementsFeature` stays Testing-only;
+- the M1 Development-only guard;
+- the M7 retrieval guard.
+
+Tests: the new focused suite passed 18/18. Full Infrastructure.Tests passed 1158/1158 (baseline 1140 + 18). Release build: 0 warnings.

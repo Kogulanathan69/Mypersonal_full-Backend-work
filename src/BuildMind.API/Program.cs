@@ -1,4 +1,5 @@
 using BuildMind.API;
+using BuildMind.API.Composition;
 using BuildMind.API.Documentation;
 using BuildMind.API.Endpoints.Regulations;
 using BuildMind.API.Health;
@@ -33,6 +34,10 @@ if (m1AuthEnabled)
 // M7 public regulation evidence retrieval: OFF unless Regulations:Retrieval:Enabled (lead contract approval pending).
 // Fails closed: when enabled it requires authentication and the internal RAG service.
 builder.Services.AddRegulationRetrievalFeature(builder.Configuration, m1AuthEnabled);
+
+// Captain local-integration profile: OFF unless CaptainIntegration:Enabled; Development only; requires M1 auth.
+// Registers implemented-but-unactivated features for local verification. Production activation is NOT approved.
+builder.AddCaptainLocalIntegration(m1AuthEnabled);
 
 // C7 (proposed): OpenAPI document and Swagger UI, Development only. Bearer scheme only when authentication is enabled.
 builder.AddBuildMindDevelopmentSwagger(bearerAuthenticationEnabled: m1AuthEnabled);
