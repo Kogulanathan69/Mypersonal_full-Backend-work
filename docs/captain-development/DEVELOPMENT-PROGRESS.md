@@ -286,3 +286,51 @@ Phase 6 journey coverage:
   - python-services 974; rag-service 238;
   - independent PDF text check: pass.
 - **Final state:** see FINAL-BACKEND-HANDOVER (A: substantially complete with recorded gaps; B: locally verified; C: partial; D: production NO-GO).
+
+## Master execution order (2026-11-24): full backend completion
+
+**Phase 0** (`f4880f6`): requirements audit and master matrix.
+- The V3 register gives 46 product routes. The "180+" claim is unsupported.
+- At start: 9 routes missing, R-13 partial, R-34 blocked, admin out of scope.
+
+**Phases 3–13** (`86b9593`): implementation and verification.
+
+**Survey extraction:**
+- **Python:** internal `/internal/v1/survey/extract`. Readable PDFs go through the text pipeline; otherwise local Tesseract OCR, always NEEDS_REVIEW.
+- **C#:** integrity-checked blob reader; DB lease queue with CAS claims, stale reclaim, bounded attempts and lease-token publication in a protected transaction; hosted worker with bounded concurrency; result endpoint.
+- **Schema:** migration `AddSurveyExtraction`.
+
+**V3 routes:**
+- `/users/me` (Captain module only, after the M1 pin caught the first placement);
+- land validate/confirm;
+- alternatives/select;
+- `POST /plans`;
+- edits/validate;
+- `POST /versions` (server re-validation + evidence + head CAS);
+- confirm alias;
+- AI proposals (truthful 503);
+- reports list.
+
+**Verification:**
+
+| Suite | Result |
+|---|---|
+| .NET | Application 252, Infrastructure 1160, Reports 164, Requirements 456, Workflow 197, ContractTests exit 0 |
+| Live MySQL | 103/103 (0 leftovers) |
+| python-services | 981 |
+| Local OCR | 3 |
+| rag-service | 238 |
+| PDF check | pass |
+| Live journey (phases 2–8) | **136/136** |
+| OpenAPI | 57 operations |
+
+**Documents:** FRONTEND-INTEGRATION-GUIDE, SECURITY-REVIEW, TECHNICAL-DECISION-REGISTER, DATABASE-MIGRATION-REGISTER, FEATURE-COMPLETION-MATRIX and INTEGRATION-COMPLETION-MATRIX are new. Matrix, inventory, blockers, test evidence, runbook and handover are updated.
+
+**Final state:**
+- A: complete for the approved register (43/46 implemented; 2 partial; 1 blocked but truthful);
+- B: verified locally;
+- C: partial;
+- D: production NO-GO;
+- E: admin/AI/email/dispatch/cost-3D out of scope or blocked by decision.
+
+**Next task** (requires owner decisions; see the handover): contract ratification by M2/M3/M6 and M4 review of the migrations. No push or merge without explicit authorization.

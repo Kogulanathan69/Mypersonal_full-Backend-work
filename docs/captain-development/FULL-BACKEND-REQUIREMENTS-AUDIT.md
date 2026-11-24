@@ -43,3 +43,12 @@ See MASTER-API-ENDPOINT-MATRIX for every row. At the start of this execution:
 | Real RAG corpus in WSL | Explicit restriction (identity pins) | Fail closed |
 | OpenAPI / frontend guide | Independently implementable | **Implement** (Development Swagger export + guide) |
 | CORS | Approved development origin unknown (C6 open) | Not configured; documented |
+
+## End state (commit `86b9593`)
+
+- **Gaps marked "Implement":** all implemented and verified live.
+- **AI proposals:** route implemented; answers truthfully 503 `AI_PROVIDER_NOT_CONFIGURED` (still BLOCKED on G20).
+- **CORS:** the exact-origin allowlist mechanism exists and stays empty (no approved origin).
+- **Out of scope:** admin/staff remains OUT_OF_SCOPE.
+
+See MASTER-API-ENDPOINT-MATRIX counts and FEATURE-COMPLETION-MATRIX.

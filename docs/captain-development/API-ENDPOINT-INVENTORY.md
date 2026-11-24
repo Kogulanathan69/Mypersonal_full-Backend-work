@@ -32,7 +32,18 @@ All product routes are under `/api/v1`, use RFC 9457 errors, and require JWT plu
 | `/api/v1/projects/{projectId}/reports/{reportId}/download` | GET | Private PDF download (attachment, `no-store`) | **Captain profile** | owner check, bounded verified read, owner re-check after the read |
 | `/api/v1/projects/{projectId}/architect-requests` | POST / GET | Create (explicit consent, directory recipient, policy version, Ready report) / list | **Captain profile** | protected write; no dispatch |
 | `/api/v1/projects/{projectId}/architect-requests/{requestId}`, `/withdraw` | GET / POST | Read / withdraw consent (CAS) | **Captain profile** | owner |
+| `/api/v1/users/me` | GET/PUT | V3 alias of the M1 profile handlers (R-06/R-07) | **Captain profile** | current user (base `/profile` inventory unchanged) |
+| `/api/v1/projects/{id}/surveys/{surveyId}/extraction` | GET | Survey extraction evidence, unverified (R-13) | **Captain profile**; the durable worker runs only with `Services:Python` | M2 owner gate + project-scoped read |
+| `/api/v1/projects/{projectId}/land/validate` | POST | Dry-run boundary validation, no persistence (R-16) | **Captain profile** + `Services:Python` | fresh owner read |
+| `/api/v1/projects/{projectId}/land/confirm` | POST | Confirm the customer boundary (R-17; same handler as PUT land) | **Captain profile** | as PUT land |
+| `/api/v1/projects/{projectId}/generation-jobs/{jobId}/alternatives` | GET | Ranked alternatives (R-29) | **Captain profile** | owner |
+| `/api/v1/projects/{projectId}/generation-jobs/{jobId}/select`; `/api/v1/projects/{projectId}/plans` | POST | Select an alternative / create a plan from it (R-30/R-31) | **Captain profile** | as candidate save |
+| `/api/v1/projects/{projectId}/plans/{planId}/edits/validate` | POST | Edit preview + server validation, no persistence (R-33) | **Captain profile** + `Services:Python` | fresh owner read |
+| `/api/v1/projects/{projectId}/plans/{planId}/versions` | POST | Save a server-validated geometry as the next revision (R-35) | **Captain profile** + `Services:Python` | server validation + evidence; protected ledger insert + head CAS |
+| `/api/v1/projects/{projectId}/plans/{planId}/ai-edit/proposals` | POST | AI edit proposal; no provider → 503 `AI_PROVIDER_NOT_CONFIGURED` (R-34) | **Captain profile**; expensive limiter | M3 orchestration ownership checks |
+| `/api/v1/projects/{projectId}/plans/{planId}/confirm` | POST | Alias of `/confirmation` (R-38) | **Captain profile** | as `/confirmation` |
+| `/api/v1/projects/{projectId}/reports` | GET | Report list, newest first, max 100 | **Captain profile** | fresh owner read |
 
-Internal (python-services, loopback, `X-BuildMind-Internal-Token` required): `POST /internal/v1/land/validate`, `/internal/v1/generation/run`, `/internal/v1/plans/validate`, `/internal/v1/plans/edit-preview`; `GET /health` open.
+Internal (python-services, loopback, `X-BuildMind-Internal-Token` required): `POST /internal/v1/land/validate`, `/internal/v1/generation/run`, `/internal/v1/plans/validate`, `/internal/v1/plans/edit-preview`, `/internal/v1/survey/extract` (9 MiB cap); `GET /health` open.
 
 All Captain-profile routes: `no-store`, RFC 9457 errors, JWT + active-session check, Development only. Production activation is NOT approved.

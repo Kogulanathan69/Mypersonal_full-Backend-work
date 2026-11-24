@@ -24,7 +24,7 @@ bash ~/bm-captain/src/tools/captain/python-setup.sh   # Python 3.13 venvs (pinne
 # Stays in the foreground (a detached wsl.exe session would terminate the services).
 RAG=1 bash ~/bm-captain/src/tools/captain/restart-stack.sh
 RAG=1 bash ~/bm-captain/src/tools/captain/wait-ready.sh            # in another session
-python3 ~/bm-captain/src/tools/captain/smoke_journey.py              # phases 2-7; phase 7 stops python-services at the end
+python3 ~/bm-captain/src/tools/captain/smoke_journey.py              # phases 2-8 (8 runs before 7); phase 7 stops python-services at the end
 pkill -f BuildMind.API.dll; pkill -f 'uvicorn app.main:app'          # stop (from a script file)
 ```
 
@@ -67,3 +67,22 @@ Root is used only inside `mysql-setup.sh`. Never point these scripts at a shared
 ## rag-service
 
 rag-service runs **without a corpus** in WSL (the real corpus is BLOCKED, see KNOWN-BLOCKERS). Search, sources and constraints answer 503, and the API fails closed.
+
+## Survey extraction worker (Captain profile)
+
+- Starts with the API only when `Services:Python:Enabled=true`. Disable it with `CaptainIntegration__SurveyWorker__Enabled=false`.
+- Tuning keys (`CaptainIntegration__SurveyWorker__*`), with defaults:
+
+  | Key | Default | Allowed range |
+  |---|---|---|
+  | `PollSeconds` | 5 | 1–300 |
+  | `Concurrency` | 2 | 1–8 |
+  | `LeaseSeconds` | 180 | 30–3600 |
+  | `MaxAttempts` | 3 | 1–10 |
+  | `ProcessingTimeoutSeconds` | 150 | 10–1800 |
+
+  `run-api.sh` sets poll 2 s and lease 120 s.
+- OCR needs `tesseract` (eng, sin, tam) and `pdftoppm` (poppler-utils) on the python-services host. Without them, OCR degrades to NEEDS_REVIEW with a manual-review diagnostic.
+- Real-OCR local tests: `cd python-services && ~/bm-captain/venv-python-services/bin/python -m pytest -q tests_local`.
+- Inspect a stuck survey (read-only): `SELECT status, state_version, processing_attempts, processing_lease_until_utc, failure_code FROM surveys WHERE id = ?;`. An expired lease is reclaimed automatically, up to `MaxAttempts`, then `EXTRACTION_ABANDONED`.
+- OpenAPI export: `curl -s http://127.0.0.1:5180/swagger/v1/swagger.json` (Development only). The committed copy is `docs/captain-development/openapi.captain-dev.json`.

@@ -6,21 +6,23 @@ All results come from actual runs in this session (2026-11-24). Unless stated, t
 
 Nothing below is inferred from file existence. Columns: PASS / FAIL / SKIP; NOT RUN gives a reason; DEFERRED means knowingly postponed.
 
-## Final results (code tree of `7213b42`; `d2d74bc` adds only tools; `src/` and `tests/` are identical)
+## Final results (code tree of `86b9593`, 2026-11-24; earlier round: `7213b42`)
 
 | Suite | PASS | FAIL | SKIP | Command |
 |---|---:|---:|---:|---|
 | Release build (`BuildMind.sln`) | — | 0 errors | — | 0 warnings |
 | Application.UnitTests | 252 | 0 | 0 | `tools/captain/unit-suites.sh` |
 | Infrastructure.Tests | 1160 | 0 | 0 | same (run without live connection-string variables) |
-| Reports.Tests | 164 | 0 | 0 | `python-and-pdf-checks.sh` (`BUILDMIND_PDF_QA_PYTHON` set, so the PDF-QA test runs) |
+| Reports.Tests | 164 | 0 | 0 | `python-and-pdf-checks.sh` (`BUILDMIND_PDF_QA_PYTHON` set, so the PDF-QA test runs; `unit-suites.sh` alone shows 163 + 1 skip) |
 | Requirements.Tests | 456 | 0 | 0 | `unit-suites.sh` |
 | Workflow.Tests | 197 | 0 | 0 | `unit-suites.sh` |
 | Application.ContractTests (console) | exit 0 | — | — | `unit-suites.sh` |
-| Persistence.IntegrationTests (live MySQL, VerifyFull) | 94 | 0 | 0 | `tools/captain/persistence-tests.sh`; 0 leftover test databases |
-| python-services pytest (WSL venv) | 974 | 0 | 0 | includes 20 Captain internal-API tests |
+| Persistence.IntegrationTests (live MySQL, VerifyFull) | 103 | 0 | 0 | `tools/captain/persistence-tests.sh`; 0 leftover test databases; includes 9 survey-extraction tests (Q01–Q04, P01×3, P02, P03) |
+| python-services pytest (WSL venv) | 981 | 0 | 0 | includes 27 Captain internal-API tests (7 survey extraction) |
+| python-services `tests_local` (real Tesseract 5.3.4 + pdftoppm) | 3 | 0 | 0 | not collected by CI; OCR read "North boundary length: 12 m" → 12 |
 | rag-service pytest (WSL venv) | 238 | 0 | 0 | unchanged M7 suite |
-| **Live journey, phases 2–7** (real API + MySQL + python-services + rag-service) | 107 | 0 | — | `tools/captain/smoke_journey.py` |
+| **Live journey, phases 2–8** (real API + MySQL + python-services + rag-service) | 136 | 0 | — | `tools/captain/smoke_journey.py` (RAG=1 stack); log `~/bm-captain/results/journey-full.log` |
+| OpenAPI export (Development Swagger) | 57 operations | — | — | `openapi.captain-dev.json`; secret scan 0 hits |
 | Independent PDF content check (pypdf) | pass | — | — | `check_report_pdf.py`: 3 pages; the preliminary notice, non-approval and synthetic statements are present |
 
 ### NOT RUN / DEFERRED / BLOCKED
@@ -30,10 +32,10 @@ Nothing below is inferred from file existence. Columns: PASS / FAIL / SKIP; NOT 
 | RH09 command-timeout classification | **DEFERRED / UNRESOLVED** | Provider hang (MySql.Data 26.7.0/26.10.0). The test is not in this baseline and was not re-investigated. |
 | `PythonLiveSmokeTests`, `RagLiveSmokeTests`, `RagConstraintAcceptanceTests` (Persistence project) | NOT RUN | They expect their own CI-provisioned services and environment variables. Live API↔Python and API↔RAG paths are instead covered by the journey. |
 | Real-corpus regulation retrieval | **BLOCKED** (environment) | Manifest identity pins Windows paths, the loader correctly refuses normalisation, G17 prevents running the API on Windows, and WSL is in NAT mode |
-| Survey extraction (OCR/PDF parse of an uploaded survey) | NOT IMPLEMENTED | Python library exists; no processing worker or route was built. The land boundary is user-confirmed instead. |
+| OCR accuracy on real surveys | NOT RUN | No approved real-survey evaluation set; only synthetic documents were used |
 | Windows-native .NET execution | NOT RUN | G17 Smart App Control (not bypassed) |
 
-## Live journey coverage (107 checks)
+## Live journey coverage (136 checks)
 
 ### Phase 2: auth, projects, requirements, survey
 - **Readiness:** the `mysql` entry is exactly Healthy/reachable; `python` is Healthy.
@@ -79,6 +81,30 @@ Nothing below is inferred from file existence. Columns: PASS / FAIL / SKIP; NOT 
 - **Dependency failure:** python-services stopped → land validation 503 `DEPENDENCY_UNAVAILABLE`, readiness python not Healthy, and the non-owner is still denied.
 - **Rate limiting:** an auth-strict burst gives 429 with no 5xx.
 
+### Phase 8: V3 register routes (runs before phase 7)
+- **Users:** `GET /users/me` → caller's profile; without a token → 401.
+- **Survey extraction:**
+  - a synthetic text-layer PDF uploads with 202;
+  - the durable worker completes within the poll window (method `PDF_TEXT`);
+  - the 14 m length comes back as unreviewed evidence with the unverified-evidence notice;
+  - a cross-user read → 404.
+- **Land:**
+  - `land/validate` dry run → valid, `persisted=false`; a bow-tie is reported invalid;
+  - `GET land` afterwards → 204, so nothing was saved;
+  - cross-user → 404;
+  - `land/confirm` → 201 (area 168).
+- **Alternatives:** 3 distinct; cross-user → 404.
+- **Select / create plan:** unknown alternative → 404; `select` → revision 1; `POST /plans` with another alternative → a new plan; cross-user → 404.
+- **Edit validation:** `edits/validate` returns validated geometry with `persisted=false`; history stays [1]; cross-user → 404.
+- **Versions:**
+  - save → revision 2;
+  - superseded base → 409;
+  - out-of-parcel geometry → 422 (server validation);
+  - cross-user → 404.
+- **AI proposals:** 503 `AI_PROVIDER_NOT_CONFIGURED`.
+- **Confirmation:** the `confirm` alias → 201.
+- **Reports:** the list shows the phase 6 report; cross-user → 404.
+
 ## Earlier phase-specific evidence (still valid; same tests are included in the final runs above)
 
 | Item | Result |
@@ -96,3 +122,7 @@ Nothing below is inferred from file existence. Columns: PASS / FAIL / SKIP; NOT 
 | Rotation lock order opposite to logout-all/reset | session stores | users row locked first in rotation and logout; S08/S09 |
 | `smoke_phase2.py` readiness accepted any "Healthy" substring; requirements read-back compared `None == None` | tooling | exact `mysql` entry; compares `revisionId` |
 | Harness leaked live connection strings into unit suites (1 false failure) | tooling | `env.sh` is sourced only by the live suite |
+| `/users/me` alias first added to the base M1 module changed the ratified route inventory (M1 Swagger pin failed) | `ProfileEndpointModule` | Alias moved to the Captain module; Infrastructure.Tests 1160/1160 |
+| `POST …/versions` body rejected: M3 strict JSON is case-sensitive without a naming policy | V3 module | explicit `JsonPropertyName` on the wrapper; journey phase 8 green |
+| Full live suite hit `Too many connections` (152/151) after adding 9 disposable-DB tests | Captain live helpers | unpooled Captain contexts; 103/103, 0 leftovers |
+| Journey expected 404 for "no land"; the API returns 204 | tooling | expectation corrected (existing API behaviour) |
