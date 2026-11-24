@@ -53,6 +53,8 @@ public sealed class BuildMindMigrationTests(ITestOutputHelper output)
             ["fk_architect_requests_projects_project_id=RESTRICT", "fk_architect_requests_reports=RESTRICT",
              "fk_architect_requests_users_granted_by=RESTRICT", "fk_reports_plan_confirmations=RESTRICT",
              "fk_reports_projects_project_id=RESTRICT", "fk_reports_users_requested_by=RESTRICT"]),
+        ("20261124170241_AddSurveyExtraction", ["survey_extractions"],
+            ["fk_survey_extractions_projects_project_id=RESTRICT", "fk_survey_extractions_surveys=RESTRICT"]),
     ];
 
     private static readonly string[] ExpectedMigrations = [.. M4Migrations, .. CaptainMigrations.Select(m => m.Migration)];

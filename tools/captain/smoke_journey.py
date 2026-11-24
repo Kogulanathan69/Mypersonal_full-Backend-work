@@ -11,7 +11,7 @@ import urllib.request
 import uuid
 
 BASE = next((a for a in sys.argv[1:] if a.startswith("http")), "http://127.0.0.1:5180")
-PHASES = {int(p) for p in (sys.argv[sys.argv.index("--phases") + 1].split(",") if "--phases" in sys.argv else "2,3,4,5,6,7".split(","))}
+PHASES = {int(p) for p in (sys.argv[sys.argv.index("--phases") + 1].split(",") if "--phases" in sys.argv else "2,3,4,5,6,7,8".split(","))}
 results = []
 state = {}
 
@@ -496,7 +496,153 @@ def phase7():
     check("auth rate limiting engages (429) and never errors (no 5xx)", 429 in codes and not any(c >= 500 for c in codes), codes)
 
 
-EXTRA_PHASES = [(4, phase4), (5, phase5), (6, phase6), (7, phase7)]
+def text_pdf(text):
+    """Minimal synthetic single-page PDF with a readable text layer (no real survey data)."""
+    content = f"BT /F1 12 Tf 72 720 Td ({text}) Tj ET".encode("ascii")
+    objects = [b"<< /Type /Catalog /Pages 2 0 R >>", b"<< /Type /Pages /Kids [3 0 R] /Count 1 >>",
+               b"<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] /Resources << /Font << /F1 5 0 R >> >> /Contents 4 0 R >>",
+               b"<< /Length " + str(len(content)).encode() + b" >>\nstream\n" + content + b"\nendstream",
+               b"<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>"]
+    pdf, offsets = bytearray(b"%PDF-1.4\n"), [0]
+    for index, obj in enumerate(objects, start=1):
+        offsets.append(len(pdf))
+        pdf.extend(f"{index} 0 obj\n".encode() + obj + b"\nendobj\n")
+    xref = len(pdf)
+    pdf.extend(f"xref\n0 {len(objects) + 1}\n0000000000 65535 f \n".encode())
+    for offset in offsets[1:]:
+        pdf.extend(f"{offset:010d} 00000 n \n".encode())
+    pdf.extend(f"trailer\n<< /Size {len(objects) + 1} /Root 1 0 R >>\nstartxref\n{xref}\n%%EOF\n".encode())
+    return bytes(pdf)
+
+
+def phase8():
+    """V3 register routes: /users/me, survey extraction, land validate/confirm, alternatives/select, POST /plans,
+    edits/validate, versions, confirm alias, AI proposals (no provider) and report listing."""
+    import time
+    a, b = state["alice"]["access"], state["bob"]["access"]
+    status, me, _ = call("GET", "/api/v1/users/me", token=a)
+    check("GET /users/me returns the caller's profile", status == 200 and me.get("email") == state["alice"]["email"], me)
+    status, _, _ = call("GET", "/api/v1/users/me")
+    check("GET /users/me without a token rejected (401)", status == 401, status)
+
+    status, project, _ = call("POST", "/api/v1/projects", {"name": "Captain V3 routes", "projectType": "Residential"}, token=a)
+    pid = project["id"]
+    status, req, _ = call("PUT", f"/api/v1/projects/{pid}/requirements", {
+        "expectedRevisionId": None, "catalogueVersion": "synthetic-fixture-v1", "floorCount": 1,
+        "groundFloorRooms": [{"roomType": "bedroom", "count": 2}, {"roomType": "livingRoom", "count": 1},
+                             {"roomType": "kitchen", "count": 1}, {"roomType": "bathroom", "count": 1}],
+        "additionalSpaces": [], "relationships": [], "designMethod": "AI_GENERATED"}, token=a)
+
+    # Survey: upload -> durable worker extraction -> unverified evidence for customer review.
+    raw, ctype = multipart("file", "synthetic-text-survey.pdf", "application/pdf",
+                           text_pdf("North boundary length: 14 m Lot No: 77 Land area: 168 m2"))
+    status, upload, _ = call("POST", f"/api/v1/projects/{pid}/surveys", raw=raw, content_type=ctype, token=a)
+    sid = upload.get("surveyId") if isinstance(upload, dict) else None
+    check("text survey upload accepted (202)", status == 202 and sid, upload)
+    extraction = None
+    for _ in range(60):
+        status, extraction, _ = call("GET", f"/api/v1/projects/{pid}/surveys/{sid}/extraction", token=a)
+        if status == 200 and extraction.get("processingStatus") in ("Completed", "Failed"):
+            break
+        time.sleep(1)
+    evidence = ((extraction or {}).get("extraction") or {}).get("evidence") or {}
+    check("worker completes extraction (Completed, PDF_TEXT)",
+          extraction.get("processingStatus") == "Completed" and extraction["extraction"]["method"] == "PDF_TEXT", extraction)
+    check("extracted length 14 m is returned as unreviewed evidence",
+          any(m.get("value") == 14 and m.get("unit") == "m" for m in evidence.get("measurements", [])), evidence)
+    check("extraction carries the unverified-evidence notice", "not a legal survey" in (extraction or {}).get("notice", ""))
+    status, _, _ = call("GET", f"/api/v1/projects/{pid}/surveys/{sid}/extraction", token=b)
+    check("cross-user extraction read denied (404)", status == 404, status)
+
+    # Land: dry-run validation persists nothing; confirmation is an explicit customer action.
+    status, dry, _ = call("POST", f"/api/v1/projects/{pid}/land/validate", {"exterior": rectangle(14, 12)}, token=a)
+    check("land/validate dry run (200, valid, persisted=false)", status == 200 and dry.get("valid") is True and dry.get("persisted") is False, dry)
+    status, bad, _ = call("POST", f"/api/v1/projects/{pid}/land/validate",
+                          {"exterior": [{"x": 0, "y": 0}, {"x": 10, "y": 10}, {"x": 10, "y": 0}, {"x": 0, "y": 10}]}, token=a)
+    check("land/validate reports an invalid polygon without saving", status in (200, 422) and (bad.get("valid") is False or code_of(bad) == "POLYGON_INVALID"), bad)
+    status, _, _ = call("GET", f"/api/v1/projects/{pid}/land", token=a)
+    check("dry run left no land revision (204 no content)", status == 204, status)
+    status, _, _ = call("POST", f"/api/v1/projects/{pid}/land/validate", {"exterior": rectangle(14, 12)}, token=b)
+    check("cross-user land/validate denied (404)", status == 404, status)
+    status, land, _ = call("POST", f"/api/v1/projects/{pid}/land/confirm",
+                           {"exterior": rectangle(14, 12), "expectedCurrentLandRevisionId": None, "surveyId": sid}, token=a)
+    check("land/confirm saves the customer-confirmed boundary (201)", status == 201 and land.get("areaM2") == 168.0, land)
+
+    # Generation alternatives, selection and plan creation.
+    status, job, _ = call("POST", f"/api/v1/projects/{pid}/generation-jobs", {
+        "idempotencyKey": "v3-" + uuid.uuid4().hex[:12], "expectedLandRevisionId": land.get("landRevisionId"),
+        "expectedRequirementsRevisionId": req.get("revisionId"), "seed": 11}, token=a)
+    jid = job.get("jobId")
+    status, alts, _ = call("GET", f"/api/v1/projects/{pid}/generation-jobs/{jid}/alternatives", token=a)
+    candidates = alts.get("candidates", []) if isinstance(alts, dict) else []
+    check("alternatives lists three distinct alternatives", status == 200 and len({c["geometryHash"] for c in candidates}) == 3, alts)
+    status, _, _ = call("GET", f"/api/v1/projects/{pid}/generation-jobs/{jid}/alternatives", token=b)
+    check("cross-user alternatives denied (404)", status == 404, status)
+    if len(candidates) < 3:
+        return
+    status, _, _ = call("POST", f"/api/v1/projects/{pid}/generation-jobs/{jid}/select", {"alternativeId": str(uuid.uuid4())}, token=a)
+    check("selecting an unknown alternative rejected (404)", status == 404, status)
+    status, selected, _ = call("POST", f"/api/v1/projects/{pid}/generation-jobs/{jid}/select",
+                               {"alternativeId": candidates[0]["candidateId"]}, token=a)
+    check("select creates plan revision 1 (201)", status == 201 and selected.get("versionNumber") == 1, selected)
+    status, created, _ = call("POST", f"/api/v1/projects/{pid}/plans",
+                              {"jobId": jid, "alternativeId": candidates[1]["candidateId"], "changeSummary": "Alternative 2"}, token=a)
+    check("POST /plans creates a plan from another alternative (201)", status == 201 and created.get("planId") not in (None, selected.get("planId")), created)
+    status, _, _ = call("POST", f"/api/v1/projects/{pid}/plans", {"jobId": jid, "alternativeId": candidates[2]["candidateId"]}, token=b)
+    check("cross-user POST /plans denied (404)", status == 404, status)
+
+    plan, base = selected["planId"], selected["revisionId"]
+    status, head, _ = call("GET", f"/api/v1/projects/{pid}/plans/{plan}", token=a)
+    floor, room = head["geometry"]["floors"][0], head["geometry"]["floors"][0]["rooms"][0]
+    xs, ys = [p["x"] for p in room["polygon"]], [p["y"] for p in room["polygon"]]
+    edit = {"schemaVersion": "0.1-draft", "projectId": pid, "planId": plan, "baseRevisionId": base,
+            "command": {"commandId": str(uuid.uuid4()), "commandType": "resizeRoom", "floorId": floor["id"], "targetId": room["id"],
+                        "payload": {"scaleX": 0.9, "scaleY": 1, "anchorX": min(xs), "anchorY": min(ys)}}}
+    status, validated, _ = call("POST", f"/api/v1/projects/{pid}/plans/{plan}/edits/validate", edit, token=a)
+    check("edits/validate returns validated geometry without saving",
+          status == 200 and validated.get("persisted") is False and validated.get("validation", {}).get("geometryValid") is True, validated)
+    status, history, _ = call("GET", f"/api/v1/projects/{pid}/plans/{plan}/versions", token=a)
+    check("edits/validate created no revision", [r["versionNumber"] for r in history.get("revisions", [])] == [1], history)
+    status, _, _ = call("POST", f"/api/v1/projects/{pid}/plans/{plan}/edits/validate", edit, token=b)
+    check("cross-user edits/validate denied (404)", status == 404, status)
+
+    geometry = validated.get("candidateGeometry")
+    status, saved, _ = call("POST", f"/api/v1/projects/{pid}/plans/{plan}/versions",
+                            {"expectedBaseRevisionId": base, "geometry": geometry, "changeSummary": "Narrower first room"}, token=a)
+    check("versions saves a server-validated revision 2 (201)", status == 201 and saved.get("versionNumber") == 2, saved)
+    status, body, _ = call("POST", f"/api/v1/projects/{pid}/plans/{plan}/versions",
+                           {"expectedBaseRevisionId": base, "geometry": geometry}, token=a)
+    check("versions against a superseded base rejected (409)", status == 409, body)
+    outside = json.loads(json.dumps(geometry))
+    for point in outside["floors"][0]["rooms"][0]["polygon"]:
+        point["x"] += 100
+    status, body, _ = call("POST", f"/api/v1/projects/{pid}/plans/{plan}/versions",
+                           {"expectedBaseRevisionId": saved.get("revisionId"), "geometry": outside}, token=a)
+    check("versions rejects geometry that fails server validation (422)", status == 422, body)
+    status, _, _ = call("POST", f"/api/v1/projects/{pid}/plans/{plan}/versions",
+                        {"expectedBaseRevisionId": saved.get("revisionId"), "geometry": geometry}, token=b)
+    check("cross-user versions denied (404)", status == 404, status)
+
+    status, body, _ = call("POST", f"/api/v1/projects/{pid}/plans/{plan}/ai-edit/proposals",
+                           {"expectedBaseRevisionId": saved.get("revisionId"), "instruction": "Make the kitchen larger"}, token=a)
+    check("AI edit proposal answers truthfully: no provider configured (503)",
+          status == 503 and code_of(body) == "AI_PROVIDER_NOT_CONFIGURED", body)
+
+    status, head2, _ = call("GET", f"/api/v1/projects/{pid}/plans/{plan}", token=a)
+    status, confirmed, _ = call("POST", f"/api/v1/projects/{pid}/plans/{plan}/confirm",
+                                {"revisionId": head2["revisionId"], "expectedGeometryHash": head2["geometryHash"],
+                                 "acknowledgedWarnings": True}, token=a)
+    check("confirm alias confirms the exact current revision (201)", status == 201 and confirmed.get("confirmationId"), confirmed)
+
+    if state.get("project") and 6 in PHASES:
+        status, reports, _ = call("GET", f"/api/v1/projects/{state['project']}/reports", token=a)
+        check("report list shows the phase 6 report", status == 200 and len(reports.get("reports", [])) >= 1, reports)
+        status, _, _ = call("GET", f"/api/v1/projects/{state['project']}/reports", token=b)
+        check("cross-user report list denied (404)", status == 404, status)
+
+
+# Phase 8 runs before phase 7, which stops python-services and exercises rate limiting.
+EXTRA_PHASES = [(4, phase4), (5, phase5), (6, phase6), (8, phase8), (7, phase7)]
 
 
 def main():

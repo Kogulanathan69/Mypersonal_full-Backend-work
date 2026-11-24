@@ -45,7 +45,7 @@ public sealed class PlanningEndpointModule : IApiEndpointModule
         return result.Status == PlanningStatus.InputsMissing ? Results.NoContent() : Map(result, Land);
     }
 
-    private static async Task<IResult> PutLandAsync(string projectId, HttpContext context, LandService service, CancellationToken token)
+    internal static async Task<IResult> PutLandAsync(string projectId, HttpContext context, LandService service, CancellationToken token)
     {
         NoStore(context);
         if (!TryId(projectId, out var project)) return Invalid("projectId");
@@ -126,14 +126,14 @@ public sealed class PlanningEndpointModule : IApiEndpointModule
         return Results.Problem(statusCode: status, type: ProblemDetailsDefaults.GetTypeForCode(code), extensions: extensions);
     }
 
-    private static object Land(LandRevision land) => new
+    internal static object Land(LandRevision land) => new
     {
         landRevisionId = land.Id, land.ProjectId, land.RevisionNumber, exterior = land.Land.Boundary.Exterior,
         coordinateSystem = land.Land.CoordinateSystem, areaM2 = land.AreaM2, land.EdgeCount, land.SurveyId, land.CreatedAtUtc,
         provenance = "User-confirmed boundary in a local metric frame; not a cadastral survey verification.",
     };
 
-    private static object Job(GenerationJobView view) => new
+    internal static object Job(GenerationJobView view) => new
     {
         jobId = view.Job.Id, view.Job.ProjectId, status = view.Job.Status.ToString(), view.Job.Outcome, view.Job.ReasonCode,
         view.Job.AlgorithmVersion, view.Job.EvidenceMode, view.Job.EvidencePackId, view.Job.Seed, view.Job.LandRevisionId, view.Job.RequirementsRevisionId,
@@ -155,14 +155,14 @@ public sealed class PlanningEndpointModule : IApiEndpointModule
         }),
     };
 
-    private static object Revision(PlanRevisionSnapshot revision) => new
+    internal static object Revision(PlanRevisionSnapshot revision) => new
     {
         planId = revision.PlanId, revision.ProjectId, revisionId = revision.RevisionId, revision.VersionNumber, revision.GeometryHash,
         revision.LandRevisionId, revision.RequirementsRevisionId, validation = revision.Validation, revision.CreatedAtUtc,
         revision.ChangeSummary, notice = PreliminaryNotice,
     };
 
-    private static async Task<(T? Value, IResult? Failure)> ReadAsync<T>(HttpContext context, CancellationToken token) where T : class
+    internal static async Task<(T? Value, IResult? Failure)> ReadAsync<T>(HttpContext context, CancellationToken token) where T : class
     {
         if (!context.Request.HasJsonContentType())
             return (null, Results.Problem(statusCode: 415, type: ProblemDetailsDefaults.GetTypeForCode("UNSUPPORTED_MEDIA_TYPE"),
@@ -178,9 +178,9 @@ public sealed class PlanningEndpointModule : IApiEndpointModule
         }
     }
 
-    private static bool TryId(string value, out Guid id) => Guid.TryParse(value, out id) && id != Guid.Empty;
+    internal static bool TryId(string value, out Guid id) => Guid.TryParse(value, out id) && id != Guid.Empty;
 
-    private static IResult Invalid(string field) =>
+    internal static IResult Invalid(string field) =>
         ApiProblems.ValidationFailed(new Dictionary<string, string[]> { [field] = ["A valid value is required."] });
 
     private static void NoStore(HttpContext context) => context.Response.Headers.CacheControl = "no-store";

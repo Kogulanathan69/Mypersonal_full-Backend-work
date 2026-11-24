@@ -487,3 +487,32 @@ internal sealed class MySqlPlanCatalog(BuildMindDbContext context) : IPlanCatalo
         }).ToArray();
     }
 }
+
+internal sealed class MySqlPlanVersionAppendStore(BuildMindDbContext context, TransactionRunner transactions) : IPlanVersionAppendStore
+{
+    public Task<ProtectedWriteStatus> TryAppendWithEvidenceAsync(PlanRevisionSnapshot revision, IssuedValidationEvidence evidence,
+        long authorizationVersion, CancellationToken token)
+    {
+        if (revision.ParentRevisionId is not { } parent || evidence.Reference.ValidationId != revision.Validation.ValidationId
+            || evidence.Reference.GeometryHash != revision.GeometryHash || evidence.Reference.HasBlockingIssues)
+            throw new ArgumentException("An appended revision must cite matching nonblocking server evidence.");
+        return new ProtectedPlanningWriter(context, transactions).RunAsync(revision.ProjectId, revision.CreatedBy, authorizationVersion,
+            async inner =>
+            {
+                context.Add(PlanValidationLedger.ToRecord(evidence));
+                await context.SaveChangesAsync(inner).ConfigureAwait(false);
+                return await PlanHead.AppendAsync(context, parent, revision, inner).ConfigureAwait(false);
+            }, token);
+    }
+}
+
+/// <summary>
+/// No AI provider is approved or configured (G20 / G11). The existing M3 AI-edit orchestration therefore always
+/// receives "Unavailable"; nothing is fabricated and no external service is called.
+/// </summary>
+internal sealed class UnconfiguredAiEditProposalPort : IAiEditProposalPort
+{
+    public Task<AiEditProposal> ProposeAsync(Guid projectId, Guid planId, Guid baseRevisionId, string customerInstruction,
+        string correlationId, CancellationToken cancellationToken) =>
+        Task.FromResult(new AiEditProposal(AiEditProposalStatus.Unavailable, [], []));
+}

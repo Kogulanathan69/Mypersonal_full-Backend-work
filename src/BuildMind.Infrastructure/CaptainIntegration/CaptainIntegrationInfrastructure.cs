@@ -83,6 +83,17 @@ public static class CaptainIntegrationInfrastructure
         services.TryAddSingleton<BuildMind.Application.Features.Reports.Services.IPreliminaryReportRenderer>(_ => new BuildMind.Infrastructure.Reports.PreliminaryPdfRenderer());
         services.TryAddScoped<BuildMind.Application.Features.ArchitectRequests.Services.IArchitectWorkflowBoundaryCandidate, CaptainArchitectBoundary>();
 
+        // Survey extraction: integrity-checked blob reads, durable lease-based queue, Python extraction client, reader.
+        services.TryAddSingleton<SurveyBlobReader>();
+        services.TryAddScoped<SurveyWorkQueue>();
+        services.TryAddScoped<SurveyExtractionProcessor>();
+        services.TryAddScoped<ISurveyExtractionWork, SurveyExtractionWork>();
+        services.TryAddTransient<ISurveyExtractionClient, SurveyExtractionClient>();
+        services.TryAddScoped<ISurveyExtractionReader, MySqlSurveyExtractionReader>();
+        services.TryAddScoped<IPlanVersionAppendStore, MySqlPlanVersionAppendStore>();
+        services.TryAddScoped<IReportCatalog, MySqlReportCatalog>();
+        services.TryAddSingleton<IAiEditProposalPort, UnconfiguredAiEditProposalPort>();
+
         return services;
     }
 

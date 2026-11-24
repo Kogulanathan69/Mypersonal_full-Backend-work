@@ -356,3 +356,12 @@ internal sealed class CaptainArchitectBoundary(
             JsonSerializer.Deserialize<Guid[]>(row.DocumentIdsJson) ?? [], row.PolicyVersion, row.GrantedAtUtc, explicitlyGranted: true),
         row.RequestedAtUtc, row.StateVersion, Enum.Parse<ArchitectRequestStatus>(row.Status), row.WithdrawnAtUtc);
 }
+
+internal sealed class MySqlReportCatalog(BuildMindDbContext context) : IReportCatalog
+{
+    public async Task<IReadOnlyList<ReportSummary>> ListAsync(Guid projectId, int maximum, CancellationToken token) =>
+        (await context.Set<ReportRecord>().AsNoTracking().Where(r => r.ProjectId == projectId)
+            .OrderByDescending(r => r.RequestedAtUtc).Take(maximum).ToListAsync(token).ConfigureAwait(false))
+        .Select(r => new ReportSummary(r.Id, r.Status, r.PlanId, r.PlanRevisionId, r.ConfirmationId, r.RequestedAtUtc, r.CompletedAtUtc,
+            r.FailureCode)).ToArray();
+}

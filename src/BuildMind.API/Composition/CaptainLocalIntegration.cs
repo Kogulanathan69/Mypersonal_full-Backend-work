@@ -107,6 +107,18 @@ public static class CaptainLocalIntegration
             new MicrosecondTimeProvider(provider.GetRequiredService<TimeProvider>())));
         services.AddSingleton<IApiEndpointModule, DeliverablesEndpointModule>();
 
+        // V3 register completion: extraction results, land validate/confirm, alternatives/select, create plan, edit
+        // validation (no persistence), server-validated version save, confirm alias, AI proposals (no provider), reports list.
+        services.AddScoped<PlanVersionService>();
+        services.AddScoped<AiEditOrchestrationService>();
+        services.AddSingleton<IApiEndpointModule, V3RouteCompletionEndpointModule>();
+
+        // Durable survey extraction worker: only when the private Python service is configured (fail closed otherwise:
+        // surveys stay Queued). Disable explicitly with CaptainIntegration:SurveyWorker:Enabled=false.
+        if (builder.Configuration.GetValue<bool>("Services:Python:Enabled")
+            && builder.Configuration.GetValue("CaptainIntegration:SurveyWorker:Enabled", true))
+            services.AddHostedService<SurveyExtractionHostedService>();
+
         return true;
     }
 }

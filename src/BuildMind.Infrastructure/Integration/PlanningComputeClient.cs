@@ -61,3 +61,44 @@ internal sealed class PlanningComputeClient(PythonServiceClient python) : IPlann
     private sealed record PlanWire(string SchemaVersion, string ValidatorVersion, bool GeometryValid, bool? RequirementsMatch,
         string? GeometryHash, DiagnosticDto[] Diagnostics);
 }
+
+/// <summary>
+/// Captain survey extraction route (<c>POST /internal/v1/survey/extract</c>). The response is validated strictly: the
+/// extraction and file identities must echo the request, the outcome must be a known terminal value and the stored
+/// evidence is bounded. Anything else is a malformed dependency response.
+/// </summary>
+internal sealed class SurveyExtractionClient(PythonServiceClient python) : ISurveyExtractionClient
+{
+    private const string Schema = "captain-survey-extract/1";
+
+    public async Task<SurveyExtractionOutput> ExtractAsync(SurveyExtractionInput input, CancellationToken token)
+    {
+        var raw = await python.PostJsonVerifiedAsync<object, JsonElement>("internal/v1/survey/extract", new
+        {
+            schemaVersion = Schema, extractionId = input.ExtractionId, fileId = input.FileId, mediaType = input.MediaType,
+            byteLength = input.Content.Length, sha256 = input.Sha256, contentBase64 = Convert.ToBase64String(input.Content),
+        }, (_, _) => true, token).ConfigureAwait(false);
+        try
+        {
+            if (raw.GetProperty("schemaVersion").GetString() != Schema)
+                throw new FormatException();
+            var method = raw.GetProperty("method").GetString();
+            var extraction = raw.GetProperty("extraction");
+            var outcome = extraction.GetProperty("status").GetString();
+            if (method is not ("PDF_TEXT" or "OCR") || outcome is not ("COMPLETED" or "NEEDS_REVIEW" or "FAILED")
+                || extraction.GetProperty("extraction_id").GetGuid() != input.ExtractionId
+                || extraction.GetProperty("file_id").GetGuid() != input.FileId
+                || extraction.GetProperty("measurements").GetArrayLength() > 200
+                || extraction.GetProperty("diagnostics").GetArrayLength() > 20)
+                throw new FormatException();
+            var json = extraction.GetRawText();
+            if (System.Text.Encoding.UTF8.GetByteCount(json) > 512 * 1024)
+                throw new FormatException();
+            return new SurveyExtractionOutput(outcome, method, json);
+        }
+        catch (Exception exception) when (exception is FormatException or KeyNotFoundException or InvalidOperationException)
+        {
+            throw new DependencyFailureException(PythonServiceClient.DependencyName, DependencyFailureKind.MalformedResponse);
+        }
+    }
+}

@@ -71,6 +71,23 @@ public sealed class LandService(
         return current is null ? new(PlanningStatus.InputsMissing, Code: "LAND_REVISION_MISSING") : PlanningResult<LandRevision>.Ok(current);
     }
 
+    /// <summary>V3 R-16: validate a candidate boundary without persisting anything.</summary>
+    public async Task<PlanningResult<LandCheckResult>> ValidateAsync(Guid projectId, IReadOnlyList<CoordinatePointDto>? exterior,
+        CancellationToken token)
+    {
+        var (status, _, _) = await access.AuthorizeAsync(projectId, token).ConfigureAwait(false);
+        if (status != PlanningStatus.Success) return new(status);
+        var ring = NormalizeRing(exterior);
+        if (ring is null) return new(PlanningStatus.ValidationFailed, Code: "LAND_BOUNDARY_INVALID");
+        var land = new MetricLandDto
+        {
+            SchemaVersion = PlanningSchemas.MetricLand, CoordinateSystem = LocalFrame(),
+            Boundary = new PolygonBoundaryDto { Exterior = ring, Holes = [] },
+        };
+        try { return PlanningResult<LandCheckResult>.Ok(await compute.ValidateLandAsync(projectId, Guid.NewGuid(), land, token).ConfigureAwait(false)); }
+        catch (DependencyFailureException failure) { return DependencyFailure<LandCheckResult>(failure); }
+    }
+
     public async Task<PlanningResult<LandRevision>> SubmitAsync(Guid projectId, SubmitLandCommand command, CancellationToken token)
     {
         ArgumentNullException.ThrowIfNull(command);

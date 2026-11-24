@@ -18,7 +18,7 @@ public sealed class ProfileEndpointModule
         profile.MapPut("", UpdateAsync);
     }
 
-    private static async Task<IResult> GetAsync(
+    internal static async Task<IResult> GetAsync(
         HttpContext context,
         [FromServices] ProfileService service,
         CancellationToken cancellationToken)
@@ -29,7 +29,7 @@ public sealed class ProfileEndpointModule
             cancellationToken));
     }
 
-    private static async Task<IResult> UpdateAsync(
+    internal static async Task<IResult> UpdateAsync(
         UpdateProfileRequest request,
         HttpContext context,
         [FromServices] ProfileService service,

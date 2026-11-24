@@ -46,6 +46,8 @@ public sealed class PersistenceRegistrationTests
         ("20261124120204_AddCaptainDeliverables", ["architect_requests", "reports"],
             ["fk_architect_requests_projects_project_id", "fk_architect_requests_reports", "fk_architect_requests_users_granted_by",
              "fk_reports_plan_confirmations", "fk_reports_projects_project_id", "fk_reports_users_requested_by"]),
+        ("20261124170241_AddSurveyExtraction", ["survey_extractions"],
+            ["fk_survey_extractions_projects_project_id", "fk_survey_extractions_surveys"]),
     ];
 
     internal static readonly string[] ApprovedTables =

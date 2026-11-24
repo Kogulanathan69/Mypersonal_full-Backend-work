@@ -9,6 +9,7 @@ import logging
 
 from fastapi import FastAPI, Request
 from fastapi.responses import JSONResponse
+from starlette.concurrency import run_in_threadpool
 from pydantic import ValidationError
 
 from app.internal.auth import AUTH_HEADER, REQUIRED_WITHOUT_TOKENS, InternalAuth
@@ -19,10 +20,19 @@ from app.internal.plan_validation import DependencyUnavailable as PlanDependency
 from app.internal.plan_edit import parse_request as parse_edit_preview
 from app.internal.plan_edit import preview as edit_preview
 from app.internal.plan_validation import PlanValidationRequest, validate_plan
+from app.internal.survey_extract import IntegrityRejected, SurveyExtractRequest
+from app.internal.survey_extract import extract as extract_survey
 from app.validation.boundary import ContractJsonError, parse_contract_json
 from app.validation.boundary import _unique_members as _unique_json_members
 
 MAX_BODY_BYTES = 2 * 1024 * 1024
+# Survey extraction carries a base64 file of at most 6 MiB (about 8 MiB encoded): a larger limit for that route only.
+SURVEY_EXTRACT_PATH = "/internal/v1/survey/extract"
+SURVEY_MAX_BODY_BYTES = 9 * 1024 * 1024
+
+
+def _limit(path: str) -> int:
+    return SURVEY_MAX_BODY_BYTES if path == SURVEY_EXTRACT_PATH else MAX_BODY_BYTES
 
 
 def _json_preflight(raw: bytes) -> None:
@@ -57,13 +67,13 @@ def create_app(auth: InternalAuth = REQUIRED_WITHOUT_TOKENS) -> FastAPI:
             if failure is not None:
                 return _problem(401, failure)
         length = request.headers.get("content-length")
-        if length is not None and (not length.isdigit() or int(length) > MAX_BODY_BYTES):
+        if length is not None and (not length.isdigit() or int(length) > _limit(request.url.path)):
             return _problem(413, "PAYLOAD_TOO_LARGE")
         return await call_next(request)
 
     async def raw_json(request: Request) -> bytes:
         raw = await request.body()
-        if len(raw) > MAX_BODY_BYTES:
+        if len(raw) > _limit(request.url.path):
             raise _Rejected(413, "PAYLOAD_TOO_LARGE")
         if request.headers.get("content-type", "").split(";")[0].strip().lower() != "application/json":
             raise _Rejected(415, "UNSUPPORTED_MEDIA_TYPE")
@@ -106,6 +116,15 @@ def create_app(auth: InternalAuth = REQUIRED_WITHOUT_TOKENS) -> FastAPI:
     @application.post("/internal/v1/plans/validate")
     async def plan_validate(request: Request):
         return validate_plan(await body(request, PlanValidationRequest))
+
+    @application.post(SURVEY_EXTRACT_PATH)
+    async def survey_extract_handler(request: Request):
+        parsed = await body(request, SurveyExtractRequest)
+        try:
+            # PDF parsing and OCR block: run in the threadpool, bounded by the subprocess timeouts in ocr.py.
+            return await run_in_threadpool(extract_survey, parsed)
+        except IntegrityRejected as error:
+            raise _Rejected(422, str(error)) from None
 
     @application.post("/internal/v1/plans/edit-preview")
     async def plan_edit_preview(request: Request):

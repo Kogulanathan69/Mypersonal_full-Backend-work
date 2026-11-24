@@ -1010,6 +1010,54 @@ namespace BuildMind.Infrastructure.Persistence.Migrations
                     b.ToTable("requirement_revisions", (string)null);
                 });
 
+            modelBuilder.Entity("BuildMind.Infrastructure.Persistence.Records.Survey.SurveyExtractionRecord", b =>
+                {
+                    b.Property<Guid>("ExtractionId")
+                        .HasColumnType("char(36)")
+                        .HasColumnName("extraction_id");
+
+                    b.Property<DateTime>("CreatedAtUtc")
+                        .HasColumnType("datetime(6)")
+                        .HasColumnName("created_at_utc");
+
+                    b.Property<string>("Method")
+                        .IsRequired()
+                        .HasMaxLength(16)
+                        .HasColumnType("varchar(16)")
+                        .HasColumnName("method");
+
+                    b.Property<string>("Outcome")
+                        .IsRequired()
+                        .HasMaxLength(16)
+                        .HasColumnType("varchar(16)")
+                        .HasColumnName("outcome");
+
+                    b.Property<Guid>("ProjectId")
+                        .HasColumnType("char(36)")
+                        .HasColumnName("project_id");
+
+                    b.Property<string>("ResultJson")
+                        .IsRequired()
+                        .HasColumnType("mediumtext")
+                        .HasColumnName("result_json");
+
+                    b.Property<Guid>("SurveyId")
+                        .HasColumnType("char(36)")
+                        .HasColumnName("survey_id");
+
+                    b.HasKey("ExtractionId")
+                        .HasName("pk_survey_extractions");
+
+                    b.HasIndex("ProjectId")
+                        .HasDatabaseName("ix_survey_extractions_project_id");
+
+                    b.HasIndex("SurveyId")
+                        .IsUnique()
+                        .HasDatabaseName("ux_survey_extractions_survey_id");
+
+                    b.ToTable("survey_extractions", (string)null);
+                });
+
             modelBuilder.Entity("BuildMind.Infrastructure.Persistence.Records.Survey.SurveyRecord", b =>
                 {
                     b.Property<Guid>("Id")
@@ -1044,6 +1092,16 @@ namespace BuildMind.Infrastructure.Persistence.Migrations
                         .HasMaxLength(255)
                         .HasColumnType("varchar(255)")
                         .HasColumnName("original_file_name");
+
+                    b.Property<int>("ProcessingAttempts")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("int")
+                        .HasDefaultValue(0)
+                        .HasColumnName("processing_attempts");
+
+                    b.Property<DateTime?>("ProcessingLeaseUntilUtc")
+                        .HasColumnType("datetime(6)")
+                        .HasColumnName("processing_lease_until_utc");
 
                     b.Property<Guid>("ProjectId")
                         .HasColumnType("char(36)")
@@ -1091,6 +1149,9 @@ namespace BuildMind.Infrastructure.Persistence.Migrations
 
                     b.HasIndex("ProjectId", "UploadedAtUtc")
                         .HasDatabaseName("ix_surveys_project_id_uploaded_at_utc");
+
+                    b.HasIndex("Status", "ProcessingLeaseUntilUtc")
+                        .HasDatabaseName("ix_surveys_status_lease");
 
                     b.ToTable("surveys", (string)null);
                 });
@@ -1397,6 +1458,23 @@ namespace BuildMind.Infrastructure.Persistence.Migrations
                         .OnDelete(DeleteBehavior.Restrict)
                         .IsRequired()
                         .HasConstraintName("fk_requirement_revisions_projects_project_id");
+                });
+
+            modelBuilder.Entity("BuildMind.Infrastructure.Persistence.Records.Survey.SurveyExtractionRecord", b =>
+                {
+                    b.HasOne("BuildMind.Infrastructure.Persistence.Records.ProjectRecord", null)
+                        .WithMany()
+                        .HasForeignKey("ProjectId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired()
+                        .HasConstraintName("fk_survey_extractions_projects_project_id");
+
+                    b.HasOne("BuildMind.Infrastructure.Persistence.Records.Survey.SurveyRecord", null)
+                        .WithMany()
+                        .HasForeignKey("SurveyId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired()
+                        .HasConstraintName("fk_survey_extractions_surveys");
                 });
 
             modelBuilder.Entity("BuildMind.Infrastructure.Persistence.Records.Survey.SurveyRecord", b =>

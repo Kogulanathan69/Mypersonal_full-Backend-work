@@ -61,7 +61,7 @@ public sealed class PlanLifecycleEndpointModule : IApiEndpointModule
         });
     }
 
-    private static async Task<IResult> ConfirmAsync(string projectId, string planId, HttpContext context, ICurrentUser user,
+    internal static async Task<IResult> ConfirmAsync(string projectId, string planId, HttpContext context, ICurrentUser user,
         FinalPlanConfirmationService confirmations, CancellationToken token)
     {
         context.Response.Headers.CacheControl = "no-store";

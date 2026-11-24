@@ -141,3 +141,51 @@ public interface IPlanCatalog
 {
     Task<IReadOnlyList<PlanSummary>> ListAsync(Guid projectId, CancellationToken cancellationToken);
 }
+
+public sealed record SurveyExtractionInput(Guid ExtractionId, Guid FileId, string MediaType, byte[] Content, string Sha256);
+
+/// <summary>Validated, bounded extraction evidence. Outcome: COMPLETED / NEEDS_REVIEW / FAILED. Never an approval.</summary>
+public sealed record SurveyExtractionOutput(string Outcome, string Method, string ExtractionJson);
+
+/// <summary>Survey extraction on the private Python service (separate port so planning fakes stay unaffected).</summary>
+public interface ISurveyExtractionClient
+{
+    Task<SurveyExtractionOutput> ExtractAsync(SurveyExtractionInput input, CancellationToken cancellationToken);
+}
+
+/// <summary>Stored extraction evidence for a survey (the caller must establish project ownership first).</summary>
+public sealed record SurveyExtractionView(Guid ExtractionId, Guid SurveyId, string Outcome, string Method, string ExtractionJson,
+    DateTimeOffset CreatedAtUtc);
+
+public interface ISurveyExtractionReader
+{
+    Task<SurveyExtractionView?> GetAsync(Guid projectId, Guid surveyId, CancellationToken cancellationToken);
+}
+
+public interface IPlanVersionAppendStore
+{
+    /// <summary>
+    /// Protected append of a new immutable revision citing server-issued evidence: project row lock + owner + version,
+    /// head CAS from the expected base, ledger insert and head move in one transaction.
+    /// </summary>
+    Task<ProtectedWriteStatus> TryAppendWithEvidenceAsync(PlanRevisionSnapshot revision, IssuedValidationEvidence evidence,
+        long authorizationVersion, CancellationToken cancellationToken);
+}
+
+public sealed record ReportSummary(Guid ReportId, string Status, Guid PlanId, Guid PlanRevisionId, Guid ConfirmationId,
+    DateTimeOffset RequestedAtUtc, DateTimeOffset? CompletedAtUtc, string? FailureCode);
+
+/// <summary>Owner-scoped report listing (the caller must establish ownership first). Bounded.</summary>
+public interface IReportCatalog
+{
+    Task<IReadOnlyList<ReportSummary>> ListAsync(Guid projectId, int maximum, CancellationToken cancellationToken);
+}
+
+/// <summary>Durable survey extraction work (claims are atomic and leased; see the Infrastructure queue).</summary>
+public interface ISurveyExtractionWork
+{
+    Task<IReadOnlyList<Guid>> FindClaimableAsync(int limit, CancellationToken cancellationToken);
+
+    /// <summary>Claims and processes one survey; returns a short outcome label (never document content).</summary>
+    Task<string> ProcessAsync(Guid surveyId, CancellationToken cancellationToken);
+}
