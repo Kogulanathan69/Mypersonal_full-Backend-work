@@ -274,3 +274,15 @@ Phase 6 journey coverage:
 - architect: missing consent → 422; unknown recipient → 422; stale policy → 409; cross-user → 404; create → 201 Pending (not dispatched); list; withdraw → 200; second withdraw → 409.
 
 **Not covered by dedicated live store tests:** the Phase 6 boundaries are exercised by the live API journey against real MySQL and file storage, plus the unchanged M5 unit suites.
+
+## Phase 7 — full verification (final)
+
+- **Resume note:** the session resumed after an interruption. The stack was down and Phase 6 was uncommitted. Its suites were re-run (all green) and it was committed as `7213b42`. Nothing else was repeated.
+- **Tooling** (`d2d74bc`): phase 7 security journey, PDF content check, `unit-suites.sh`, `python-and-pdf-checks.sh`.
+- **Final results:**
+  - live journey phases 2–7: 107/107;
+  - .NET: Application 252, Infrastructure 1160, Reports 164 (PDF-QA executed), Requirements 456, Workflow 197, ContractTests exit 0;
+  - live MySQL: 94/94;
+  - python-services 974; rag-service 238;
+  - independent PDF text check: pass.
+- **Final state:** see FINAL-BACKEND-HANDOVER (A: substantially complete with recorded gaps; B: locally verified; C: partial; D: production NO-GO).

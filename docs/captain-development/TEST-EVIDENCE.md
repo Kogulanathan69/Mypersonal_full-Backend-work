@@ -1,43 +1,98 @@
 # Test evidence — Captain full-backend completion
 
-All results are from actual runs in this session. Runs used WSL Ubuntu-24.04 with .NET SDK 10.0.115 on the one-way copy `~/bm-captain/src`, and TRX files under `~/bm-captain/results/`. Python runs used `python-services/.venv` (Python 3.13). Nothing below is inferred from file existence.
+All results come from actual runs in this session (2026-11-24). Unless stated, they ran in WSL Ubuntu-24.04 with .NET SDK 10.0.115 on the one-way copy `~/bm-captain/src`; TRX files are under `~/bm-captain/results/`.
+- **Python:** `~/bm-captain/venv-*` (Python 3.13.9, created by a pinned, checksum-verified uv 0.9.5), and the existing Windows `python-services/.venv` (Python 3.13) where noted.
+- **MySQL:** 8.4.13 in container `bm-captain-mysql`, with `SslMode=VerifyFull` since commit `1574e1f`.
 
-Result columns:
-- PASS / FAIL / SKIP: counts from the run.
-- NOT RUN: not executed, with the reason.
-- DEFERRED: knowingly postponed.
+Nothing below is inferred from file existence. Columns: PASS / FAIL / SKIP; NOT RUN gives a reason; DEFERRED means knowingly postponed.
 
-## Phase 0 baseline (`fec3254`)
+## Final results (code tree of `7213b42`; `d2d74bc` adds only tools; `src/` and `tests/` are identical)
 
-| Suite | PASS | FAIL | SKIP | Note |
+| Suite | PASS | FAIL | SKIP | Command |
 |---|---:|---:|---:|---|
-| Release build | — | 0 | — | 0 warnings |
-| Application.UnitTests | 233 | 0 | 0 | |
-| Infrastructure.Tests | 1140 | 0 | 0 | |
-| Reports.Tests | 163 | 0 | 1 | `IndependentParserVerifiesExactSyntheticReport` needs `BUILDMIND_PDF_QA_PYTHON` |
-| Requirements.Tests | 456 | 0 | 0 | |
-| Workflow.Tests | 197 | 0 | 0 | |
-| Application.ContractTests | exit 0 | | | console runner |
-| python-services pytest | 954 | 0 | 0 | |
-| rag-service pytest | 238 | 0 | 0 | |
-| Persistence.IntegrationTests | NOT RUN | | | no database at that point (Phase 2) |
-| RH09 | DEFERRED | | | test not present at `fec3254`; provider defect, see KNOWN-BLOCKERS |
+| Release build (`BuildMind.sln`) | — | 0 errors | — | 0 warnings |
+| Application.UnitTests | 252 | 0 | 0 | `tools/captain/unit-suites.sh` |
+| Infrastructure.Tests | 1160 | 0 | 0 | same (run without live connection-string variables) |
+| Reports.Tests | 164 | 0 | 0 | `python-and-pdf-checks.sh` (`BUILDMIND_PDF_QA_PYTHON` set, so the PDF-QA test runs) |
+| Requirements.Tests | 456 | 0 | 0 | `unit-suites.sh` |
+| Workflow.Tests | 197 | 0 | 0 | `unit-suites.sh` |
+| Application.ContractTests (console) | exit 0 | — | — | `unit-suites.sh` |
+| Persistence.IntegrationTests (live MySQL, VerifyFull) | 94 | 0 | 0 | `tools/captain/persistence-tests.sh`; 0 leftover test databases |
+| python-services pytest (WSL venv) | 974 | 0 | 0 | includes 20 Captain internal-API tests |
+| rag-service pytest (WSL venv) | 238 | 0 | 0 | unchanged M7 suite |
+| **Live journey, phases 2–7** (real API + MySQL + python-services + rag-service) | 107 | 0 | — | `tools/captain/smoke_journey.py` |
+| Independent PDF content check (pypdf) | pass | — | — | `check_report_pdf.py`: 3 pages; the preliminary notice, non-approval and synthetic statements are present |
 
-## Phase 1
+### NOT RUN / DEFERRED / BLOCKED
 
-| Suite | PASS | FAIL | SKIP |
-|---|---:|---:|---:|
-| Infrastructure.Tests, filter `CaptainIntegration` | 18 | 0 | 0 |
-| Infrastructure.Tests (full) | 1158 | 0 | 0 |
+| Item | State | Reason |
+|---|---|---|
+| RH09 command-timeout classification | **DEFERRED / UNRESOLVED** | Provider hang (MySql.Data 26.7.0/26.10.0). The test is not in this baseline and was not re-investigated. |
+| `PythonLiveSmokeTests`, `RagLiveSmokeTests`, `RagConstraintAcceptanceTests` (Persistence project) | NOT RUN | They expect their own CI-provisioned services and environment variables. Live API↔Python and API↔RAG paths are instead covered by the journey. |
+| Real-corpus regulation retrieval | **BLOCKED** (environment) | Manifest identity pins Windows paths, the loader correctly refuses normalisation, G17 prevents running the API on Windows, and WSL is in NAT mode |
+| Survey extraction (OCR/PDF parse of an uploaded survey) | NOT IMPLEMENTED | Python library exists; no processing worker or route was built. The land boundary is user-confirmed instead. |
+| Windows-native .NET execution | NOT RUN | G17 Smart App Control (not bypassed) |
 
-## Phase 2 (live MySQL 8.4.13, verified TLS)
+## Live journey coverage (107 checks)
 
-| Run | PASS | FAIL | Note |
-|---|---:|---:|---|
-| Persistence.IntegrationTests, baseline (Python/RAG live excluded) | 81 | 0 | 0 leftover test databases |
-| Same suite with the `AddSurveys` migration, before updating the inventory pins | 82 | 6 | 5 schema-inventory pins (expected; then updated) + 1 `SessionSecurityLiveTests.S03` **deadlock** (intermittent) |
-| Same suite after the updates | 88 | 0 | includes 7 new Captain live tests |
-| `SessionSecurityLiveTests` × 10 after the deadlock fix | 70 | 0 | 10/10 consecutive runs green |
-| Live API smoke (`tools/captain/smoke_phase2.py`) | 19 | 0 | real API + MySQL; synthetic users |
+### Phase 2: auth, projects, requirements, survey
+- **Readiness:** the `mysql` entry is exactly Healthy/reachable; `python` is Healthy.
+- **Auth:** register and login for two users; invalid JWT → 401.
+- **Projects:** create; cross-user read → 404.
+- **Requirements:** save; stale revision → 409.
+- **Survey:** upload → 202.
 
-Excluded and NOT RUN in Phase 2: `PythonLiveSmokeTests`, `RagLiveSmokeTests`, `RagConstraintAcceptanceTests`. Those services were not running yet; they are covered in Phase 5/7.
+### Phase 3: land and generation
+- **Land:** self-intersecting boundary → 422 `POLYGON_INVALID`; valid boundary → 201 (area 168); stale → 409; cross-user → 404.
+- **Generation:** 3 distinct candidates ranked 1..3, labelled synthetic with "access not evaluated", 5 rooms each, no openings, with a preliminary notice.
+- **Idempotency:** replay returns the same job; key reuse with other inputs → 409.
+- **Denials:** stale inputs → 409; cross-user generate and read → 404.
+- **Save:** candidate saved as revision 1 citing server-issued `SYNTHETIC_FIXTURE` evidence; duplicate save → 409; history shows [1].
+- **Truthful failure:** impossible requirements → 422 `INFEASIBLE` with no candidates.
+
+### Phase 4: plan list, edits, apply, confirmation
+- **Plans:** list and read; cross-user list/read → 404.
+- **Edit validation:** out-of-parcel edit → 422 `VALIDATION_EVIDENCE_INVALID`; stale base → 409/404; cross-user edit → 404.
+- **Apply:** valid edit → validated candidate; apply without acknowledgement → 422; cross-user apply → 404; apply → v2; duplicate apply → 409.
+- **History:** [2, 1]; edit on the superseded revision → 409; explicit reject → 200.
+- **Confirmation:** wrong hash → 409; superseded revision → 409; no acknowledgement → 422; cross-user → 404; success → 201 with the non-approval notice; second confirmation → 409; plan list shows the confirmation.
+
+### Phase 5: regulation retrieval (fail closed)
+- **Readiness:** rag = Degraded/unavailable.
+- **Retrieval:** anonymous → 401; authenticated with no corpus → 503 with no passages.
+- **rag-constraints generation:** 503 `DEPENDENCY_UNAVAILABLE`, and no job is published.
+
+### Phase 6: reports and architect requests
+- **Reports:** hash mismatch → 404; cross-user generate/status/download → 404; generate → 201 Ready; idempotent repeat → 200; download is a PDF attachment with `no-store`; unknown report → 404.
+- **Architect requests:** missing consent → 422; unknown recipient → 422; stale policy → 409; cross-user → 404; create → 201 Pending (recorded, not dispatched); list; cross-user read → 404; withdraw → 200; second withdraw → 409.
+
+### Phase 7: dashboard and security
+- **Dashboard:** owner sees their projects; other users never see them.
+- **JWT:** expired (validly signed) → 401; wrong key → 401; tampered → 401.
+- **Refresh and sessions:**
+  - refresh rotation → 200, and the rotated token works;
+  - replayed refresh token → 401, the issued access token is revoked → 401, and the whole family is revoked;
+  - re-login; logout → 204, then the logged-out refresh token → 401;
+  - logout-all → 204, then the access token → 401; other users are unaffected.
+- **Invalid requests:** malformed JSON → 400 with no stack trace or SQL in the body; unsupported media type → 415/404 (sent by a non-owner, so 404 is also accepted; this is a weak check); 2 MiB body → 413.
+- **Logs:** no password, JWT, refresh token, DB password, internal token or signing key in any service log.
+- **Dependency failure:** python-services stopped → land validation 503 `DEPENDENCY_UNAVAILABLE`, readiness python not Healthy, and the non-owner is still denied.
+- **Rate limiting:** an auth-strict burst gives 429 with no 5xx.
+
+## Earlier phase-specific evidence (still valid; same tests are included in the final runs above)
+
+| Item | Result |
+|---|---|
+| Refresh-rotation deadlock fix (Phase 2) | `SessionSecurityLiveTests` 10/10 consecutive runs |
+| Users-first lock order across rotation, replay, logout, logout-all and reset (review correction) | `SessionSecurityLiveTests` (incl. S08/S09, 8 mixed rounds each) 5/5 consecutive runs |
+| TLS negative check | MySQL CLI `VERIFY_IDENTITY` refuses the container bridge IP (not in the SAN) and accepts 127.0.0.1. CLI-level only. |
+| Phase 2 smoke (`smoke_phase2.py`) | 19/19 with the exact readiness assertion |
+
+## Defects found and fixed in this session
+
+| Defect | Where | Fix and evidence |
+|---|---|---|
+| Intermittent deadlock on concurrent refresh of one token (S03 failed in 1 of 3 runs) | `RefreshTokenStore.RotateAsync` | Token-row lock, then users-first lock order everywhere; 10/10 and 5/5 repeated runs |
+| Rotation lock order opposite to logout-all/reset | session stores | users row locked first in rotation and logout; S08/S09 |
+| `smoke_phase2.py` readiness accepted any "Healthy" substring; requirements read-back compared `None == None` | tooling | exact `mysql` entry; compares `revisionId` |
+| Harness leaked live connection strings into unit suites (1 false failure) | tooling | `env.sh` is sourced only by the live suite |
