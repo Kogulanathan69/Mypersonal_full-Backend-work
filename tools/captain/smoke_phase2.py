@@ -42,6 +42,14 @@ def check(name, condition, detail=""):
     print(("PASS " if condition else "FAIL ") + name + (f"  [{detail}]" if detail and not condition else ""))
 
 
+def mysql_ready(status, body):
+    """The single check named exactly "mysql" must be Healthy with reason "reachable" (no substring matching)."""
+    if status != 200 or not isinstance(body, dict) or not isinstance(body.get("checks"), list):
+        return False
+    entries = [c for c in body["checks"] if isinstance(c, dict) and c.get("name") == "mysql"]
+    return len(entries) == 1 and entries[0].get("status") == "Healthy" and entries[0].get("reason") == "reachable"
+
+
 def user():
     email = f"captain-{uuid.uuid4().hex[:12]}@example.invalid"
     password = "Synthetic-" + secrets.token_urlsafe(18) + "9a!"
@@ -66,7 +74,7 @@ def main():
     check("liveness /health", status == 200, status)
     status, body = call("GET", "/health/ready")
     print("     readiness body: " + json.dumps(body))
-    check("readiness /health/ready mysql Healthy", status == 200 and "Healthy" in json.dumps(body), body)
+    check("readiness: exact mysql check is Healthy/reachable", mysql_ready(status, body), body)
 
     alice = user()
     bob = user()
@@ -98,7 +106,8 @@ def main():
     status, _ = call("PUT", f"/api/v1/projects/{pid}/requirements", snapshot, token=b)
     check("cross-user requirement write denied (404)", status == 404, status)
     status, again = call("GET", f"/api/v1/projects/{pid}/requirements", token=a)
-    check("requirements read back", status == 200 and again.get("id") == saved.get("id"), status)
+    check("requirements read back (same revisionId)",
+          status == 200 and saved.get("revisionId") and again.get("revisionId") == saved.get("revisionId"), status)
 
     pdf = b"%PDF-1.4\n1 0 obj<<>>endobj\ntrailer<<>>\n%%EOF\n"
     raw, ctype = multipart("file", "synthetic-survey.pdf", "application/pdf", pdf)

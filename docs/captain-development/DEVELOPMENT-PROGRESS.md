@@ -73,3 +73,55 @@ Tests: the new focused suite passed 18/18. Full Infrastructure.Tests passed 1158
 - **Live API:** `tools/captain/run-api.sh` + `smoke_phase2.py`: 19/19.
 
 **Not done in Phase 2** (moved to their feature phases): generation jobs, plan candidates/revision writes, reports, architect requests.
+
+Post-Phase-2 commit `279ff2f`: LF endings for `tools/captain` scripts.
+
+## Phase 3 — AI generation workflow
+
+The interrupted `generation.py` `_envelope()` edit had **not** been applied (verified at HEAD `279ff2f`). It is now implemented: JSON-mode validation through the unchanged `GenerationResult` contract, with no duplicate return paths.
+
+### Python (python-services, commit `0ebb7d8`)
+
+| File | Change |
+|---|---|
+| `app/internal/auth.py` | `X-BuildMind-Internal-Token`, adopting the rag-service G11 pattern. Fail closed: no token configured gives 503; a missing, wrong or repeated header gives 401. Disabling requires `BUILDMIND_PY_ENVIRONMENT=development`. |
+| `app/internal/land.py` | `POST /internal/v1/land/validate` over the existing `validate_confirmed_parcel` |
+| `app/internal/generation.py` | `POST /internal/v1/generation/run`: D02 `assess_feasibility`, then D04 `generate_alternatives`, then M3 draft geometry. Truthful outcomes: `NEEDS_REVIEW` / `INFEASIBLE` / `UNSUPPORTED` / `UNAVAILABLE` with no alternatives. Synthetic setbacks only through the explicit flag. Every alternative carries the WARNING diagnostics `SYNTHETIC_REGULATORY_EVIDENCE` and `PHYSICAL_ACCESS_NOT_EVALUATED`. |
+| `app/internal/plan_validation.py` | `POST /internal/v1/plans/validate`: strict schema, single floor, rooms valid, inside the parcel and buildable area, no overlaps, openings fit, room counts |
+| `app/main.py` | `create_app(auth)`; docs/OpenAPI disabled; fixed-code errors |
+| `tests/captain/test_internal_api.py` | 17 tests (auth cases, land, success and failure envelopes, determinism, plan validation, no coercion) |
+
+### C#
+
+- **Application** (`Features/Planning/`):
+  - `PlanningAccess`: fresh owner authorization and version;
+  - `LandService`;
+  - `GenerationService`: idempotency, stale-input binding, deterministic room program from requirements plus the policy, evidence modes, job lifecycle `Running` → `Succeeded`/`Failed`, dependency failure recorded;
+  - `PlanSaveService`: server re-validation, then server-issued evidence, then plan revision 1.
+- **Infrastructure:**
+  - `PlanningComputeClient`: every generation response is parsed by the existing strict `GenerationContractBoundary`, which is the live parity check;
+  - `FileGenerationPolicyProvider`;
+  - MySQL stores `MySqlLandRevisionStore`, `MySqlGenerationJobStore` and `MySqlPlanCreationStore`. All use `ProtectedPlanningWriter` (project row `FOR UPDATE` + owner + version), so idempotency-key and head checks are race-free.
+- **Migration** `20261124104612_AddCaptainPlanningWorkflow` (additive): `land_revisions`, `generation_jobs` (unique project+actor+key), `generation_candidates`, `plan_validation_evidence` (server-issued evidence ledger).
+- **API:** `PlanningEndpointModule` under the Captain profile. Generation uses the expensive-operation limiter.
+- **Synthetic labelling:**
+  - policy file `docs/captain-development/samples/generation-policy.synthetic.json` ("DEVELOPMENT ONLY");
+  - saved plans record `regulatoryEvidenceStatus = SYNTHETIC_FIXTURE`, never `REVIEWED`;
+  - every response carries a preliminary notice ("not construction-ready").
+
+### WSL Python environment
+
+`python3-venv`, pip and passwordless sudo are absent. A pinned **uv 0.9.5** binary was downloaded and its SHA-256 verified against the published checksum (`2cf10bab…4f66`). It created the Python 3.13.9 venvs `~/bm-captain/venv-{python-services,rag-service}` from the pinned requirements (`tools/captain/python-setup.sh`).
+
+### Results
+
+| Suite | Result |
+|---|---|
+| python-services, Windows venv | 971/971 |
+| python-services, WSL venv | 971/971 |
+| Application.UnitTests | 246/246 (+13) |
+| Infrastructure.Tests | 1160/1160 |
+| Live MySQL | 92/92 (+4 planning store tests) |
+| Live journey phases 2–3 (`smoke_journey.py`) | 32/32 |
+
+**Review corrections:** the `smoke_phase2.py` readiness check now asserts the exact `mysql` entry (`Healthy`/`reachable`); its requirements read-back now compares `revisionId` (it previously compared `None == None`). Rerun: 19/19.

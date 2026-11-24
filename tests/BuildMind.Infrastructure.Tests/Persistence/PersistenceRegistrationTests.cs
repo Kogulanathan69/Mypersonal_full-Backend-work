@@ -33,6 +33,12 @@ public sealed class PersistenceRegistrationTests
     internal static readonly (string Migration, string[] Tables, string[] ForeignKeys)[] CaptainMigrations =
     [
         ("20261124095515_AddSurveys", ["surveys"], ["fk_surveys_projects_project_id", "fk_surveys_users_uploaded_by"]),
+        ("20261124104612_AddCaptainPlanningWorkflow",
+            ["generation_candidates", "generation_jobs", "land_revisions", "plan_validation_evidence"],
+            ["fk_generation_candidates_generation_jobs", "fk_generation_candidates_projects_project_id",
+             "fk_generation_jobs_land_revisions", "fk_generation_jobs_projects_project_id", "fk_generation_jobs_users_requested_by",
+             "fk_land_revisions_projects_project_id", "fk_land_revisions_users_created_by",
+             "fk_plan_validation_evidence_projects_project_id"]),
     ];
 
     internal static readonly string[] ApprovedTables =

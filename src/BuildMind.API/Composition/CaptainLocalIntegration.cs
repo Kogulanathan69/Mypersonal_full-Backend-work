@@ -1,6 +1,8 @@
 using BuildMind.API.Endpoints.PlanEditor;
 using BuildMind.API.Endpoints.Requirements;
+using BuildMind.API.Endpoints.Planning;
 using BuildMind.API.Endpoints.Survey;
+using BuildMind.Application.Features.Planning;
 using BuildMind.API.Routing;
 using BuildMind.Application.Features.Requirements.Abstractions;
 using BuildMind.Application.Features.Requirements.Services;
@@ -55,6 +57,14 @@ public static class CaptainLocalIntegration
 
         // M2 survey upload and status (existing services and module).
         services.AddSurveyFeature();
+
+        // Captain planning: land boundary, generation jobs, saving a generated candidate as a plan.
+        services.AddScoped<PlanningAccess>();
+        services.AddScoped<LandService>();
+        services.AddScoped<GenerationService>();
+        services.AddScoped<PlanSaveService>();
+        services.AddSingleton<IRegulatoryEvidenceProvider, PolicyRegulatoryEvidenceProvider>();
+        services.AddSingleton<IApiEndpointModule, PlanningEndpointModule>();
 
         // M3 revision history: the two read routes only.
         services.AddSingleton<IApiEndpointModule, PlanRevisionHistoryEndpointModule>();

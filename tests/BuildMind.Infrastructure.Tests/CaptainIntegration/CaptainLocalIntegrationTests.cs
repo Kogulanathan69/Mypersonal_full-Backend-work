@@ -52,6 +52,8 @@ public sealed class CaptainLocalIntegrationTests
     [InlineData("/requirements")]
     [InlineData("/requirements/summary")]
     [InlineData("/plans/00000000-0000-4000-8000-000000000002/versions")]
+    [InlineData("/land")]
+    [InlineData("/generation-jobs/00000000-0000-4000-8000-000000000003")]
     public async Task Enabled_profile_maps_protected_routes_that_reject_anonymous_callers(string suffix)
     {
         using var factory = M1ApiIntegrationTests.CreateFactory(new InMemoryM1Store(), s => s[Flag] = "true");

@@ -196,6 +196,275 @@ namespace BuildMind.Infrastructure.Persistence.Migrations
                         });
                 });
 
+            modelBuilder.Entity("BuildMind.Infrastructure.Persistence.Records.Planning.GenerationCandidateRecord", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .HasColumnType("char(36)")
+                        .HasColumnName("id");
+
+                    b.Property<DateTime>("CreatedAtUtc")
+                        .HasColumnType("datetime(6)")
+                        .HasColumnName("created_at_utc");
+
+                    b.Property<string>("DiversitySignature")
+                        .IsRequired()
+                        .HasMaxLength(128)
+                        .HasColumnType("varchar(128)")
+                        .HasColumnName("diversity_signature");
+
+                    b.Property<string>("GeometryHash")
+                        .IsRequired()
+                        .HasMaxLength(71)
+                        .HasColumnType("varchar(71)")
+                        .HasColumnName("geometry_hash");
+
+                    b.Property<string>("GeometryJson")
+                        .IsRequired()
+                        .HasColumnType("mediumtext")
+                        .HasColumnName("geometry_json")
+                        .HasAnnotation("MySQL:Charset", "utf8mb4");
+
+                    b.Property<Guid>("JobId")
+                        .HasColumnType("char(36)")
+                        .HasColumnName("job_id");
+
+                    b.Property<string>("MetricsJson")
+                        .IsRequired()
+                        .HasColumnType("text")
+                        .HasColumnName("metrics_json");
+
+                    b.Property<int>("Ordinal")
+                        .HasColumnType("int")
+                        .HasColumnName("ordinal");
+
+                    b.Property<Guid>("ProjectId")
+                        .HasColumnType("char(36)")
+                        .HasColumnName("project_id");
+
+                    b.Property<string>("ValidationJson")
+                        .IsRequired()
+                        .HasColumnType("mediumtext")
+                        .HasColumnName("validation_json")
+                        .HasAnnotation("MySQL:Charset", "utf8mb4");
+
+                    b.HasKey("Id")
+                        .HasName("pk_generation_candidates");
+
+                    b.HasIndex("ProjectId")
+                        .HasDatabaseName("ix_generation_candidates_project_id");
+
+                    b.HasIndex("JobId", "Ordinal")
+                        .IsUnique()
+                        .HasDatabaseName("ux_generation_candidates_job_ordinal");
+
+                    b.ToTable("generation_candidates", (string)null);
+                });
+
+            modelBuilder.Entity("BuildMind.Infrastructure.Persistence.Records.Planning.GenerationJobRecord", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .HasColumnType("char(36)")
+                        .HasColumnName("id");
+
+                    b.Property<string>("AlgorithmVersion")
+                        .HasMaxLength(64)
+                        .HasColumnType("varchar(64)")
+                        .HasColumnName("algorithm_version");
+
+                    b.Property<DateTime?>("CompletedAtUtc")
+                        .HasColumnType("datetime(6)")
+                        .HasColumnName("completed_at_utc");
+
+                    b.Property<DateTime>("CreatedAtUtc")
+                        .HasColumnType("datetime(6)")
+                        .HasColumnName("created_at_utc");
+
+                    b.Property<string>("DiagnosticsJson")
+                        .IsRequired()
+                        .HasColumnType("mediumtext")
+                        .HasColumnName("diagnostics_json")
+                        .HasAnnotation("MySQL:Charset", "utf8mb4");
+
+                    b.Property<string>("EvidenceMode")
+                        .IsRequired()
+                        .HasMaxLength(32)
+                        .HasColumnType("varchar(32)")
+                        .HasColumnName("evidence_mode");
+
+                    b.Property<string>("IdempotencyKey")
+                        .IsRequired()
+                        .HasMaxLength(64)
+                        .HasColumnType("varchar(64)")
+                        .HasColumnName("idempotency_key");
+
+                    b.Property<Guid>("LandRevisionId")
+                        .HasColumnType("char(36)")
+                        .HasColumnName("land_revision_id");
+
+                    b.Property<string>("Outcome")
+                        .HasMaxLength(16)
+                        .HasColumnType("varchar(16)")
+                        .HasColumnName("outcome");
+
+                    b.Property<Guid>("ProjectId")
+                        .HasColumnType("char(36)")
+                        .HasColumnName("project_id");
+
+                    b.Property<string>("ReasonCode")
+                        .HasMaxLength(80)
+                        .HasColumnType("varchar(80)")
+                        .HasColumnName("reason_code");
+
+                    b.Property<Guid>("RequestedBy")
+                        .HasColumnType("char(36)")
+                        .HasColumnName("requested_by");
+
+                    b.Property<Guid>("RequirementsRevisionId")
+                        .HasColumnType("char(36)")
+                        .HasColumnName("requirements_revision_id");
+
+                    b.Property<int>("Seed")
+                        .HasColumnType("int")
+                        .HasColumnName("seed");
+
+                    b.Property<string>("Status")
+                        .IsRequired()
+                        .HasMaxLength(16)
+                        .HasColumnType("varchar(16)")
+                        .HasColumnName("status");
+
+                    b.HasKey("Id")
+                        .HasName("pk_generation_jobs");
+
+                    b.HasIndex("LandRevisionId")
+                        .HasDatabaseName("ix_generation_jobs_land_revision_id");
+
+                    b.HasIndex("RequestedBy")
+                        .HasDatabaseName("ix_generation_jobs_requested_by");
+
+                    b.HasIndex("ProjectId", "RequestedBy", "IdempotencyKey")
+                        .IsUnique()
+                        .HasDatabaseName("ux_generation_jobs_project_actor_key");
+
+                    b.ToTable("generation_jobs", (string)null);
+                });
+
+            modelBuilder.Entity("BuildMind.Infrastructure.Persistence.Records.Planning.LandRevisionRecord", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .HasColumnType("char(36)")
+                        .HasColumnName("id");
+
+                    b.Property<double>("AreaM2")
+                        .HasColumnType("double")
+                        .HasColumnName("area_m2");
+
+                    b.Property<DateTime>("CreatedAtUtc")
+                        .HasColumnType("datetime(6)")
+                        .HasColumnName("created_at_utc");
+
+                    b.Property<Guid>("CreatedBy")
+                        .HasColumnType("char(36)")
+                        .HasColumnName("created_by");
+
+                    b.Property<int>("EdgeCount")
+                        .HasColumnType("int")
+                        .HasColumnName("edge_count");
+
+                    b.Property<string>("LandJson")
+                        .IsRequired()
+                        .HasColumnType("mediumtext")
+                        .HasColumnName("land_json")
+                        .HasAnnotation("MySQL:Charset", "utf8mb4");
+
+                    b.Property<Guid>("ProjectId")
+                        .HasColumnType("char(36)")
+                        .HasColumnName("project_id");
+
+                    b.Property<long>("RevisionNumber")
+                        .HasColumnType("bigint")
+                        .HasColumnName("revision_number");
+
+                    b.Property<Guid?>("SurveyId")
+                        .HasColumnType("char(36)")
+                        .HasColumnName("survey_id");
+
+                    b.HasKey("Id")
+                        .HasName("pk_land_revisions");
+
+                    b.HasIndex("CreatedBy")
+                        .HasDatabaseName("ix_land_revisions_created_by");
+
+                    b.HasIndex("ProjectId", "RevisionNumber")
+                        .IsUnique()
+                        .HasDatabaseName("ux_land_revisions_project_id_revision_number");
+
+                    b.ToTable("land_revisions", (string)null);
+                });
+
+            modelBuilder.Entity("BuildMind.Infrastructure.Persistence.Records.Planning.PlanValidationEvidenceRecord", b =>
+                {
+                    b.Property<Guid>("ValidationId")
+                        .HasColumnType("char(36)")
+                        .HasColumnName("validation_id");
+
+                    b.Property<string>("DiagnosticsJson")
+                        .IsRequired()
+                        .HasColumnType("mediumtext")
+                        .HasColumnName("diagnostics_json")
+                        .HasAnnotation("MySQL:Charset", "utf8mb4");
+
+                    b.Property<string>("GeometryHash")
+                        .IsRequired()
+                        .HasMaxLength(71)
+                        .HasColumnType("varchar(71)")
+                        .HasColumnName("geometry_hash");
+
+                    b.Property<bool>("GeometryValid")
+                        .HasColumnType("tinyint(1)")
+                        .HasColumnName("geometry_valid");
+
+                    b.Property<bool>("HasBlockingIssues")
+                        .HasColumnType("tinyint(1)")
+                        .HasColumnName("has_blocking_issues");
+
+                    b.Property<Guid>("PlanId")
+                        .HasColumnType("char(36)")
+                        .HasColumnName("plan_id");
+
+                    b.Property<Guid>("ProjectId")
+                        .HasColumnType("char(36)")
+                        .HasColumnName("project_id");
+
+                    b.Property<string>("RegulatoryEvidenceStatus")
+                        .IsRequired()
+                        .HasMaxLength(64)
+                        .HasColumnType("varchar(64)")
+                        .HasColumnName("regulatory_evidence_status");
+
+                    b.Property<bool?>("RequirementsMatch")
+                        .HasColumnType("tinyint(1)")
+                        .HasColumnName("requirements_match");
+
+                    b.Property<DateTime>("ValidatedAtUtc")
+                        .HasColumnType("datetime(6)")
+                        .HasColumnName("validated_at_utc");
+
+                    b.Property<string>("ValidatorVersion")
+                        .IsRequired()
+                        .HasMaxLength(64)
+                        .HasColumnType("varchar(64)")
+                        .HasColumnName("validator_version");
+
+                    b.HasKey("ValidationId")
+                        .HasName("pk_plan_validation_evidence");
+
+                    b.HasIndex("ProjectId", "PlanId")
+                        .HasDatabaseName("ix_plan_validation_evidence_project_plan");
+
+                    b.ToTable("plan_validation_evidence", (string)null);
+                });
+
             modelBuilder.Entity("BuildMind.Infrastructure.Persistence.Records.ProjectRecord", b =>
                 {
                     b.Property<Guid>("Id")
@@ -577,6 +846,74 @@ namespace BuildMind.Infrastructure.Persistence.Migrations
                         .HasForeignKey("ProjectId", "PlanId", "ParentRevisionId")
                         .OnDelete(DeleteBehavior.ClientNoAction)
                         .HasConstraintName("fk_plan_revisions_parent");
+                });
+
+            modelBuilder.Entity("BuildMind.Infrastructure.Persistence.Records.Planning.GenerationCandidateRecord", b =>
+                {
+                    b.HasOne("BuildMind.Infrastructure.Persistence.Records.Planning.GenerationJobRecord", null)
+                        .WithMany()
+                        .HasForeignKey("JobId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired()
+                        .HasConstraintName("fk_generation_candidates_generation_jobs");
+
+                    b.HasOne("BuildMind.Infrastructure.Persistence.Records.ProjectRecord", null)
+                        .WithMany()
+                        .HasForeignKey("ProjectId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired()
+                        .HasConstraintName("fk_generation_candidates_projects_project_id");
+                });
+
+            modelBuilder.Entity("BuildMind.Infrastructure.Persistence.Records.Planning.GenerationJobRecord", b =>
+                {
+                    b.HasOne("BuildMind.Infrastructure.Persistence.Records.Planning.LandRevisionRecord", null)
+                        .WithMany()
+                        .HasForeignKey("LandRevisionId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired()
+                        .HasConstraintName("fk_generation_jobs_land_revisions");
+
+                    b.HasOne("BuildMind.Infrastructure.Persistence.Records.ProjectRecord", null)
+                        .WithMany()
+                        .HasForeignKey("ProjectId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired()
+                        .HasConstraintName("fk_generation_jobs_projects_project_id");
+
+                    b.HasOne("BuildMind.Infrastructure.Persistence.Records.UserRecord", null)
+                        .WithMany()
+                        .HasForeignKey("RequestedBy")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired()
+                        .HasConstraintName("fk_generation_jobs_users_requested_by");
+                });
+
+            modelBuilder.Entity("BuildMind.Infrastructure.Persistence.Records.Planning.LandRevisionRecord", b =>
+                {
+                    b.HasOne("BuildMind.Infrastructure.Persistence.Records.UserRecord", null)
+                        .WithMany()
+                        .HasForeignKey("CreatedBy")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired()
+                        .HasConstraintName("fk_land_revisions_users_created_by");
+
+                    b.HasOne("BuildMind.Infrastructure.Persistence.Records.ProjectRecord", null)
+                        .WithMany()
+                        .HasForeignKey("ProjectId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired()
+                        .HasConstraintName("fk_land_revisions_projects_project_id");
+                });
+
+            modelBuilder.Entity("BuildMind.Infrastructure.Persistence.Records.Planning.PlanValidationEvidenceRecord", b =>
+                {
+                    b.HasOne("BuildMind.Infrastructure.Persistence.Records.ProjectRecord", null)
+                        .WithMany()
+                        .HasForeignKey("ProjectId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired()
+                        .HasConstraintName("fk_plan_validation_evidence_projects_project_id");
                 });
 
             modelBuilder.Entity("BuildMind.Infrastructure.Persistence.Records.ProjectRecord", b =>

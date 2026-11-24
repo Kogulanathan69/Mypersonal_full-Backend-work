@@ -20,4 +20,11 @@ All product routes are under `/api/v1`, use RFC 9457 errors, and require JWT plu
 | `/api/v1/projects/{id}/surveys` | POST (multipart `file`) | M2 survey upload | **`CaptainIntegration:Enabled`** + `CaptainIntegration:SurveyStorageDirectory` | owner gate, then protected insert (project row lock + owner + version) |
 | `/api/v1/projects/{id}/surveys/{surveyId}` | GET | M2 survey status | **`CaptainIntegration:Enabled`** | owner gate + project-scoped read |
 
+| `/api/v1/projects/{projectId}/land` | GET / PUT | Land boundary (user-confirmed, local metric frame) | **Captain profile** | fresh owner read; PUT = Python validation + protected append with head CAS (`expectedCurrentLandRevisionId`) |
+| `/api/v1/projects/{projectId}/generation-jobs` | POST | Generation (synthetic or truthful failure) | **Captain profile** + `Services:Python` + `CaptainIntegration:GenerationPolicyFile`; expensive limiter | `idempotencyKey` per project+actor; expected land/requirement revisions; protected job writes |
+| `/api/v1/projects/{projectId}/generation-jobs/{jobId}` | GET | Job + candidates | **Captain profile** | owner |
+| `/api/v1/projects/{projectId}/generation-jobs/{jobId}/candidates/{candidateId}/save` | POST | Save candidate as plan revision 1 | **Captain profile** | server re-validation + server-issued evidence + protected creation |
+
+Internal (python-services, loopback, `X-BuildMind-Internal-Token` required): `POST /internal/v1/land/validate`, `/internal/v1/generation/run`, `/internal/v1/plans/validate`; `GET /health` open.
+
 Phase updates append rows below.

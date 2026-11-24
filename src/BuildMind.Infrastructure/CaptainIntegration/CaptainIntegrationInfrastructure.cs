@@ -6,6 +6,9 @@ using BuildMind.Infrastructure.Persistence.Repositories.Projects;
 using BuildMind.Infrastructure.Persistence.Repositories.Requirements;
 using BuildMind.Application.Features.PlanEditor.Confirmation;
 using BuildMind.Application.Features.Survey.Abstractions;
+using BuildMind.Application.Features.Planning;
+using BuildMind.Infrastructure.Integration;
+using BuildMind.Infrastructure.Persistence.Repositories.Planning;
 using BuildMind.Infrastructure.Persistence.Repositories.Survey;
 using BuildMind.Infrastructure.Survey;
 using Microsoft.Extensions.Configuration;
@@ -45,6 +48,13 @@ public static class CaptainIntegrationInfrastructure
             return new PrivateSurveyFileStorage(directory
                 ?? throw new InvalidOperationException($"{SurveyStorageDirectoryKey} is required for survey upload."));
         });
+
+        // Captain planning: land revisions, generation jobs/candidates, plan creation, Python compute routes.
+        services.TryAddScoped<ILandRevisionStore, MySqlLandRevisionStore>();
+        services.TryAddScoped<IGenerationJobStore, MySqlGenerationJobStore>();
+        services.TryAddScoped<IPlanCreationStore, MySqlPlanCreationStore>();
+        services.TryAddTransient<IPlanningComputeClient, PlanningComputeClient>();
+        services.TryAddSingleton<IGenerationPolicyProvider, FileGenerationPolicyProvider>();
 
         return services;
     }
