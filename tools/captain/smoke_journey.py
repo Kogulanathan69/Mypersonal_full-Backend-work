@@ -11,7 +11,7 @@ import urllib.request
 import uuid
 
 BASE = next((a for a in sys.argv[1:] if a.startswith("http")), "http://127.0.0.1:5180")
-PHASES = {int(p) for p in (sys.argv[sys.argv.index("--phases") + 1].split(",") if "--phases" in sys.argv else "2,3,4,5,6".split(","))}
+PHASES = {int(p) for p in (sys.argv[sys.argv.index("--phases") + 1].split(",") if "--phases" in sys.argv else "2,3,4,5,6,7".split(","))}
 results = []
 state = {}
 
@@ -341,6 +341,12 @@ def phase6():
           and "application/pdf" in headers.get("Content-Type", "") and "attachment" in headers.get("Content-Disposition", "")
           and "no-store" in headers.get("Cache-Control", ""), (status, headers.get("Content-Type")))
     state["pdf_bytes"] = len(pdf) if isinstance(pdf, bytes) else 0
+    if isinstance(pdf, bytes):
+        import os
+        target = os.path.expanduser("~/bm-captain/results/journey-report.pdf")
+        os.makedirs(os.path.dirname(target), exist_ok=True)
+        with open(target, "wb") as handle:
+            handle.write(pdf)
     status, _, _ = call("GET", f"/api/v1/projects/{pid}/reports/{rid}/download", token=b)
     check("cross-user report download denied (404)", status == 404, status)
     status, _, _ = call("GET", f"/api/v1/projects/{pid}/reports/{uuid.uuid4()}/download", token=a)
@@ -370,7 +376,127 @@ def phase6():
     check("second withdrawal rejected (409)", status == 409, body)
 
 
-EXTRA_PHASES = [(4, phase4), (5, phase5), (6, phase6)]
+def _b64(data):
+    import base64
+    return base64.urlsafe_b64encode(data).rstrip(b"=").decode()
+
+
+def _jwt(claims, key):
+    import hashlib
+    import hmac
+    head = _b64(json.dumps({"alg": "HS256", "typ": "JWT"}, separators=(",", ":")).encode())
+    body = _b64(json.dumps(claims, separators=(",", ":")).encode())
+    sig = hmac.new(key, f"{head}.{body}".encode(), hashlib.sha256).digest()
+    return f"{head}.{body}.{_b64(sig)}"
+
+
+def _claims(token):
+    import base64
+    payload = token.split(".")[1]
+    return json.loads(base64.urlsafe_b64decode(payload + "=" * (-len(payload) % 4)))
+
+
+def phase7():
+    import base64
+    import os
+    import subprocess
+    import time
+    alice, bob, pid = state["alice"], state["bob"], state["project"]
+    status, dash, _ = call("GET", "/api/v1/dashboard/summary", token=alice["access"])
+    check("dashboard summary for owner (200)", status == 200, dash)
+    status, bob_dash, _ = call("GET", "/api/v1/dashboard/summary", token=bob["access"])
+    check("dashboard never shows another user's project", status == 200 and pid not in json.dumps(bob_dash), bob_dash)
+
+    # Forged tokens with the real local key: expired, and with the wrong key.
+    key = base64.b64decode(open(os.path.expanduser("~/bm-captain/secrets/jwt-signing.key")).read().strip())
+    claims = _claims(alice["access"])
+    now = int(time.time())
+    expired = _jwt({**claims, "iat": now - 7200, "nbf": now - 7200, "exp": now - 3600}, key)
+    status, _, _ = call("GET", "/api/v1/projects", token=expired)
+    check("expired JWT rejected (401)", status == 401, status)
+    wrong = _jwt({**claims, "exp": now + 600}, os.urandom(32))
+    status, _, _ = call("GET", "/api/v1/projects", token=wrong)
+    check("JWT signed with another key rejected (401)", status == 401, status)
+    tampered = alice["access"][:-4] + ("AAAA" if not alice["access"].endswith("AAAA") else "BBBB")
+    status, _, _ = call("GET", "/api/v1/projects", token=tampered)
+    check("tampered JWT signature rejected (401)", status == 401, status)
+
+    # Refresh rotation, then replay of the old refresh token revokes the session (token version bump).
+    status, rotated, _ = call("POST", "/api/v1/auth/refresh", {"refreshToken": alice["refresh"]})
+    check("refresh rotates the session (200, new tokens)",
+          status == 200 and rotated.get("accessToken") and rotated.get("refreshToken") != alice["refresh"], status)
+    new_access = rotated.get("accessToken")
+    status, _, _ = call("GET", "/api/v1/projects", token=new_access)
+    check("rotated access token works", status == 200, status)
+    status, _, _ = call("POST", "/api/v1/auth/refresh", {"refreshToken": alice["refresh"]})
+    check("replayed refresh token rejected (401)", status == 401, status)
+    status, _, _ = call("GET", "/api/v1/projects", token=new_access)
+    check("replay detection revokes issued access tokens (401)", status == 401, status)
+    status, _, _ = call("POST", "/api/v1/auth/refresh", {"refreshToken": rotated.get("refreshToken")})
+    check("whole refresh family revoked after replay (401)", status == 401, status)
+
+    # Fresh login, logout (one session), then logout-all (every access token).
+    status, login, _ = call("POST", "/api/v1/auth/login", {"email": alice["email"], "password": alice["password"]})
+    check("re-login after revocation (200)", status == 200 and login.get("accessToken"), status)
+    status, _, _ = call("POST", "/api/v1/auth/logout", {"refreshToken": login["refreshToken"]}, token=login["accessToken"])
+    check("logout (204)", status == 204, status)
+    status, _, _ = call("POST", "/api/v1/auth/refresh", {"refreshToken": login["refreshToken"]})
+    check("logged-out refresh token rejected (401)", status == 401, status)
+    status, login2, _ = call("POST", "/api/v1/auth/login", {"email": alice["email"], "password": alice["password"]})
+    status, _, _ = call("POST", "/api/v1/auth/logout-all", token=login2["accessToken"])
+    check("logout-all (204)", status == 204, status)
+    status, _, _ = call("GET", "/api/v1/projects", token=login2["accessToken"])
+    check("access token rejected after logout-all (401)", status == 401, status)
+    status, _, _ = call("GET", f"/api/v1/projects/{pid}", token=bob["access"])
+    check("other users' sessions unaffected; cross-user still denied (404)", status == 404, status)
+
+    # Invalid requests and safe errors.
+    status, body, _ = call("POST", "/api/v1/projects", raw=b'{"name":', content_type="application/json", token=bob["access"])
+    check("malformed JSON rejected (400)", status == 400, status)
+    leaky = json.dumps(body) if body is not None else ""
+    check("error body leaks no stack trace or SQL",
+          not any(s in leaky for s in ("Exception", "   at ", "SELECT ", "MySql", "/home/")), leaky[:200])
+    status, _, _ = call("PUT", f"/api/v1/projects/{pid}/land", raw=b"x=1", content_type="text/plain", token=bob["access"])
+    check("unsupported media type rejected (415 or 404 for non-owner)", status in (404, 415), status)
+    status, _, _ = call("POST", "/api/v1/projects", raw=b'{"name":"' + b"a" * (2 * 1024 * 1024) + b'"}',
+                        content_type="application/json", token=bob["access"])
+    check("oversized body rejected (413)", status == 413, status)
+
+    # No secret material in service logs.
+    secrets_used = [alice["password"], bob["password"], alice["access"], alice["refresh"], bob["access"], login["accessToken"]]
+    leaked = []
+    for log in ("~/bm-captain/logs/api.log", "~/bm-captain/logs/api-rag.log", "~/bm-captain/logs/python.log", "~/bm-captain/logs/rag.log"):
+        path = os.path.expanduser(log)
+        if os.path.exists(path):
+            text = open(path, encoding="utf-8", errors="replace").read()
+            leaked += [log for s in secrets_used if s and s in text]
+            for f in ("mysql-runtime.password", "python-internal.token", "rag-internal.token", "jwt-signing.key"):
+                value = open(os.path.expanduser(f"~/bm-captain/secrets/{f}")).read().strip()
+                if value and value in text:
+                    leaked.append(f"{log}:{f}")
+    check("no passwords, tokens or keys in service logs", not leaked, leaked)
+
+    # Dependency failure: stop python-services; land validation must fail closed (503) and readiness must say so.
+    subprocess.run(["pkill", "-f", "uvicorn app.main:app --host 127.0.0.1 --port 8091"], check=False)
+    time.sleep(2)
+    status, body, _ = call("PUT", f"/api/v1/projects/{pid}/land", {"exterior": rectangle(14, 12),
+                                                                  "expectedCurrentLandRevisionId": state["land"]}, token=bob["access"])
+    check("non-owner still denied while python is down (404)", status == 404, status)
+    status, login3, _ = call("POST", "/api/v1/auth/login", {"email": alice["email"], "password": alice["password"]})
+    status, body, _ = call("PUT", f"/api/v1/projects/{pid}/land", {"exterior": rectangle(14, 12),
+                                                                  "expectedCurrentLandRevisionId": state["land"]}, token=login3["accessToken"])
+    check("python dependency down -> land validation fails closed (503)", status == 503 and code_of(body) == "DEPENDENCY_UNAVAILABLE", body)
+    status, ready, _ = call("GET", "/health/ready")
+    py = {c["name"]: c for c in ready.get("checks", [])}.get("python", {}) if isinstance(ready, dict) else {}
+    check("readiness reports python not Healthy while down", py.get("status") != "Healthy", py)
+
+    # Auth rate limiting (auth-strict policy) - last, so it cannot affect earlier logins.
+    codes = [call("POST", "/api/v1/auth/login", {"email": f"nobody-{i}@example.invalid", "password": "Wrong-password-123!"})[0]
+             for i in range(14)]
+    check("auth rate limiting engages (429) and never errors (no 5xx)", 429 in codes and not any(c >= 500 for c in codes), codes)
+
+
+EXTRA_PHASES = [(4, phase4), (5, phase5), (6, phase6), (7, phase7)]
 
 
 def main():
