@@ -124,4 +124,20 @@ The interrupted `generation.py` `_envelope()` edit had **not** been applied (ver
 | Live MySQL | 92/92 (+4 planning store tests) |
 | Live journey phases 2–3 (`smoke_journey.py`) | 32/32 |
 
-**Review corrections:** the `smoke_phase2.py` readiness check now asserts the exact `mysql` entry (`Healthy`/`reachable`); its requirements read-back now compares `revisionId` (it previously compared `None == None`). Rerun: 19/19.
+### Review corrections (after the Phase 3 commit `96975a5`)
+
+- **Refresh-token lock order.**
+  - Before the fix:
+    - logout-all, disable and password reset lock the `users` row first, then tokens;
+    - rotation took token rows first, then `users` (FK check on insert, token_version bump on replay);
+    - logout took family rows without `users`.
+    - Rotation therefore ran opposite to logout-all and reset, and deadlocks were possible.
+  - Fix: every session writer now takes the `users` row lock FIRST (`SessionSql.LockUserAsync`). Rotation then keeps the token-row lock (the Phase 2 fix is preserved), and logout also locks `users` first. Password reset (reset row → users → tokens) has no cycle with these.
+  - New live tests:
+    - **S08**: same family, consumed T1 + current T2, two rotations, a replay, logout and logout-all concurrently, 8 rounds;
+    - **S09**: rotation vs logout-all vs password reset, 8 rounds.
+  - Both assert no exception and that every token ends up revoked. Revocation semantics are unchanged.
+  - Result: `SessionSecurityLiveTests` passed 5/5 consecutive runs (9 tests each). No deadlock was observed in 80 mixed rounds. This is evidence, not proof.
+- **Database TLS: VerifyFull** (see DATABASE-SETUP §TLS). Two provider requirements were handled without weakening TLS: a client certificate, and a PKCS#1 key. Live MySQL 94/94 and live journey 32/32 under VerifyFull; CLI negative identity check passed.
+- **Internal Python auth:** fail closed. Covered by `tests/captain/test_internal_api.py`: missing → 401, invalid → 401, repeated header → 401, unconfigured → 503, valid → passes. Disabling is possible only with `BUILDMIND_PY_ENVIRONMENT=development`; production/missing environment raises at start-up. The live API used the real token.
+- **Readiness smoke:** the `smoke_phase2.py` readiness check now asserts the exact `mysql` entry (`Healthy`/`reachable`); its requirements read-back now compares `revisionId` (it previously compared `None == None`). Rerun: 19/19.

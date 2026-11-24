@@ -6,7 +6,7 @@ set -euo pipefail
 name="$1"
 ~/bm-captain/sync.sh
 cd ~/bm-captain/src
-export BUILDMIND_MIGRATIONS_CONNECTION="Server=127.0.0.1;Port=3417;Database=buildmind_dev;User ID=bm_migrator;SslMode=VerifyCA"
+export BUILDMIND_MIGRATIONS_CONNECTION="Server=127.0.0.1;Port=3417;Database=buildmind_dev;User ID=bm_migrator;SslMode=VerifyFull"
 dotnet tool restore >/dev/null
 dotnet build src/BuildMind.API -c Release 2>&1 | grep -E " error |Error\(s\)" | sort -u
 dotnet tool run dotnet-ef migrations add "$name" --context BuildMindDbContext --configuration Release --no-build \

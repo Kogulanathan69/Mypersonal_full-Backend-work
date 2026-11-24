@@ -174,6 +174,68 @@ public sealed class SessionSecurityLiveTests
         Assert.Null((await check.Set<RefreshTokenRecord>().AsNoTracking().SingleAsync(t => t.UserId == bob)).RevokedAtUtc);
     }
 
+    [Fact]
+    public async Task S08_mixed_same_family_rotation_replay_logout_and_logout_all_never_deadlock()
+    {
+        // Captain review (lock order users -> tokens): different tokens of one family (consumed T1, current T2) are
+        // presented concurrently together with logout (family) and logout-all (user). Repeated to expose ordering bugs.
+        for (var round = 0; round < 8; round++)
+        {
+            await using var db = await SchemaAsync();
+            var userId = await SeedUserAsync(db);
+            var t1 = await SeedRefreshAsync(db, userId, $"family-{round}");
+            var t2Hash = Hash($"family-{round}-next");
+            await using (var setup = Context(db))
+                Assert.Equal(RefreshRotationStatus.Rotated,
+                    (await Refresh(setup).RotateAsync(t1.TokenHash, Guid.NewGuid(), t2Hash, Now, TimeSpan.FromDays(7), default)).Status);
+
+            var operations = new List<Func<Task>>
+            {
+                () => WithContext(db, c => Refresh(c).RotateAsync(t2Hash, Guid.NewGuid(), Hash($"r{round}a"), Now, TimeSpan.FromDays(7), default)),
+                () => WithContext(db, c => Refresh(c).RotateAsync(t2Hash, Guid.NewGuid(), Hash($"r{round}b"), Now, TimeSpan.FromDays(7), default)),
+                () => WithContext(db, c => Refresh(c).RotateAsync(t1.TokenHash, Guid.NewGuid(), Hash($"r{round}c"), Now, TimeSpan.FromDays(7), default)),
+                () => WithContext(db, c => Refresh(c).RevokeFamilyAsync(t2Hash, userId, Now, "logout", default)),
+                () => WithContext(db, c => Sessions(c).RevokeAllSessionsAsync(userId, Now, "logout_all", default)),
+            };
+            await Task.WhenAll(operations.Select(op => Task.Run(op)));  // any deadlock surfaces as an exception here
+
+            await using var check = Context(db);
+            // Revocation semantics preserved: replay of T1 and logout-all both revoke, so nothing stays usable.
+            Assert.DoesNotContain(await check.Set<RefreshTokenRecord>().AsNoTracking().ToListAsync(), t => t.RevokedAtUtc == null);
+            // logout-all always bumps once; the T1 replay bumps again only if it observed T1 before revocation.
+            Assert.InRange((await Sessions(check).GetAsync(userId, default))!.TokenVersion, 2L, 3L);
+        }
+    }
+
+    [Fact]
+    public async Task S09_rotation_racing_logout_all_and_password_reset_never_deadlocks()
+    {
+        for (var round = 0; round < 8; round++)
+        {
+            await using var db = await SchemaAsync();
+            var userId = await SeedUserAsync(db);
+            var token = await SeedRefreshAsync(db, userId, $"reset-{round}");
+            var resetHash = Hash($"reset-token-{round}");
+            await using (var setup = Context(db))
+                await Resets(setup).ReplaceTokenAsync(new PasswordResetTokenRecord(userId, resetHash, Now.AddMinutes(-1), Now.AddHours(1)), default);
+
+            await Task.WhenAll(
+                Task.Run(() => WithContext(db, c => Refresh(c).RotateAsync(token.TokenHash, Guid.NewGuid(), Hash($"n{round}"), Now, TimeSpan.FromDays(7), default))),
+                Task.Run(() => WithContext(db, c => Sessions(c).RevokeAllSessionsAsync(userId, Now, "logout_all", default))),
+                Task.Run(() => WithContext(db, c => Resets(c).ResetPasswordAtomicallyAsync(userId, resetHash, "synthetic-new-hash", Now, default))));
+
+            await using var check = Context(db);
+            Assert.DoesNotContain(await check.Set<RefreshTokenRecord>().AsNoTracking().ToListAsync(), t => t.RevokedAtUtc == null);
+            Assert.Equal(3L, (await Sessions(check).GetAsync(userId, default))!.TokenVersion); // logout-all + reset
+        }
+    }
+
+    private static async Task WithContext<T>(DisposableMySqlDatabase db, Func<BuildMindDbContext, Task<T>> operation)
+    {
+        await using var context = Context(db);
+        await operation(context);
+    }
+
     private static string Hash(string seed) =>
         Convert.ToHexString(System.Security.Cryptography.SHA256.HashData(System.Text.Encoding.UTF8.GetBytes(seed)));
 

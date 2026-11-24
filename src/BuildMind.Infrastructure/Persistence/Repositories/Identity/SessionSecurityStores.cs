@@ -76,11 +76,19 @@ internal sealed class RefreshTokenStore(BuildMindDbContext context, TransactionR
         CancellationToken cancellationToken) =>
         transactions.ExecuteAsync(async token =>
         {
-            // Serialize every presenter of this token on its row BEFORE any other lock is taken. Without this the
-            // winner (claim, then insert under the users FK) and a loser (replay: revoke the family, bump the user's
-            // token_version) acquired locks in opposite orders and InnoDB intermittently chose a deadlock victim
-            // (observed in SessionSecurityLiveTests.S03, Captain run 2026-11-24). Losers now wait here and observe
-            // the committed claim, so they take the replay path without contending with the winner.
+            // LOCK ORDER (all session writers): users row FIRST, then refresh-token rows. logout-all, disable and
+            // password reset already start with an UPDATE of the users row; rotation and logout now lock it explicitly.
+            // History: the original rotation took token/family locks before the users row (FK check on insert, replay
+            // token_version bump) and intermittently deadlocked (SessionSecurityLiveTests.S03, Captain run 2026-11-24);
+            // a token-row-first fix removed same-token races but still ran opposite to logout-all.
+            var owner = await context.Set<RefreshTokenRecord>().AsNoTracking()
+                .Where(t => t.TokenHash == presentedTokenHash).Select(t => (Guid?)t.UserId).SingleOrDefaultAsync(token);
+            if (owner is not Guid ownerId)
+                return new RefreshRotationResult(RefreshRotationStatus.Invalid);
+            await SessionSql.LockUserAsync(context, ownerId, token);
+
+            // Then serialize presenters of this exact token on its row. The claim below is a current read, so a loser
+            // whose snapshot predates the winner's commit still finds nothing to claim and takes the replay path.
             await context.Database
                 .SqlQuery<int>($"SELECT 1 AS Value FROM refresh_tokens WHERE token_hash = {presentedTokenHash} FOR UPDATE")
                 .ToListAsync(token);
@@ -133,6 +141,7 @@ internal sealed class RefreshTokenStore(BuildMindDbContext context, TransactionR
         string presentedTokenHash, Guid userId, DateTimeOffset nowUtc, string reason, CancellationToken cancellationToken) =>
         transactions.ExecuteAsync(async token =>
         {
+            await SessionSql.LockUserAsync(context, userId, token); // lock order: users row first (see RotateAsync)
             var family = await context.Set<RefreshTokenRecord>()
                 .AsNoTracking()
                 .Where(t => t.TokenHash == presentedTokenHash && t.UserId == userId)
@@ -215,6 +224,10 @@ internal sealed class PasswordResetRepository(BuildMindDbContext context, Transa
 
 internal static class SessionSql
 {
+    /// <summary>Takes the users row lock that orders every session-mutating transaction (users before tokens).</summary>
+    public static Task<List<int>> LockUserAsync(BuildMindDbContext context, Guid userId, CancellationToken token) =>
+        context.Database.SqlQuery<int>($"SELECT 1 AS Value FROM users WHERE id = {userId} FOR UPDATE").ToListAsync(token);
+
     public static Task<int> RevokeUserRefreshTokensAsync(
         BuildMindDbContext context, Guid userId, DateTimeOffset nowUtc, string reason, CancellationToken token) =>
         context.Set<RefreshTokenRecord>()

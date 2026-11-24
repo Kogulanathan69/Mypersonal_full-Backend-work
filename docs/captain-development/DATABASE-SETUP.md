@@ -12,7 +12,7 @@
 | Network | `127.0.0.1:3417` only |
 | Volume | `bm-captain-mysql-data` (persistent development data) |
 | Transport | `--require-secure-transport=ON`; plaintext login is refused (verified) |
-| TLS | Clients use `SslMode=VerifyCA` with the server CA (`~/bm-captain/secrets/ca.pem`, exported from the container). The session negotiates TLSv1.3. VerifyCA checks the certificate chain; the MySQL auto-generated certificate has no host-name SAN, so VerifyFull is not used. The repository validator accepts VerifyCA on loopback in Development and requires VerifyFull elsewhere. |
+| TLS | **`SslMode=VerifyFull`** (certificate chain **and** host name) since the review correction of 2026-11-24. See the TLS section below. |
 | `partial_revokes` | OFF (checked by the setup script) |
 
 ## Accounts (least privilege, all `REQUIRE SSL`)
@@ -23,6 +23,24 @@
 | `bm_migrator` | DML + CREATE, ALTER, DROP, INDEX, REFERENCES on `buildmind_dev.*` | Ranged migration scripts only |
 | `bm_test` | ALL on `` `buildmind\_test\_%`.* `` | Live integration tests (disposable databases) |
 | `root` | — | Setup script only, through `MYSQL_PWD` inside `docker exec`; never used by the application |
+
+## TLS (review correction)
+
+The first setup used `VerifyCA`. That validates certificate trust (the chain to the server CA) but **not** the host name: any certificate issued by that CA would be accepted for any host. MySQL's auto-generated certificate has no SAN, so it cannot support host-name verification.
+
+Current setup (`tools/captain/mysql-setup.sh`):
+- **Server certificate:** a Captain local CA (`~/bm-captain/secrets/tls`, directory 0700, CA key 0600) issues a server certificate with `SAN DNS:localhost, IP:127.0.0.1`. mysqld uses it via `--ssl-ca`, `--ssl-cert` and `--ssl-key`.
+- **File modes:** the files are bind-mounted individually. The server key is 0644 because mysqld runs as uid 999 in the container; the 0700 host directory keeps it private on the host.
+- **Client mode:** clients use `SslMode=VerifyFull;SslCa=...`.
+- **Provider requirements found:**
+  1. MySql.Data 26.10.0 requires `SslCert`/`SslKey` whenever VerifyFull is used with PEM files ("No file path has been provided for the connection option SslCert"). A client certificate is therefore issued by the same CA and presented. The server still requires SSL only, so this adds client authentication and weakens nothing.
+  2. MySql.Data parses only traditional PKCS#1 RSA keys ("The specified file cannot be converted to a key"), so the client key is converted with `openssl rsa -traditional`.
+- **Verified:**
+  - live MySQL suite 94/94 under VerifyFull;
+  - live API journey 32/32 under VerifyFull;
+  - MySQL CLI `VERIFY_IDENTITY` accepts 127.0.0.1;
+  - **negative check:** `VERIFY_IDENTITY` refuses the container bridge IP, which is not in the SAN. This is CLI-level evidence; a MySql.Data-level negative test was not run.
+- **Scope:** local development only. The certificates are self-issued with a 365-day lifetime. Production certificate management is out of scope and remains G11/hosting.
 
 ## Secrets
 
@@ -48,5 +66,6 @@ Secrets live in `~/bm-captain/secrets` (directory mode 0700, files 0600), one ra
 | `20261120202215_AddSessionSecurity` | M4 | applied |
 | `20261122080431_AddPlanRevisionHistory` | M4 | applied |
 | `20261124095515_AddSurveys` | **Captain** | applied. Additive only: table `surveys` with FKs to projects/users (RESTRICT), unique `storage_id`, CAS `state_version` |
+| `20261124104612_AddCaptainPlanningWorkflow` | **Captain** | applied. Additive only: `land_revisions` (unique project+number), `generation_jobs` (unique project+actor+idempotency key, FK land), `generation_candidates` (unique job+ordinal), `plan_validation_evidence` (server-issued ledger) |
 
 Later Captain migrations are appended per phase. Each Captain migration is registered in `BuildMindMigrationTests.CaptainMigrations`. That keeps the M4 schema-pin tests exact and also proves rollback back to the M4 baseline.

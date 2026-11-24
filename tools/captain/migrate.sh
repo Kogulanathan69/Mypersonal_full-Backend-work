@@ -14,7 +14,7 @@ ef() { dotnet tool run dotnet-ef "$@" --context BuildMindDbContext --configurati
 dotnet tool restore >/dev/null
 ef migrations has-pending-model-changes
 applied="$(docker exec -i -e MYSQL_PWD="$(cat "$S/mysql-migrator.password")" bm-captain-mysql \
-  mysql -ubm_migrator -h127.0.0.1 --ssl-mode=VERIFY_CA --ssl-ca=/var/lib/mysql/ca.pem -N buildmind_dev \
+  mysql -ubm_migrator -h127.0.0.1 --ssl-mode=VERIFY_IDENTITY --ssl-ca=/etc/mysql/captain-tls/ca.pem -N buildmind_dev \
   -e "SELECT MigrationId FROM __EFMigrationsHistory ORDER BY MigrationId DESC LIMIT 1" 2>/dev/null || true)"
 from="${applied:-0}"
 echo "last applied: ${applied:-<none>}"
@@ -22,8 +22,8 @@ script="$OUT/ranged-from-${from}-$(date +%Y%m%d%H%M%S).sql"
 ef migrations script "$from" --output "$script" >/dev/null
 if ! grep -qE "CREATE|ALTER|INSERT" "$script"; then echo "no pending migrations"; rm -f "$script"; exit 0; fi
 docker exec -i -e MYSQL_PWD="$(cat "$S/mysql-migrator.password")" bm-captain-mysql \
-  mysql -ubm_migrator -h127.0.0.1 --ssl-mode=VERIFY_CA --ssl-ca=/var/lib/mysql/ca.pem buildmind_dev < "$script"
+  mysql -ubm_migrator -h127.0.0.1 --ssl-mode=VERIFY_IDENTITY --ssl-ca=/etc/mysql/captain-tls/ca.pem buildmind_dev < "$script"
 echo "applied script: $script"
 docker exec -i -e MYSQL_PWD="$(cat "$S/mysql-migrator.password")" bm-captain-mysql \
-  mysql -ubm_migrator -h127.0.0.1 --ssl-mode=VERIFY_CA --ssl-ca=/var/lib/mysql/ca.pem -N buildmind_dev \
+  mysql -ubm_migrator -h127.0.0.1 --ssl-mode=VERIFY_IDENTITY --ssl-ca=/etc/mysql/captain-tls/ca.pem -N buildmind_dev \
   -e "SELECT MigrationId FROM __EFMigrationsHistory ORDER BY MigrationId; SHOW TABLES;"
