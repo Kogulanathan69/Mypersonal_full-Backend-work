@@ -68,7 +68,9 @@ public static class CaptainLocalIntegration
         services.AddScoped<LandService>();
         services.AddScoped<GenerationService>();
         services.AddScoped<PlanSaveService>();
-        services.AddSingleton<IRegulatoryEvidenceProvider, PolicyRegulatoryEvidenceProvider>();
+        // Evidence modes: none / synthetic-fixture (policy) / rag-constraints (existing M7 contract, fail closed).
+        services.AddSingleton<PolicyRegulatoryEvidenceProvider>();
+        services.AddScoped<IRegulatoryEvidenceProvider, RagRegulatoryEvidenceProvider>();
         services.AddSingleton<IApiEndpointModule, PlanningEndpointModule>();
 
         // M3 plan editor (existing services and module): revision history, edit candidates (create/apply/reject),

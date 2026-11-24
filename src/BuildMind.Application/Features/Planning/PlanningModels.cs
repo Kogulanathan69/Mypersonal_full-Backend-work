@@ -56,7 +56,7 @@ public sealed record GenerationJob(
     Guid Id, Guid ProjectId, Guid RequestedBy, string IdempotencyKey, Guid LandRevisionId,
     Guid RequirementsRevisionId, GenerationJobStatus Status, string? Outcome, string? ReasonCode,
     string? AlgorithmVersion, string EvidenceMode, int Seed, DateTimeOffset CreatedAtUtc,
-    DateTimeOffset? CompletedAtUtc, IReadOnlyList<DiagnosticDto> Diagnostics);
+    DateTimeOffset? CompletedAtUtc, IReadOnlyList<DiagnosticDto> Diagnostics, string? EvidencePackId = null);
 
 /// <summary>One validated alternative, persisted exactly as generated (M3 draft geometry + M6 metadata).</summary>
 public sealed record GenerationCandidate(
@@ -76,7 +76,7 @@ public sealed record PlanCheckResult(
 /// <summary>Operator-supplied, synthetic, development-only generation policy (no compiled-in values).</summary>
 public sealed record GenerationPolicy(
     string Version, string Label, IReadOnlyDictionary<string, RoomDimensionsDto> RoomDimensions,
-    string EvidenceMode, double? SyntheticSetbackM, string? SyntheticRuleSetVersion);
+    string EvidenceMode, double? SyntheticSetbackM, string? SyntheticRuleSetVersion, string? Jurisdiction = null);
 
 public interface IGenerationPolicyProvider
 {

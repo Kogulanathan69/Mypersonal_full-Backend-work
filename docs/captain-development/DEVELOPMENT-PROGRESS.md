@@ -197,3 +197,39 @@ Phase 4 journey coverage:
 **Not covered by dedicated live store tests:** the Phase 4 adapters are covered by the live API journey against real MySQL and Python, plus the unchanged M3 unit suites.
 
 - **Readiness smoke:** the `smoke_phase2.py` readiness check now asserts the exact `mysql` entry (`Healthy`/`reachable`); its requirements read-back now compares `revisionId` (it previously compared `None == None`). Rerun: 19/19.
+
+## Phase 5 — Regulation RAG integration (fail closed)
+
+**STEP 8B:** the repository never defines its scope; it is mentioned only as "M7 STEP 8B: strictly on hold". It is treated conservatively: **no change** to `rag-service`, `RagServiceClient`, the M7 retrieval module or its registration guard. Phase 5 only *consumes* the existing approved contracts (evidence v1, constraints v0) in the Development-only profile.
+
+**Implemented:**
+- **`RagRegulatoryEvidenceProvider`**, generation evidence mode `rag-constraints`. It queries the existing `IRegulatoryConstraintSource` for Front/Rear/Side setback kinds, bound to project revision + land revision + requirements revision, and assesses the result with the existing `ConstraintEvidenceGate` (`allowSynthetic: false`).
+  - Synthetic packs never count as reviewed.
+  - Fully verified kinds are still passed to generation as `UNVERIFIED` with the gap `PARCEL_EDGE_ROLE_MAPPING_UNAPPROVED`. Mapping front/rear/side rules to parcel edges is an open M6 decision (doc 29 §11), so no setback value is placed on an edge and generation answers `NEEDS_REVIEW`.
+  - A RAG dependency failure propagates: 503/504, and no job is created.
+  - A missing jurisdiction gives `MISSING`, and the service is never queried.
+- **Traceability:** the evidence pack id is stored on the job (`generation_jobs.evidence_pack_id`, migration `20261124114516_AddGenerationEvidencePackId`, additive nullable column) and returned in the job view.
+- **Policy:** `docs/captain-development/samples/generation-policy.rag.json` (labelled development only; operator-configured jurisdiction).
+
+**Live environment:**
+- rag-service runs in WSL from a pinned Python 3.13 venv with the internal token required.
+- **Real corpus: BLOCKED in this environment.** The approved STEP 4 manifest at `C:\BuildMind-PDF-Processor` pins source identities with Windows path separators. Under Linux the files do not resolve, and a separator-normalised copy is correctly refused by the loader ("Approved identity/scope mismatch"). That integrity control was **not bypassed**; the helper was deleted.
+- The API cannot run on Windows (G17), and WSL is in NAT mode, so Windows loopback is unreachable.
+- rag-service therefore runs **without a corpus**. Search, sources and constraints answer 503, which live-verifies the fail-closed paths.
+- Real-corpus retrieval evidence from M7 (EV-20261119-11, Windows) is reference only and is not re-claimed.
+
+**Results:**
+
+| Suite | Result |
+|---|---|
+| Application.UnitTests | 252/252 (+6 RAG evidence tests) |
+| rag-service pytest, WSL | 238/238 |
+| Infrastructure.Tests | 1160/1160 |
+| Live MySQL | 94/94 |
+| Live journey phases 2–5 | 63/63 |
+
+Phase 5 journey checks:
+- readiness `rag = Degraded/unavailable`;
+- retrieval anonymous → 401;
+- retrieval authenticated → 503 with no passages;
+- rag-mode generation → 503 `DEPENDENCY_UNAVAILABLE` with no job published (repeat → 503, not a replay).

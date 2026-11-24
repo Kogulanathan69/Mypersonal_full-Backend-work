@@ -268,7 +268,48 @@ def phase4():
               for p in plans.get("plans", [])), plans)
 
 
-EXTRA_PHASES = [(4, phase4)]
+def phase5():
+    global BASE
+    a = state["alice"]["access"]
+    status, body, _ = call("GET", "/health/ready")
+    rag = {c["name"]: c for c in body.get("checks", [])}.get("rag", {}) if isinstance(body, dict) else {}
+    print(f"     rag readiness entry: {rag}")
+    check("readiness reports rag truthfully (not Healthy without a corpus)", rag.get("status") in ("Degraded", "Unhealthy"), rag)
+    status, _, _ = call("POST", "/api/v1/regulations/retrieve", {"query": "rear setback"})
+    check("regulation retrieval requires authentication (401)", status == 401, status)
+    status, body, _ = call("POST", "/api/v1/regulations/retrieve", {"query": "rear setback", "maxResults": 3}, token=a)
+    check("retrieval fails closed without a verified corpus (503, no passages)",
+          status == 503 and not (isinstance(body, dict) and body.get("passages")), body)
+
+    # Second API instance: generation policy evidence mode "rag-constraints".
+    saved_base, BASE = BASE, "http://127.0.0.1:5181"
+    try:
+        user = new_user("ragmode")
+        t = user["access"]
+        status, project, _ = call("POST", "/api/v1/projects", {"name": "RAG mode plot", "projectType": "Residential"}, token=t)
+        pid = project["id"]
+        status, req, _ = call("PUT", f"/api/v1/projects/{pid}/requirements", {
+            "expectedRevisionId": None, "catalogueVersion": "synthetic-fixture-v1", "floorCount": 1,
+            "groundFloorRooms": [{"roomType": "bedroom", "count": 1}, {"roomType": "livingRoom", "count": 1},
+                                 {"roomType": "kitchen", "count": 1}, {"roomType": "bathroom", "count": 1}],
+            "additionalSpaces": [], "relationships": [], "designMethod": None}, token=t)
+        check("rag-mode requirements saved", status == 200 and isinstance(req, dict) and req.get("revisionId"), req)
+        status, land, _ = call("PUT", f"/api/v1/projects/{pid}/land", {"exterior": rectangle(14, 12), "expectedCurrentLandRevisionId": None}, token=t)
+        key = "journey-rag-" + uuid.uuid4().hex[:8]
+        status, body, _ = call("POST", f"/api/v1/projects/{pid}/generation-jobs", {
+            "idempotencyKey": key, "expectedLandRevisionId": land["landRevisionId"],
+            "expectedRequirementsRevisionId": req["revisionId"]}, token=t)
+        check("rag-constraints generation fails closed when the constraint service is unavailable (503)",
+              status == 503 and code_of(body) == "DEPENDENCY_UNAVAILABLE", body)
+        status, again, _ = call("POST", f"/api/v1/projects/{pid}/generation-jobs", {
+            "idempotencyKey": key, "expectedLandRevisionId": land["landRevisionId"],
+            "expectedRequirementsRevisionId": req["revisionId"]}, token=t)
+        check("no job or candidates were published for the failed attempt (still 503, not a replay)", status == 503, again)
+    finally:
+        BASE = saved_base
+
+
+EXTRA_PHASES = [(4, phase4), (5, phase5)]
 
 
 def main():

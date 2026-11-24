@@ -291,6 +291,11 @@ namespace BuildMind.Infrastructure.Persistence.Migrations
                         .HasColumnType("varchar(32)")
                         .HasColumnName("evidence_mode");
 
+                    b.Property<string>("EvidencePackId")
+                        .HasMaxLength(128)
+                        .HasColumnType("varchar(128)")
+                        .HasColumnName("evidence_pack_id");
+
                     b.Property<string>("IdempotencyKey")
                         .IsRequired()
                         .HasMaxLength(64)

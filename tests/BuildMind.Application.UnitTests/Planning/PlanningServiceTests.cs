@@ -72,7 +72,7 @@ public sealed class PlanningServiceTests
     {
         var provider = new PolicyRegulatoryEvidenceProvider();
         var policy = Policy() with { EvidenceMode = PlanningSchemas.EvidenceModeNone };
-        var evidence = await provider.GetAsync(Project, Land(), policy, default);
+        var evidence = (await provider.GetAsync(Project, Land(), Guid.NewGuid(), policy, default)).Evidence;
         Assert.Equal(RegulatoryEvidenceStatuses.Missing, evidence.Status);
         Assert.Empty(evidence.Constraints);
         Assert.Equal(PlanningSchemas.EvidenceModeNone, provider.Mode(policy));

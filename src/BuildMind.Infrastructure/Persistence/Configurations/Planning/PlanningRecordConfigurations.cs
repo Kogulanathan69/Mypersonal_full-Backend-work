@@ -51,6 +51,7 @@ internal sealed class GenerationJobRecordConfiguration : IEntityTypeConfiguratio
         builder.Property(j => j.Seed).HasColumnName("seed").IsRequired();
         builder.Property(j => j.CreatedAtUtc).HasColumnName("created_at_utc").IsRequired();
         builder.Property(j => j.CompletedAtUtc).HasColumnName("completed_at_utc");
+        builder.Property(j => j.EvidencePackId).HasColumnName("evidence_pack_id").HasMaxLength(128);
         builder.Property(j => j.DiagnosticsJson).HasColumnName("diagnostics_json").HasColumnType("mediumtext").ForMySQLHasCharset("utf8mb4").IsRequired();
         builder.HasOne<ProjectRecord>().WithMany().HasForeignKey(j => j.ProjectId)
             .HasConstraintName("fk_generation_jobs_projects_project_id").OnDelete(DeleteBehavior.Restrict);

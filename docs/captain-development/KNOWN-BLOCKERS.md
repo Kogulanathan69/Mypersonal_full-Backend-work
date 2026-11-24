@@ -18,3 +18,7 @@ Branch `feature/captain-full-backend-completion` (worktree `BuildMind-Worktrees/
 | Python auth | python-services has no internal token | See DEVELOPMENT-PROGRESS | Tracked per phase. |
 
 Entries are appended per phase below.
+| RAG-CORPUS-WSL | Real regulation corpus cannot be served in this environment: the manifest pins Windows-separator identities (the loader refuses normalisation, correctly); the API cannot run on Windows (G17); WSL is in NAT mode | BLOCKED (environment) | Live RAG verified only on fail-closed paths; real-corpus retrieval not re-verified in this session |
+| EDGE-ROLE | Mapping front/rear/side constraint kinds to parcel edges (doc 29 §11, M6) | OPEN | rag-constraints evidence is never REVIEWED; generation answers NEEDS_REVIEW |
+| G06 constraint table | No reviewed real constraint table; only a synthetic fixture | OPEN | Synthetic setbacks remain an explicit development-only policy mode |
+| STEP 8B scope | Not defined in the repository | ON HOLD | No M7 code or registration changed |

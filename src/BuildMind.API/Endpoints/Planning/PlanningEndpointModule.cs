@@ -136,7 +136,7 @@ public sealed class PlanningEndpointModule : IApiEndpointModule
     private static object Job(GenerationJobView view) => new
     {
         jobId = view.Job.Id, view.Job.ProjectId, status = view.Job.Status.ToString(), view.Job.Outcome, view.Job.ReasonCode,
-        view.Job.AlgorithmVersion, view.Job.EvidenceMode, view.Job.Seed, view.Job.LandRevisionId, view.Job.RequirementsRevisionId,
+        view.Job.AlgorithmVersion, view.Job.EvidenceMode, view.Job.EvidencePackId, view.Job.Seed, view.Job.LandRevisionId, view.Job.RequirementsRevisionId,
         view.Job.CreatedAtUtc, view.Job.CompletedAtUtc,
         diagnostics = view.Job.Diagnostics.Select(d => new { d.Code, d.Severity, d.Message }),
         notice = PreliminaryNotice,

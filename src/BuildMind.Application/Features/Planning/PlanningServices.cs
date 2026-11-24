@@ -4,6 +4,7 @@ using System.Text.Json;
 using System.Text.RegularExpressions;
 using BuildMind.Application.Abstractions;
 using BuildMind.Application.Abstractions.Errors;
+using BuildMind.Application.Abstractions.Regulations;
 using BuildMind.Application.Features.Generation.Contracts;
 using BuildMind.Application.Features.PlanEditor.Contracts;
 using BuildMind.Application.Features.PlanEditor.Integration;
@@ -188,20 +189,20 @@ public sealed partial class GenerationService(
         var (program, programCode) = BuildRoomProgram(requirement, policy);
         if (program is null) return new(PlanningStatus.ValidationFailed, Code: programCode);
 
-        RegulatoryEvidenceDto regulatory;
-        try { regulatory = await evidence.GetAsync(projectId, land, policy, token).ConfigureAwait(false); }
+        RegulatoryEvidenceSelection regulatory;
+        try { regulatory = await evidence.GetAsync(projectId, land, requirement.Id, policy, token).ConfigureAwait(false); }
         catch (DependencyFailureException failure) { return LandService.DependencyFailure<GenerationJobView>(failure); }
 
         var input = new GenerationInputDto
         {
             SchemaVersion = GenerationSchemas.Input, ProjectId = projectId, LandRevisionId = land.Id,
             RequirementsRevisionId = requirement.Id, Land = land.Land, RoomProgram = program,
-            AdjacencyPreferences = BuildAdjacency(requirement, program), RegulatoryEvidence = regulatory, Seed = seed,
+            AdjacencyPreferences = BuildAdjacency(requirement, program), RegulatoryEvidence = regulatory.Evidence, Seed = seed,
         };
 
         var mode = evidence.Mode(policy);
         var running = new GenerationJob(Guid.NewGuid(), projectId, actor, key, land.Id, requirement.Id,
-            GenerationJobStatus.Running, null, null, null, mode, seed, PlanningClock.Now(time), null, []);
+            GenerationJobStatus.Running, null, null, null, mode, seed, PlanningClock.Now(time), null, [], regulatory.EvidencePackId);
         switch (await jobs.TryStartAsync(running, version, token).ConfigureAwait(false))
         {
             case ProtectedWriteStatus.Denied: return new(PlanningStatus.NotFound);
@@ -343,14 +344,19 @@ public sealed partial class GenerationService(
     };
 }
 
+public sealed record RegulatoryEvidenceSelection(RegulatoryEvidenceDto Evidence, string? EvidencePackId = null);
+
 /// <summary>Selects regulatory evidence for generation according to the policy's evidence mode.</summary>
 public interface IRegulatoryEvidenceProvider
 {
     string Mode(GenerationPolicy policy);
-    Task<RegulatoryEvidenceDto> GetAsync(Guid projectId, LandRevision land, GenerationPolicy policy, CancellationToken token);
+
+    /// <summary>Dependency failures propagate (fail closed); the caller maps them to 503/504.</summary>
+    Task<RegulatoryEvidenceSelection> GetAsync(Guid projectId, LandRevision land, Guid requirementsRevisionId, GenerationPolicy policy,
+        CancellationToken token);
 }
 
-/// <summary>Phase 3 provider: "synthetic-fixture" or MISSING. Never invents real rule values.</summary>
+/// <summary>"synthetic-fixture" or MISSING. Never invents real rule values.</summary>
 public sealed class PolicyRegulatoryEvidenceProvider : IRegulatoryEvidenceProvider
 {
     public string Mode(GenerationPolicy policy) =>
@@ -359,10 +365,67 @@ public sealed class PolicyRegulatoryEvidenceProvider : IRegulatoryEvidenceProvid
             ? PlanningSchemas.EvidenceModeSynthetic
             : PlanningSchemas.EvidenceModeNone;
 
-    public Task<RegulatoryEvidenceDto> GetAsync(Guid projectId, LandRevision land, GenerationPolicy policy, CancellationToken token) =>
-        Task.FromResult(Mode(policy) == PlanningSchemas.EvidenceModeSynthetic
+    public Task<RegulatoryEvidenceSelection> GetAsync(Guid projectId, LandRevision land, Guid requirementsRevisionId,
+        GenerationPolicy policy, CancellationToken token) =>
+        Task.FromResult(new RegulatoryEvidenceSelection(Mode(policy) == PlanningSchemas.EvidenceModeSynthetic
             ? GenerationService.SyntheticEvidence(land, policy)
-            : GenerationService.MissingEvidence("REGULATORY_EVIDENCE_NOT_INTEGRATED"));
+            : GenerationService.MissingEvidence("REGULATORY_EVIDENCE_NOT_INTEGRATED")));
+}
+
+/// <summary>
+/// "rag-constraints" mode: consumes the existing M7 constraint contract (<see cref="IRegulatoryConstraintSource"/>) and
+/// the existing <see cref="ConstraintEvidenceGate"/> unchanged. FAIL CLOSED:
+/// <list type="bullet">
+/// <item>the RAG dependency failing propagates (no generation; 503/504);</item>
+/// <item>synthetic constraint packs never count as reviewed (<c>allowSynthetic: false</c>);</item>
+/// <item>even fully verified kinds are passed to generation as UNVERIFIED with the gap
+/// <c>PARCEL_EDGE_ROLE_MAPPING_UNAPPROVED</c>: mapping front/rear/side rules to parcel edges is an open M6 decision
+/// (doc 29 §11), so no setback value is placed on an edge and generation truthfully answers NEEDS_REVIEW.</item>
+/// </list>
+/// The evidence pack id is returned for traceability on the generation job.
+/// </summary>
+public sealed class RagRegulatoryEvidenceProvider(
+    IRegulatoryConstraintSource constraints, IProjectRepository projects, PolicyRegulatoryEvidenceProvider fallback)
+    : IRegulatoryEvidenceProvider
+{
+    public static readonly RegulatoryConstraintKind[] MandatoryKinds =
+        [RegulatoryConstraintKind.FrontSetbackMin, RegulatoryConstraintKind.RearSpaceMin, RegulatoryConstraintKind.SideSpaceMin];
+
+    public string Mode(GenerationPolicy policy) =>
+        policy.EvidenceMode == PlanningSchemas.EvidenceModeRag ? PlanningSchemas.EvidenceModeRag : fallback.Mode(policy);
+
+    public async Task<RegulatoryEvidenceSelection> GetAsync(Guid projectId, LandRevision land, Guid requirementsRevisionId,
+        GenerationPolicy policy, CancellationToken token)
+    {
+        if (Mode(policy) != PlanningSchemas.EvidenceModeRag)
+            return await fallback.GetAsync(projectId, land, requirementsRevisionId, policy, token).ConfigureAwait(false);
+        if (string.IsNullOrWhiteSpace(policy.Jurisdiction))
+            return new(GenerationService.MissingEvidence("JURISDICTION_NOT_CONFIGURED"));
+        var project = await projects.GetByIdAsync(projectId, token).ConfigureAwait(false);
+        if (project is null)
+            return new(GenerationService.MissingEvidence("PROJECT_REVISION_UNAVAILABLE"));
+
+        var pack = await constraints.GetConstraintsAsync(new RegulatoryConstraintQuery(policy.Jurisdiction, MandatoryKinds,
+            new ConstraintBinding(projectId, project.Revision, land.Id, requirementsRevisionId), ResidentialOnly: true), token)
+            .ConfigureAwait(false);
+        var assessment = ConstraintEvidenceGate.Assess(pack, MandatoryKinds, allowSynthetic: false);
+        var gaps = assessment.Gaps.ToList();
+        var status = assessment.RegulatoryEvidenceStatus;
+        if (status == RegulatoryEvidenceStatuses.Reviewed)
+        {
+            status = RegulatoryEvidenceStatuses.Unverified;
+            gaps.Add("PARCEL_EDGE_ROLE_MAPPING_UNAPPROVED");
+        }
+        if (gaps.Count == 0)
+            gaps.Add("REGULATORY_EVIDENCE_INCOMPLETE");
+        return new(new RegulatoryEvidenceDto
+        {
+            Status = status,
+            RuleSetVersion = status == RegulatoryEvidenceStatuses.Missing ? null : assessment.RuleSetVersion,
+            Constraints = [],
+            Gaps = gaps.Distinct(StringComparer.Ordinal).Select(code => new EvidenceGapDto { Code = code }).ToArray(),
+        }, pack.EvidencePackId);
+    }
 }
 
 public sealed record SaveCandidateCommand(string? ChangeSummary);

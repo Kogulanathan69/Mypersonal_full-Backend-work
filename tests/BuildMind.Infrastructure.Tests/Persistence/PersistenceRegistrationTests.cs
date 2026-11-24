@@ -42,6 +42,7 @@ public sealed class PersistenceRegistrationTests
         ("20261124112814_AddCaptainPlanLifecycle", ["plan_confirmations", "plan_edit_candidates"],
             ["fk_plan_confirmations_plan_revisions", "fk_plan_confirmations_users_confirmed_by",
              "fk_plan_edit_candidates_plan_validation_evidence", "fk_plan_edit_candidates_plans", "fk_plan_edit_candidates_users_owner_id"]),
+        ("20261124114516_AddGenerationEvidencePackId", [], []),
     ];
 
     internal static readonly string[] ApprovedTables =

@@ -59,17 +59,19 @@ internal sealed class FileGenerationPolicyProvider(IConfiguration configuration)
         }
         if (d.EvidenceMode is not (PlanningSchemas.EvidenceModeNone or PlanningSchemas.EvidenceModeSynthetic or PlanningSchemas.EvidenceModeRag))
             return null;
+        if (d.EvidenceMode == PlanningSchemas.EvidenceModeRag && (string.IsNullOrWhiteSpace(d.Jurisdiction) || d.Jurisdiction.Length > 200))
+            return null;
         if (d.EvidenceMode == PlanningSchemas.EvidenceModeSynthetic
             && (d.SyntheticSetbackM is not (>= 0 and < 100) || string.IsNullOrWhiteSpace(d.SyntheticRuleSetVersion)))
             return null;
         return new GenerationPolicy(d.Version, d.Label, d.RoomDimensions.ToDictionary(p => p.Key,
                 p => new RoomDimensionsDto { MinWidthM = p.Value!.MinWidthM, MinDepthM = p.Value.MinDepthM }, StringComparer.Ordinal),
-            d.EvidenceMode, d.SyntheticSetbackM, d.SyntheticRuleSetVersion);
+            d.EvidenceMode, d.SyntheticSetbackM, d.SyntheticRuleSetVersion, d.Jurisdiction);
     }
 
     private sealed record PolicyDocument(
         string Version, string Label, Dictionary<string, Dimensions?>? RoomDimensions, string EvidenceMode,
-        double? SyntheticSetbackM, string? SyntheticRuleSetVersion);
+        double? SyntheticSetbackM, string? SyntheticRuleSetVersion, string? Jurisdiction = null);
 
     private sealed record Dimensions(double MinWidthM, double MinDepthM);
 }

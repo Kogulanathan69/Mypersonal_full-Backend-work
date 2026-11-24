@@ -35,6 +35,7 @@ internal sealed class GenerationJobRecord
     public DateTimeOffset CreatedAtUtc { get; init; }
     public DateTimeOffset? CompletedAtUtc { get; set; }
     public required string DiagnosticsJson { get; set; }
+    public string? EvidencePackId { get; init; }
 }
 
 internal sealed class GenerationCandidateRecord

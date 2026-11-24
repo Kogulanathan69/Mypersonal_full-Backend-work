@@ -142,6 +142,7 @@ internal sealed class MySqlGenerationJobStore(BuildMindDbContext context, Transa
                 IdempotencyKey = running.IdempotencyKey, LandRevisionId = running.LandRevisionId,
                 RequirementsRevisionId = running.RequirementsRevisionId, Status = running.Status.ToString(),
                 EvidenceMode = running.EvidenceMode, Seed = running.Seed, CreatedAtUtc = running.CreatedAtUtc,
+                EvidencePackId = running.EvidencePackId,
                 DiagnosticsJson = "[]",
             });
             await context.SaveChangesAsync(inner).ConfigureAwait(false);
@@ -182,7 +183,7 @@ internal sealed class MySqlGenerationJobStore(BuildMindDbContext context, Transa
     private static GenerationJob ToModel(GenerationJobRecord row) => new(row.Id, row.ProjectId, row.RequestedBy, row.IdempotencyKey,
         row.LandRevisionId, row.RequirementsRevisionId, Enum.Parse<GenerationJobStatus>(row.Status), row.Outcome, row.ReasonCode,
         row.AlgorithmVersion, row.EvidenceMode, row.Seed, row.CreatedAtUtc, row.CompletedAtUtc,
-        PlanningJson.Read<DiagnosticDto[]>(row.DiagnosticsJson));
+        PlanningJson.Read<DiagnosticDto[]>(row.DiagnosticsJson), row.EvidencePackId);
 }
 
 internal sealed class MySqlPlanCreationStore(BuildMindDbContext context, TransactionRunner transactions) : IPlanCreationStore
