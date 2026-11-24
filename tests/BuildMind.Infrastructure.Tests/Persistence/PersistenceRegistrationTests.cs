@@ -43,6 +43,9 @@ public sealed class PersistenceRegistrationTests
             ["fk_plan_confirmations_plan_revisions", "fk_plan_confirmations_users_confirmed_by",
              "fk_plan_edit_candidates_plan_validation_evidence", "fk_plan_edit_candidates_plans", "fk_plan_edit_candidates_users_owner_id"]),
         ("20261124114516_AddGenerationEvidencePackId", [], []),
+        ("20261124120204_AddCaptainDeliverables", ["architect_requests", "reports"],
+            ["fk_architect_requests_projects_project_id", "fk_architect_requests_reports", "fk_architect_requests_users_granted_by",
+             "fk_reports_plan_confirmations", "fk_reports_projects_project_id", "fk_reports_users_requested_by"]),
     ];
 
     internal static readonly string[] ApprovedTables =

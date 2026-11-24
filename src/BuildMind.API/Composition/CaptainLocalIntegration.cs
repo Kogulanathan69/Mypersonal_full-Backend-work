@@ -96,6 +96,17 @@ public static class CaptainLocalIntegration
         services.AddSingleton<IApiEndpointModule, PlanEditorEndpointModule>();
         services.AddSingleton<IApiEndpointModule, PlanLifecycleEndpointModule>();
 
+        // Phase 6: existing M5 report generation/read and architect workflow candidates over Captain boundaries.
+        services.AddScoped(provider => new BuildMind.Application.Features.Reports.Services.ReportGenerationCandidate(
+            provider.GetRequiredService<BuildMind.Application.Features.Reports.Services.IReportGenerationBoundaryCandidate>(),
+            provider.GetRequiredService<BuildMind.Application.Features.Reports.Services.IPreliminaryReportRenderer>()));
+        services.AddScoped(provider => new BuildMind.Application.Features.Reports.Services.ReportReadCandidate(
+            provider.GetRequiredService<BuildMind.Application.Features.Reports.Services.IReportReadBoundaryCandidate>()));
+        services.AddScoped(provider => new BuildMind.Application.Features.ArchitectRequests.Services.ArchitectWorkflowCandidate(
+            provider.GetRequiredService<BuildMind.Application.Features.ArchitectRequests.Services.IArchitectWorkflowBoundaryCandidate>(),
+            new MicrosecondTimeProvider(provider.GetRequiredService<TimeProvider>())));
+        services.AddSingleton<IApiEndpointModule, DeliverablesEndpointModule>();
+
         return true;
     }
 }

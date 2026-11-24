@@ -23,6 +23,8 @@ export CaptainIntegration__Enabled=true
 export CaptainIntegration__RequirementCatalogueFile="$PWD/docs/captain-development/samples/requirement-catalogue.synthetic.json"
 export CaptainIntegration__SurveyStorageDirectory="$HOME/bm-captain/data/surveys"
 export CaptainIntegration__ReportStorageDirectory="$HOME/bm-captain/data/reports"
+export CaptainIntegration__ArchitectRecipientsFile="$PWD/docs/captain-development/samples/architect-directory.synthetic.json"
+export CaptainIntegration__SharingPolicyVersion="captain-sharing-policy-dev-1"
 if [ -n "${PY_PORT:-}" ] && [ -s "$S/python-internal.token" ]; then
   export Services__Python__Enabled=true Services__Python__BaseUrl="http://127.0.0.1:$PY_PORT"
   export Services__Python__AuthToken="$(cat "$S/python-internal.token")" Services__Python__TimeoutSeconds=30

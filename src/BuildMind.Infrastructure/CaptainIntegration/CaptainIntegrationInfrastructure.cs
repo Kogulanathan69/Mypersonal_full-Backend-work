@@ -75,6 +75,14 @@ public static class CaptainIntegrationInfrastructure
         services.TryAddSingleton<IConfirmedPlanSnapshotSink, DurableConfirmationSink>();
         services.TryAddScoped<IPlanCatalog, MySqlPlanCatalog>();
 
+        // Phase 6: reports (existing M5 generation/read candidates + PDF renderer) and architect workflow.
+        services.TryAddSingleton<PrivateReportArtifactStore>();
+        services.TryAddScoped<CaptainReportBoundary>();
+        services.TryAddScoped<BuildMind.Application.Features.Reports.Services.IReportGenerationBoundaryCandidate>(p => p.GetRequiredService<CaptainReportBoundary>());
+        services.TryAddScoped<BuildMind.Application.Features.Reports.Services.IReportReadBoundaryCandidate>(p => p.GetRequiredService<CaptainReportBoundary>());
+        services.TryAddSingleton<BuildMind.Application.Features.Reports.Services.IPreliminaryReportRenderer>(_ => new BuildMind.Infrastructure.Reports.PreliminaryPdfRenderer());
+        services.TryAddScoped<BuildMind.Application.Features.ArchitectRequests.Services.IArchitectWorkflowBoundaryCandidate, CaptainArchitectBoundary>();
+
         return services;
     }
 

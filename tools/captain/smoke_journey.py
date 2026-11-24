@@ -309,7 +309,68 @@ def phase5():
         BASE = saved_base
 
 
-EXTRA_PHASES = [(4, phase4), (5, phase5)]
+ARCHITECT = "a7c1e0de-0000-4000-8000-0000000000a1"  # synthetic directory entry
+POLICY = "captain-sharing-policy-dev-1"
+
+
+def phase6():
+    a, b, pid, plan = state["alice"]["access"], state["bob"]["access"], state["project"], state.get("plan")
+    if not check("phase 6 prerequisite: confirmed plan", state.get("confirmation")):
+        return
+    status, head, _ = call("GET", f"/api/v1/projects/{pid}/plans/{plan}", token=a)
+    request = {"planId": plan, "planRevisionId": head["revisionId"], "confirmationId": state["confirmation"],
+               "geometryHash": head["geometryHash"], "reportId": str(uuid.uuid4())}
+    status, body, _ = call("POST", f"/api/v1/projects/{pid}/reports", {**request, "reportId": str(uuid.uuid4()),
+                                                                     "geometryHash": "sha256:" + "1" * 64}, token=a)
+    check("report for a mismatched geometry hash refused (404)", status == 404, body)
+    status, _, _ = call("POST", f"/api/v1/projects/{pid}/reports", request, token=b)
+    check("cross-user report generation denied (404)", status == 404, status)
+    status, report, _ = call("POST", f"/api/v1/projects/{pid}/reports", request, token=a)
+    check("preliminary PDF report generated and Ready (201)", status == 201 and report.get("status") == "Ready", report)
+    rid = request["reportId"]
+    state["report"] = rid
+    status, again, _ = call("POST", f"/api/v1/projects/{pid}/reports", request, token=a)
+    check("repeated report request is idempotent (200 existing)", status == 200 and again.get("existing") is True, again)
+    status, st, _ = call("GET", f"/api/v1/projects/{pid}/reports/{rid}", token=a)
+    check("report status readable by owner", status == 200 and st.get("status") == "Ready", st)
+    status, _, _ = call("GET", f"/api/v1/projects/{pid}/reports/{rid}", token=b)
+    check("cross-user report status denied (404)", status == 404, status)
+    status, pdf, headers = call("GET", f"/api/v1/projects/{pid}/reports/{rid}/download", token=a)
+    check("authorized download returns a PDF attachment (no-store)",
+          status == 200 and isinstance(pdf, bytes) and pdf.startswith(b"%PDF-")
+          and "application/pdf" in headers.get("Content-Type", "") and "attachment" in headers.get("Content-Disposition", "")
+          and "no-store" in headers.get("Cache-Control", ""), (status, headers.get("Content-Type")))
+    state["pdf_bytes"] = len(pdf) if isinstance(pdf, bytes) else 0
+    status, _, _ = call("GET", f"/api/v1/projects/{pid}/reports/{rid}/download", token=b)
+    check("cross-user report download denied (404)", status == 404, status)
+    status, _, _ = call("GET", f"/api/v1/projects/{pid}/reports/{uuid.uuid4()}/download", token=a)
+    check("unknown report download hidden (404)", status == 404, status)
+
+    path = f"/api/v1/projects/{pid}/architect-requests"
+    base = {"recipientId": ARCHITECT, "reportId": rid, "documentIds": [], "explicitConsent": True, "acknowledgedPolicyVersion": POLICY}
+    status, body, _ = call("POST", path, {**base, "explicitConsent": False}, token=a)
+    check("architect request without explicit consent refused (422)", status == 422 and code_of(body) == "EXPLICIT_CONSENT_REQUIRED", body)
+    status, body, _ = call("POST", path, {**base, "recipientId": str(uuid.uuid4())}, token=a)
+    check("unknown architect recipient not eligible (422)", status == 422 and code_of(body) == "NOT_ELIGIBLE", body)
+    status, body, _ = call("POST", path, {**base, "acknowledgedPolicyVersion": "old-policy"}, token=a)
+    check("stale sharing-policy acknowledgement refused (409)", status == 409, body)
+    status, _, _ = call("POST", path, base, token=b)
+    check("cross-user architect request denied (404)", status == 404, status)
+    status, created, _ = call("POST", path, base, token=a)
+    check("architect request recorded with explicit consent (201 Pending, not dispatched)",
+          status == 201 and created.get("status") == "Pending" and "No project data has been sent" in created.get("delivery", ""), created)
+    req_id = created.get("requestId")
+    status, listing, _ = call("GET", path, token=a)
+    check("architect requests listed for owner", status == 200 and any(r["requestId"] == req_id for r in listing.get("requests", [])), listing)
+    status, _, _ = call("GET", f"{path}/{req_id}", token=b)
+    check("cross-user architect request read denied (404)", status == 404, status)
+    status, withdrawn, _ = call("POST", f"{path}/{req_id}/withdraw", {"expectedStateVersion": 1}, token=a)
+    check("consent withdrawn (200 Withdrawn)", status == 200 and withdrawn.get("status") == "Withdrawn", withdrawn)
+    status, body, _ = call("POST", f"{path}/{req_id}/withdraw", {"expectedStateVersion": 1}, token=a)
+    check("second withdrawal rejected (409)", status == 409, body)
+
+
+EXTRA_PHASES = [(4, phase4), (5, phase5), (6, phase6)]
 
 
 def main():

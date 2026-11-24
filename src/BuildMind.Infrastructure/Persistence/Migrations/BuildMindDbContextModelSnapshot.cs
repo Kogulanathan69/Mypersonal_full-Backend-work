@@ -19,6 +19,206 @@ namespace BuildMind.Infrastructure.Persistence.Migrations
                 .HasAnnotation("ProductVersion", "10.0.12")
                 .HasAnnotation("Relational:MaxIdentifierLength", 64);
 
+            modelBuilder.Entity("BuildMind.Infrastructure.Persistence.Records.Deliverables.ArchitectRequestRecord", b =>
+                {
+                    b.Property<Guid>("RequestId")
+                        .HasColumnType("char(36)")
+                        .HasColumnName("request_id");
+
+                    b.Property<Guid>("ConsentId")
+                        .HasColumnType("char(36)")
+                        .HasColumnName("consent_id");
+
+                    b.Property<string>("DocumentIdsJson")
+                        .IsRequired()
+                        .HasColumnType("text")
+                        .HasColumnName("document_ids_json");
+
+                    b.Property<DateTime>("GrantedAtUtc")
+                        .HasColumnType("datetime(6)")
+                        .HasColumnName("granted_at_utc");
+
+                    b.Property<Guid>("GrantedBy")
+                        .HasColumnType("char(36)")
+                        .HasColumnName("granted_by");
+
+                    b.Property<string>("PolicyVersion")
+                        .IsRequired()
+                        .HasMaxLength(128)
+                        .HasColumnType("varchar(128)")
+                        .HasColumnName("policy_version");
+
+                    b.Property<Guid>("ProjectId")
+                        .HasColumnType("char(36)")
+                        .HasColumnName("project_id");
+
+                    b.Property<Guid>("RecipientId")
+                        .HasColumnType("char(36)")
+                        .HasColumnName("recipient_id");
+
+                    b.Property<Guid?>("ReportId")
+                        .HasColumnType("char(36)")
+                        .HasColumnName("report_id");
+
+                    b.Property<DateTime>("RequestedAtUtc")
+                        .HasColumnType("datetime(6)")
+                        .HasColumnName("requested_at_utc");
+
+                    b.Property<long>("StateVersion")
+                        .IsConcurrencyToken()
+                        .HasColumnType("bigint")
+                        .HasColumnName("state_version");
+
+                    b.Property<string>("Status")
+                        .IsRequired()
+                        .HasMaxLength(16)
+                        .HasColumnType("varchar(16)")
+                        .HasColumnName("status");
+
+                    b.Property<DateTime?>("WithdrawnAtUtc")
+                        .HasColumnType("datetime(6)")
+                        .HasColumnName("withdrawn_at_utc");
+
+                    b.HasKey("RequestId")
+                        .HasName("pk_architect_requests");
+
+                    b.HasIndex("ConsentId")
+                        .IsUnique()
+                        .HasDatabaseName("ux_architect_requests_consent_id");
+
+                    b.HasIndex("GrantedBy")
+                        .HasDatabaseName("ix_architect_requests_granted_by");
+
+                    b.HasIndex("ReportId")
+                        .HasDatabaseName("ix_architect_requests_report_id");
+
+                    b.HasIndex("ProjectId", "RequestedAtUtc")
+                        .HasDatabaseName("ix_architect_requests_project_requested");
+
+                    b.ToTable("architect_requests", (string)null);
+                });
+
+            modelBuilder.Entity("BuildMind.Infrastructure.Persistence.Records.Deliverables.ReportRecord", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .HasColumnType("char(36)")
+                        .HasColumnName("id");
+
+                    b.Property<long?>("ArtifactByteLength")
+                        .HasColumnType("bigint")
+                        .HasColumnName("artifact_byte_length");
+
+                    b.Property<string>("ArtifactContentHash")
+                        .HasMaxLength(71)
+                        .HasColumnType("varchar(71)")
+                        .HasColumnName("artifact_content_hash");
+
+                    b.Property<DateTime?>("ArtifactCreatedAtUtc")
+                        .HasColumnType("datetime(6)")
+                        .HasColumnName("artifact_created_at_utc");
+
+                    b.Property<Guid?>("ArtifactId")
+                        .HasColumnType("char(36)")
+                        .HasColumnName("artifact_id");
+
+                    b.Property<string>("ArtifactMediaType")
+                        .HasMaxLength(64)
+                        .HasColumnType("varchar(64)")
+                        .HasColumnName("artifact_media_type");
+
+                    b.Property<DateTime>("CapturedAtUtc")
+                        .HasColumnType("datetime(6)")
+                        .HasColumnName("captured_at_utc");
+
+                    b.Property<DateTime?>("CompletedAtUtc")
+                        .HasColumnType("datetime(6)")
+                        .HasColumnName("completed_at_utc");
+
+                    b.Property<Guid>("ConfirmationId")
+                        .HasColumnType("char(36)")
+                        .HasColumnName("confirmation_id");
+
+                    b.Property<string>("DisclaimerText")
+                        .IsRequired()
+                        .HasMaxLength(2000)
+                        .HasColumnType("varchar(2000)")
+                        .HasColumnName("disclaimer_text");
+
+                    b.Property<string>("DisclaimerVersion")
+                        .IsRequired()
+                        .HasMaxLength(64)
+                        .HasColumnType("varchar(64)")
+                        .HasColumnName("disclaimer_version");
+
+                    b.Property<DateTime?>("FailedAtUtc")
+                        .HasColumnType("datetime(6)")
+                        .HasColumnName("failed_at_utc");
+
+                    b.Property<string>("FailureCode")
+                        .HasMaxLength(64)
+                        .HasColumnType("varchar(64)")
+                        .HasColumnName("failure_code");
+
+                    b.Property<Guid>("PlanId")
+                        .HasColumnType("char(36)")
+                        .HasColumnName("plan_id");
+
+                    b.Property<Guid>("PlanRevisionId")
+                        .HasColumnType("char(36)")
+                        .HasColumnName("plan_revision_id");
+
+                    b.Property<Guid>("ProjectId")
+                        .HasColumnType("char(36)")
+                        .HasColumnName("project_id");
+
+                    b.Property<DateTime>("RequestedAtUtc")
+                        .HasColumnType("datetime(6)")
+                        .HasColumnName("requested_at_utc");
+
+                    b.Property<Guid>("RequestedBy")
+                        .HasColumnType("char(36)")
+                        .HasColumnName("requested_by");
+
+                    b.Property<Guid>("RequirementsRevisionId")
+                        .HasColumnType("char(36)")
+                        .HasColumnName("requirements_revision_id");
+
+                    b.Property<string>("SnapshotSchemaVersion")
+                        .IsRequired()
+                        .HasMaxLength(64)
+                        .HasColumnType("varchar(64)")
+                        .HasColumnName("snapshot_schema_version");
+
+                    b.Property<long>("StateVersion")
+                        .IsConcurrencyToken()
+                        .HasColumnType("bigint")
+                        .HasColumnName("state_version");
+
+                    b.Property<string>("Status")
+                        .IsRequired()
+                        .HasMaxLength(16)
+                        .HasColumnType("varchar(16)")
+                        .HasColumnName("status");
+
+                    b.HasKey("Id")
+                        .HasName("pk_reports");
+
+                    b.HasIndex("ArtifactId")
+                        .IsUnique()
+                        .HasDatabaseName("ux_reports_artifact_id");
+
+                    b.HasIndex("ConfirmationId")
+                        .HasDatabaseName("ix_reports_confirmation_id");
+
+                    b.HasIndex("RequestedBy")
+                        .HasDatabaseName("ix_reports_requested_by");
+
+                    b.HasIndex("ProjectId", "RequestedAtUtc")
+                        .HasDatabaseName("ix_reports_project_requested");
+
+                    b.ToTable("reports", (string)null);
+                });
+
             modelBuilder.Entity("BuildMind.Infrastructure.Persistence.Records.PasswordResetRecord", b =>
                 {
                     b.Property<Guid>("UserId")
@@ -951,6 +1151,53 @@ namespace BuildMind.Infrastructure.Persistence.Migrations
                         .HasDatabaseName("ux_users_normalized_email");
 
                     b.ToTable("users", (string)null);
+                });
+
+            modelBuilder.Entity("BuildMind.Infrastructure.Persistence.Records.Deliverables.ArchitectRequestRecord", b =>
+                {
+                    b.HasOne("BuildMind.Infrastructure.Persistence.Records.UserRecord", null)
+                        .WithMany()
+                        .HasForeignKey("GrantedBy")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired()
+                        .HasConstraintName("fk_architect_requests_users_granted_by");
+
+                    b.HasOne("BuildMind.Infrastructure.Persistence.Records.ProjectRecord", null)
+                        .WithMany()
+                        .HasForeignKey("ProjectId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired()
+                        .HasConstraintName("fk_architect_requests_projects_project_id");
+
+                    b.HasOne("BuildMind.Infrastructure.Persistence.Records.Deliverables.ReportRecord", null)
+                        .WithMany()
+                        .HasForeignKey("ReportId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .HasConstraintName("fk_architect_requests_reports");
+                });
+
+            modelBuilder.Entity("BuildMind.Infrastructure.Persistence.Records.Deliverables.ReportRecord", b =>
+                {
+                    b.HasOne("BuildMind.Infrastructure.Persistence.Records.Planning.PlanConfirmationRecord", null)
+                        .WithMany()
+                        .HasForeignKey("ConfirmationId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired()
+                        .HasConstraintName("fk_reports_plan_confirmations");
+
+                    b.HasOne("BuildMind.Infrastructure.Persistence.Records.ProjectRecord", null)
+                        .WithMany()
+                        .HasForeignKey("ProjectId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired()
+                        .HasConstraintName("fk_reports_projects_project_id");
+
+                    b.HasOne("BuildMind.Infrastructure.Persistence.Records.UserRecord", null)
+                        .WithMany()
+                        .HasForeignKey("RequestedBy")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired()
+                        .HasConstraintName("fk_reports_users_requested_by");
                 });
 
             modelBuilder.Entity("BuildMind.Infrastructure.Persistence.Records.PasswordResetRecord", b =>

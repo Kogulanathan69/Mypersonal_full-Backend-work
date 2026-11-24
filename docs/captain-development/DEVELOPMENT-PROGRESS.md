@@ -233,3 +233,44 @@ Phase 5 journey checks:
 - retrieval anonymous → 401;
 - retrieval authenticated → 503 with no passages;
 - rag-mode generation → 503 `DEPENDENCY_UNAVAILABLE` with no job published (repeat → 503, not a replay).
+
+## Phase 6 — preliminary PDF reports and architect workflow
+
+The existing M5 services are reused unchanged:
+- `ReportGenerationCandidate`, with `ReportDataBuilder` and the existing `PreliminaryPdfRenderer`;
+- `ReportReadCandidate`, with `ReportPrivatePdfReadVerifier` and `ReportArtifactIntegrity`;
+- `ArchitectWorkflowCandidate`.
+
+The Captain work supplies their boundaries:
+
+| Component | Behaviour |
+|---|---|
+| `CaptainReportBoundary` (generation + read) | **Accept:** fresh owner authorization. The persisted confirmation must match plan, revision and geometry hash. The snapshot is built from immutable sources (requirement revision, plan revision, confirmation, evidence) plus a fixed disclaimer, then inserted as Pending under the protected write; an existing report id gives `Existing`. **Publish:** write the artifact privately, read it back through the bounded verifier, then CAS Pending→Ready under the protected write. If the CAS fails, the unreferenced file is deleted. **Fail:** CAS to Failed. **Read:** owner check, bounded verified read, and an owner **re-check after the read**. Missing and unauthorized are both reported as Hidden. |
+| `PrivateReportArtifactStore` | Operator-provisioned directory. File names are the opaque server GUID only, so there is no user input in paths. Create-new + atomic rename. |
+| `CaptainArchitectBoundary` | Recipient must be in the operator-supplied architect directory (synthetic sample). The acknowledged policy must equal `CaptainIntegration:SharingPolicyVersion`. Only a Ready, intact report bound to the plan's persisted confirmation is shareable; other document types are NotEligible (scope undefined, G12). Consent and request are stored together under the protected write. Withdrawal is an atomic Pending→Withdrawn CAS. **Nothing is dispatched externally.** |
+| `DeliverablesEndpointModule` | `POST/GET /projects/{id}/reports[/{reportId}[/download]]`; `POST/GET /projects/{id}/architect-requests[/{requestId}[/withdraw]]`. Report generation uses the expensive limiter. Downloads are `application/pdf` attachments with `no-store`. |
+
+**Report honesty:**
+- The disclaimer `captain-preliminary-disclaimer/1` states: preliminary 2D; synthetic dimensions and setbacks; no doors or circulation; not a construction drawing, design or approval; the evidence status is not a compliance determination.
+- The existing `ReportDataBuilder` refuses non-`VERIFIED` evidence unless the confirmation acknowledged warnings.
+
+**Migration** `20261124120204_AddCaptainDeliverables` (additive): `reports` (FK to the confirmation, unique artifact id) and `architect_requests` (unique consent id, FK to the report).
+
+### Results
+
+| Suite | Result |
+|---|---|
+| Application.UnitTests | 252/252 |
+| Infrastructure.Tests | 1160/1160 |
+| Reports.Tests | 163 passed + 1 skipped (`BUILDMIND_PDF_QA_PYTHON` unset; run in Phase 7) |
+| Requirements.Tests | 456/456 |
+| Workflow.Tests | 197/197 |
+| ContractTests | exit 0 |
+| Live MySQL | 94/94 |
+| Live journey phases 2–6 | 82/82 |
+
+Phase 6 journey coverage:
+- report: hash mismatch → 404; cross-user generate/status/download → 404; generate → 201 Ready; idempotent repeat → 200; PDF attachment with `no-store`; unknown report → 404;
+- architect: missing consent → 422; unknown recipient → 422; stale policy → 409; cross-user → 404; create → 201 Pending (not dispatched); list; withdraw → 200; second withdraw → 409.
+
+**Not covered by dedicated live store tests:** the Phase 6 boundaries are exercised by the live API journey against real MySQL and file storage, plus the unchanged M5 unit suites.
