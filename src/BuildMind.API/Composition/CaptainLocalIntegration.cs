@@ -7,6 +7,7 @@ using BuildMind.Application.Features.PlanEditor.Editing;
 using BuildMind.Application.Features.PlanEditor.Integration;
 using BuildMind.Application.Features.PlanEditor.Versioning;
 using BuildMind.Application.Features.Planning;
+using BuildMind.Application.Features.Administration;
 using BuildMind.API.Routing;
 using BuildMind.Application.Features.Requirements.Abstractions;
 using BuildMind.Application.Features.Requirements.Services;
@@ -112,6 +113,14 @@ public static class CaptainLocalIntegration
         services.AddScoped<PlanVersionService>();
         services.AddScoped<AiEditOrchestrationService>();
         services.AddSingleton<IApiEndpointModule, V3RouteCompletionEndpointModule>();
+
+        // Admin and delegated staff (proposed Captain-local role model; privileges read fresh per request).
+        services.AddScoped<StaffInvitationService>();
+        services.AddSingleton<IApiEndpointModule, BuildMind.API.Endpoints.Administration.AdministrationEndpointModule>();
+        services.AddHostedService<AdminBootstrapHostedService>();
+        // SMTP delivery (loopback-only unless explicitly allowed) replaces the non-delivering recovery sender.
+        if (!string.IsNullOrWhiteSpace(builder.Configuration["CaptainIntegration:Email:SmtpHost"]))
+            services.UseCaptainSmtpForPasswordRecovery();
 
         // Durable survey extraction worker: only when the private Python service is configured (fail closed otherwise:
         // surveys stay Queued). Disable explicitly with CaptainIntegration:SurveyWorker:Enabled=false.

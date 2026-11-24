@@ -27,6 +27,13 @@ export CaptainIntegration__ArchitectRecipientsFile="$PWD/docs/captain-developmen
 export CaptainIntegration__SharingPolicyVersion="captain-sharing-policy-dev-1"
 export CaptainIntegration__SurveyWorker__PollSeconds=2
 export CaptainIntegration__SurveyWorker__LeaseSeconds=120
+# Local email capture (Mailpit, loopback only) for recovery and staff invitations; no real recipients.
+export Authentication__PasswordRecovery__Enabled=true
+export CaptainIntegration__Email__SmtpHost=127.0.0.1
+export CaptainIntegration__Email__SmtpPort=1025
+export CaptainIntegration__Email__FromAddress=no-reply@buildmind.invalid
+# One-shot operator bootstrap (inert once an admin exists); set ADMIN_BOOTSTRAP_EMAIL to use it.
+if [ -n "${ADMIN_BOOTSTRAP_EMAIL:-}" ]; then export CaptainIntegration__AdminBootstrap__Email="$ADMIN_BOOTSTRAP_EMAIL"; fi
 if [ -n "${PY_PORT:-}" ] && [ -s "$S/python-internal.token" ]; then
   export Services__Python__Enabled=true Services__Python__BaseUrl="http://127.0.0.1:$PY_PORT"
   export Services__Python__AuthToken="$(cat "$S/python-internal.token")" Services__Python__TimeoutSeconds=30

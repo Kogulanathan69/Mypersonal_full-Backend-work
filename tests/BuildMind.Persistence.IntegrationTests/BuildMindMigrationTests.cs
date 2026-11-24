@@ -55,6 +55,8 @@ public sealed class BuildMindMigrationTests(ITestOutputHelper output)
              "fk_reports_projects_project_id=RESTRICT", "fk_reports_users_requested_by=RESTRICT"]),
         ("20261124170241_AddSurveyExtraction", ["survey_extractions"],
             ["fk_survey_extractions_projects_project_id=RESTRICT", "fk_survey_extractions_surveys=RESTRICT"]),
+        ("20261124182132_AddAdministration", ["admin_audit_chain_head", "admin_audit_events", "principal_roles", "staff_change_proposals", "staff_profiles", "staff_task_notes", "staff_tasks", "system_policies"],
+            ["fk_admin_audit_events_users_actor_id=RESTRICT", "fk_principal_roles_users_granted_by=RESTRICT", "fk_principal_roles_users_revoked_by=RESTRICT", "fk_principal_roles_users_user_id=RESTRICT", "fk_staff_change_proposals_users_proposed_by=RESTRICT", "fk_staff_change_proposals_users_reviewed_by=RESTRICT", "fk_staff_profiles_users_created_by=RESTRICT", "fk_staff_profiles_users_user_id=RESTRICT", "fk_staff_task_notes_staff_tasks_task_id=RESTRICT", "fk_staff_task_notes_users_author_id=RESTRICT", "fk_staff_tasks_projects_project_id=RESTRICT", "fk_staff_tasks_users_assigned_to=RESTRICT", "fk_staff_tasks_users_created_by=RESTRICT", "fk_system_policies_users_updated_by=RESTRICT"]),
     ];
 
     private static readonly string[] ExpectedMigrations = [.. M4Migrations, .. CaptainMigrations.Select(m => m.Migration)];

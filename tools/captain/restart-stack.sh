@@ -15,6 +15,8 @@ if [ "${RAG:-0}" = 1 ]; then
   nohup bash tools/captain/run-rag.sh 8092 > ~/bm-captain/logs/rag.log 2>&1 &
   export RAG_PORT=8092
 fi
+if [ -s ~/bm-captain/secrets/captain-admin.email ]; then export ADMIN_BOOTSTRAP_EMAIL="$(cat ~/bm-captain/secrets/captain-admin.email)"; fi
+bash tools/captain/mailpit.sh start || true
 export CaptainIntegration__GenerationPolicyFile="$PWD/docs/captain-development/samples/generation-policy.synthetic.json"
 PY_PORT=8091 nohup bash tools/captain/run-api.sh 5180 > ~/bm-captain/logs/api.log 2>&1 &
 if [ "${RAG:-0}" = 1 ]; then

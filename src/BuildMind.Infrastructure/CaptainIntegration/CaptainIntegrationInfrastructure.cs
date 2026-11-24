@@ -8,6 +8,7 @@ using BuildMind.Application.Features.PlanEditor.Confirmation;
 using BuildMind.Application.Features.Survey.Abstractions;
 using BuildMind.Application.Features.PlanEditor.Editing;
 using BuildMind.Application.Features.Planning;
+using BuildMind.Application.Features.Administration;
 using BuildMind.Infrastructure.Integration;
 using BuildMind.Infrastructure.Persistence.Repositories.Planning;
 using BuildMind.Infrastructure.Persistence.Repositories.Survey;
@@ -94,6 +95,23 @@ public static class CaptainIntegrationInfrastructure
         services.TryAddScoped<IReportCatalog, MySqlReportCatalog>();
         services.TryAddSingleton<IAiEditProposalPort, UnconfiguredAiEditProposalPort>();
 
+        // Administration: fresh principal reads, store with audit chain, proposal appliers, email.
+        services.TryAddScoped<IPrincipalDirectory, MySqlPrincipalDirectory>();
+        services.TryAddScoped<IAdministrationStore, MySqlAdministrationStore>();
+        services.AddScoped<IProposalApplier, SystemPolicyProposalApplier>();
+        services.TryAddSingleton<SmtpEmailSender>();
+        services.TryAddSingleton<ISystemEmailSender>(p => p.GetRequiredService<SmtpEmailSender>());
+        services.TryAddScoped<BuildMind.Application.Features.Auth.Abstractions.IPasswordResetTokenProvider,
+            BuildMind.Infrastructure.Identity.PasswordResetTokenProvider>();
+
+        return services;
+    }
+
+    /// <summary>Routes password-recovery email through the configured SMTP sender (Development, loopback by default).</summary>
+    public static IServiceCollection UseCaptainSmtpForPasswordRecovery(this IServiceCollection services)
+    {
+        services.Replace(ServiceDescriptor.Singleton<BuildMind.Application.Features.Auth.Abstractions.IPasswordResetEmailSender>(
+            p => p.GetRequiredService<SmtpEmailSender>()));
         return services;
     }
 

@@ -19,6 +19,424 @@ namespace BuildMind.Infrastructure.Persistence.Migrations
                 .HasAnnotation("ProductVersion", "10.0.12")
                 .HasAnnotation("Relational:MaxIdentifierLength", 64);
 
+            modelBuilder.Entity("BuildMind.Infrastructure.Persistence.Records.Administration.AdminAuditChainHeadRecord", b =>
+                {
+                    b.Property<int>("Id")
+                        .HasColumnType("int")
+                        .HasColumnName("id");
+
+                    b.Property<string>("LastHash")
+                        .IsRequired()
+                        .HasMaxLength(64)
+                        .HasColumnType("char(64)")
+                        .HasColumnName("last_hash")
+                        .IsFixedLength();
+
+                    b.Property<long>("LastSequence")
+                        .HasColumnType("bigint")
+                        .HasColumnName("last_sequence");
+
+                    b.HasKey("Id")
+                        .HasName("pk_admin_audit_chain_head");
+
+                    b.ToTable("admin_audit_chain_head", (string)null);
+
+                    b.HasData(
+                        new
+                        {
+                            Id = 1,
+                            LastHash = "0000000000000000000000000000000000000000000000000000000000000000",
+                            LastSequence = 0L
+                        });
+                });
+
+            modelBuilder.Entity("BuildMind.Infrastructure.Persistence.Records.Administration.AdminAuditEventRecord", b =>
+                {
+                    b.Property<long>("Sequence")
+                        .HasColumnType("bigint")
+                        .HasColumnName("sequence");
+
+                    b.Property<string>("Action")
+                        .IsRequired()
+                        .HasMaxLength(64)
+                        .HasColumnType("varchar(64)")
+                        .HasColumnName("action");
+
+                    b.Property<Guid?>("ActorId")
+                        .HasColumnType("char(36)")
+                        .HasColumnName("actor_id");
+
+                    b.Property<string>("DetailsJson")
+                        .IsRequired()
+                        .HasColumnType("text")
+                        .HasColumnName("details_json");
+
+                    b.Property<string>("Hash")
+                        .IsRequired()
+                        .HasMaxLength(64)
+                        .HasColumnType("char(64)")
+                        .HasColumnName("hash")
+                        .IsFixedLength();
+
+                    b.Property<DateTime>("OccurredAtUtc")
+                        .HasColumnType("datetime(6)")
+                        .HasColumnName("occurred_at_utc");
+
+                    b.Property<string>("PreviousHash")
+                        .IsRequired()
+                        .HasMaxLength(64)
+                        .HasColumnType("char(64)")
+                        .HasColumnName("previous_hash")
+                        .IsFixedLength();
+
+                    b.Property<string>("Purpose")
+                        .HasMaxLength(500)
+                        .HasColumnType("varchar(500)")
+                        .HasColumnName("purpose");
+
+                    b.Property<string>("TargetId")
+                        .HasMaxLength(128)
+                        .HasColumnType("varchar(128)")
+                        .HasColumnName("target_id");
+
+                    b.Property<string>("TargetType")
+                        .IsRequired()
+                        .HasMaxLength(64)
+                        .HasColumnType("varchar(64)")
+                        .HasColumnName("target_type");
+
+                    b.HasKey("Sequence")
+                        .HasName("pk_admin_audit_events");
+
+                    b.HasIndex("ActorId")
+                        .HasDatabaseName("ix_admin_audit_events_actor_id");
+
+                    b.HasIndex("TargetType", "TargetId")
+                        .HasDatabaseName("ix_admin_audit_events_target");
+
+                    b.ToTable("admin_audit_events", (string)null);
+                });
+
+            modelBuilder.Entity("BuildMind.Infrastructure.Persistence.Records.Administration.PrincipalRoleRecord", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .HasColumnType("char(36)")
+                        .HasColumnName("id");
+
+                    b.Property<DateTime>("GrantedAtUtc")
+                        .HasColumnType("datetime(6)")
+                        .HasColumnName("granted_at_utc");
+
+                    b.Property<Guid?>("GrantedBy")
+                        .HasColumnType("char(36)")
+                        .HasColumnName("granted_by");
+
+                    b.Property<bool>("IsActive")
+                        .HasColumnType("tinyint(1)")
+                        .HasColumnName("is_active");
+
+                    b.Property<DateTime?>("RevokedAtUtc")
+                        .HasColumnType("datetime(6)")
+                        .HasColumnName("revoked_at_utc");
+
+                    b.Property<Guid?>("RevokedBy")
+                        .HasColumnType("char(36)")
+                        .HasColumnName("revoked_by");
+
+                    b.Property<string>("Role")
+                        .IsRequired()
+                        .HasMaxLength(16)
+                        .HasColumnType("varchar(16)")
+                        .HasColumnName("role");
+
+                    b.Property<Guid>("UserId")
+                        .HasColumnType("char(36)")
+                        .HasColumnName("user_id");
+
+                    b.HasKey("Id")
+                        .HasName("pk_principal_roles");
+
+                    b.HasIndex("GrantedBy")
+                        .HasDatabaseName("ix_principal_roles_granted_by");
+
+                    b.HasIndex("RevokedBy")
+                        .HasDatabaseName("ix_principal_roles_revoked_by");
+
+                    b.HasIndex("Role", "IsActive")
+                        .HasDatabaseName("ix_principal_roles_role_is_active");
+
+                    b.HasIndex("UserId", "Role")
+                        .IsUnique()
+                        .HasDatabaseName("ux_principal_roles_user_id_role");
+
+                    b.ToTable("principal_roles", (string)null);
+                });
+
+            modelBuilder.Entity("BuildMind.Infrastructure.Persistence.Records.Administration.StaffChangeProposalRecord", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .HasColumnType("char(36)")
+                        .HasColumnName("id");
+
+                    b.Property<long?>("BaseVersion")
+                        .HasColumnType("bigint")
+                        .HasColumnName("base_version");
+
+                    b.Property<string>("ChangeType")
+                        .IsRequired()
+                        .HasMaxLength(16)
+                        .HasColumnType("varchar(16)")
+                        .HasColumnName("change_type");
+
+                    b.Property<string>("Module")
+                        .IsRequired()
+                        .HasMaxLength(32)
+                        .HasColumnType("varchar(32)")
+                        .HasColumnName("module");
+
+                    b.Property<string>("PayloadJson")
+                        .IsRequired()
+                        .HasColumnType("mediumtext")
+                        .HasColumnName("payload_json");
+
+                    b.Property<DateTime>("ProposedAtUtc")
+                        .HasColumnType("datetime(6)")
+                        .HasColumnName("proposed_at_utc");
+
+                    b.Property<Guid>("ProposedBy")
+                        .HasColumnType("char(36)")
+                        .HasColumnName("proposed_by");
+
+                    b.Property<string>("ReviewNote")
+                        .HasMaxLength(1000)
+                        .HasColumnType("varchar(1000)")
+                        .HasColumnName("review_note");
+
+                    b.Property<DateTime?>("ReviewedAtUtc")
+                        .HasColumnType("datetime(6)")
+                        .HasColumnName("reviewed_at_utc");
+
+                    b.Property<Guid?>("ReviewedBy")
+                        .HasColumnType("char(36)")
+                        .HasColumnName("reviewed_by");
+
+                    b.Property<long>("RowVersion")
+                        .IsConcurrencyToken()
+                        .HasColumnType("bigint")
+                        .HasColumnName("row_version");
+
+                    b.Property<string>("Status")
+                        .IsRequired()
+                        .HasMaxLength(16)
+                        .HasColumnType("varchar(16)")
+                        .HasColumnName("status");
+
+                    b.Property<string>("TargetKey")
+                        .IsRequired()
+                        .HasMaxLength(128)
+                        .HasColumnType("varchar(128)")
+                        .HasColumnName("target_key");
+
+                    b.Property<string>("TargetType")
+                        .IsRequired()
+                        .HasMaxLength(64)
+                        .HasColumnType("varchar(64)")
+                        .HasColumnName("target_type");
+
+                    b.HasKey("Id")
+                        .HasName("pk_staff_change_proposals");
+
+                    b.HasIndex("ProposedBy")
+                        .HasDatabaseName("ix_staff_change_proposals_proposed_by");
+
+                    b.HasIndex("ReviewedBy")
+                        .HasDatabaseName("ix_staff_change_proposals_reviewed_by");
+
+                    b.HasIndex("Status", "ProposedAtUtc")
+                        .HasDatabaseName("ix_staff_change_proposals_status");
+
+                    b.ToTable("staff_change_proposals", (string)null);
+                });
+
+            modelBuilder.Entity("BuildMind.Infrastructure.Persistence.Records.Administration.StaffProfileRecord", b =>
+                {
+                    b.Property<Guid>("UserId")
+                        .HasColumnType("char(36)")
+                        .HasColumnName("user_id");
+
+                    b.Property<DateTime>("CreatedAtUtc")
+                        .HasColumnType("datetime(6)")
+                        .HasColumnName("created_at_utc");
+
+                    b.Property<Guid>("CreatedBy")
+                        .HasColumnType("char(36)")
+                        .HasColumnName("created_by");
+
+                    b.Property<string>("ModulesCsv")
+                        .IsRequired()
+                        .HasMaxLength(512)
+                        .HasColumnType("varchar(512)")
+                        .HasColumnName("modules_csv");
+
+                    b.Property<long>("ScopeVersion")
+                        .IsConcurrencyToken()
+                        .HasColumnType("bigint")
+                        .HasColumnName("scope_version");
+
+                    b.HasKey("UserId")
+                        .HasName("pk_staff_profiles");
+
+                    b.HasIndex("CreatedBy")
+                        .HasDatabaseName("ix_staff_profiles_created_by");
+
+                    b.ToTable("staff_profiles", (string)null);
+                });
+
+            modelBuilder.Entity("BuildMind.Infrastructure.Persistence.Records.Administration.StaffTaskNoteRecord", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .HasColumnType("char(36)")
+                        .HasColumnName("id");
+
+                    b.Property<Guid>("AuthorId")
+                        .HasColumnType("char(36)")
+                        .HasColumnName("author_id");
+
+                    b.Property<string>("Body")
+                        .IsRequired()
+                        .HasMaxLength(2000)
+                        .HasColumnType("varchar(2000)")
+                        .HasColumnName("body");
+
+                    b.Property<DateTime>("CreatedAtUtc")
+                        .HasColumnType("datetime(6)")
+                        .HasColumnName("created_at_utc");
+
+                    b.Property<string>("Kind")
+                        .IsRequired()
+                        .HasMaxLength(16)
+                        .HasColumnType("varchar(16)")
+                        .HasColumnName("kind");
+
+                    b.Property<Guid>("TaskId")
+                        .HasColumnType("char(36)")
+                        .HasColumnName("task_id");
+
+                    b.HasKey("Id")
+                        .HasName("pk_staff_task_notes");
+
+                    b.HasIndex("AuthorId")
+                        .HasDatabaseName("ix_staff_task_notes_author_id");
+
+                    b.HasIndex("TaskId", "CreatedAtUtc")
+                        .HasDatabaseName("ix_staff_task_notes_task_id_created");
+
+                    b.ToTable("staff_task_notes", (string)null);
+                });
+
+            modelBuilder.Entity("BuildMind.Infrastructure.Persistence.Records.Administration.StaffTaskRecord", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .HasColumnType("char(36)")
+                        .HasColumnName("id");
+
+                    b.Property<Guid>("AssignedTo")
+                        .HasColumnType("char(36)")
+                        .HasColumnName("assigned_to");
+
+                    b.Property<DateTime>("CreatedAtUtc")
+                        .HasColumnType("datetime(6)")
+                        .HasColumnName("created_at_utc");
+
+                    b.Property<Guid>("CreatedBy")
+                        .HasColumnType("char(36)")
+                        .HasColumnName("created_by");
+
+                    b.Property<string>("Description")
+                        .HasMaxLength(2000)
+                        .HasColumnType("varchar(2000)")
+                        .HasColumnName("description");
+
+                    b.Property<string>("Module")
+                        .IsRequired()
+                        .HasMaxLength(32)
+                        .HasColumnType("varchar(32)")
+                        .HasColumnName("module");
+
+                    b.Property<Guid?>("ProjectId")
+                        .HasColumnType("char(36)")
+                        .HasColumnName("project_id");
+
+                    b.Property<string>("Status")
+                        .IsRequired()
+                        .HasMaxLength(16)
+                        .HasColumnType("varchar(16)")
+                        .HasColumnName("status");
+
+                    b.Property<string>("Title")
+                        .IsRequired()
+                        .HasMaxLength(200)
+                        .HasColumnType("varchar(200)")
+                        .HasColumnName("title");
+
+                    b.Property<DateTime>("UpdatedAtUtc")
+                        .HasColumnType("datetime(6)")
+                        .HasColumnName("updated_at_utc");
+
+                    b.Property<long>("Version")
+                        .IsConcurrencyToken()
+                        .HasColumnType("bigint")
+                        .HasColumnName("version");
+
+                    b.HasKey("Id")
+                        .HasName("pk_staff_tasks");
+
+                    b.HasIndex("CreatedBy")
+                        .HasDatabaseName("ix_staff_tasks_created_by");
+
+                    b.HasIndex("ProjectId")
+                        .HasDatabaseName("ix_staff_tasks_project_id");
+
+                    b.HasIndex("AssignedTo", "Status")
+                        .HasDatabaseName("ix_staff_tasks_assigned_to_status");
+
+                    b.ToTable("staff_tasks", (string)null);
+                });
+
+            modelBuilder.Entity("BuildMind.Infrastructure.Persistence.Records.Administration.SystemPolicyRecord", b =>
+                {
+                    b.Property<string>("Key")
+                        .HasMaxLength(64)
+                        .HasColumnType("varchar(64)")
+                        .HasColumnName("policy_key");
+
+                    b.Property<DateTime>("UpdatedAtUtc")
+                        .HasColumnType("datetime(6)")
+                        .HasColumnName("updated_at_utc");
+
+                    b.Property<Guid?>("UpdatedBy")
+                        .HasColumnType("char(36)")
+                        .HasColumnName("updated_by");
+
+                    b.Property<string>("ValueJson")
+                        .IsRequired()
+                        .HasColumnType("text")
+                        .HasColumnName("value_json");
+
+                    b.Property<long>("Version")
+                        .IsConcurrencyToken()
+                        .HasColumnType("bigint")
+                        .HasColumnName("version");
+
+                    b.HasKey("Key")
+                        .HasName("pk_system_policies");
+
+                    b.HasIndex("UpdatedBy")
+                        .HasDatabaseName("ix_system_policies_updated_by");
+
+                    b.ToTable("system_policies", (string)null);
+                });
+
             modelBuilder.Entity("BuildMind.Infrastructure.Persistence.Records.Deliverables.ArchitectRequestRecord", b =>
                 {
                     b.Property<Guid>("RequestId")
@@ -1212,6 +1630,119 @@ namespace BuildMind.Infrastructure.Persistence.Migrations
                         .HasDatabaseName("ux_users_normalized_email");
 
                     b.ToTable("users", (string)null);
+                });
+
+            modelBuilder.Entity("BuildMind.Infrastructure.Persistence.Records.Administration.AdminAuditEventRecord", b =>
+                {
+                    b.HasOne("BuildMind.Infrastructure.Persistence.Records.UserRecord", null)
+                        .WithMany()
+                        .HasForeignKey("ActorId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .HasConstraintName("fk_admin_audit_events_users_actor_id");
+                });
+
+            modelBuilder.Entity("BuildMind.Infrastructure.Persistence.Records.Administration.PrincipalRoleRecord", b =>
+                {
+                    b.HasOne("BuildMind.Infrastructure.Persistence.Records.UserRecord", null)
+                        .WithMany()
+                        .HasForeignKey("GrantedBy")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .HasConstraintName("fk_principal_roles_users_granted_by");
+
+                    b.HasOne("BuildMind.Infrastructure.Persistence.Records.UserRecord", null)
+                        .WithMany()
+                        .HasForeignKey("RevokedBy")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .HasConstraintName("fk_principal_roles_users_revoked_by");
+
+                    b.HasOne("BuildMind.Infrastructure.Persistence.Records.UserRecord", null)
+                        .WithMany()
+                        .HasForeignKey("UserId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired()
+                        .HasConstraintName("fk_principal_roles_users_user_id");
+                });
+
+            modelBuilder.Entity("BuildMind.Infrastructure.Persistence.Records.Administration.StaffChangeProposalRecord", b =>
+                {
+                    b.HasOne("BuildMind.Infrastructure.Persistence.Records.UserRecord", null)
+                        .WithMany()
+                        .HasForeignKey("ProposedBy")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired()
+                        .HasConstraintName("fk_staff_change_proposals_users_proposed_by");
+
+                    b.HasOne("BuildMind.Infrastructure.Persistence.Records.UserRecord", null)
+                        .WithMany()
+                        .HasForeignKey("ReviewedBy")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .HasConstraintName("fk_staff_change_proposals_users_reviewed_by");
+                });
+
+            modelBuilder.Entity("BuildMind.Infrastructure.Persistence.Records.Administration.StaffProfileRecord", b =>
+                {
+                    b.HasOne("BuildMind.Infrastructure.Persistence.Records.UserRecord", null)
+                        .WithMany()
+                        .HasForeignKey("CreatedBy")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired()
+                        .HasConstraintName("fk_staff_profiles_users_created_by");
+
+                    b.HasOne("BuildMind.Infrastructure.Persistence.Records.UserRecord", null)
+                        .WithOne()
+                        .HasForeignKey("BuildMind.Infrastructure.Persistence.Records.Administration.StaffProfileRecord", "UserId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired()
+                        .HasConstraintName("fk_staff_profiles_users_user_id");
+                });
+
+            modelBuilder.Entity("BuildMind.Infrastructure.Persistence.Records.Administration.StaffTaskNoteRecord", b =>
+                {
+                    b.HasOne("BuildMind.Infrastructure.Persistence.Records.UserRecord", null)
+                        .WithMany()
+                        .HasForeignKey("AuthorId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired()
+                        .HasConstraintName("fk_staff_task_notes_users_author_id");
+
+                    b.HasOne("BuildMind.Infrastructure.Persistence.Records.Administration.StaffTaskRecord", null)
+                        .WithMany()
+                        .HasForeignKey("TaskId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired()
+                        .HasConstraintName("fk_staff_task_notes_staff_tasks_task_id");
+                });
+
+            modelBuilder.Entity("BuildMind.Infrastructure.Persistence.Records.Administration.StaffTaskRecord", b =>
+                {
+                    b.HasOne("BuildMind.Infrastructure.Persistence.Records.UserRecord", null)
+                        .WithMany()
+                        .HasForeignKey("AssignedTo")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired()
+                        .HasConstraintName("fk_staff_tasks_users_assigned_to");
+
+                    b.HasOne("BuildMind.Infrastructure.Persistence.Records.UserRecord", null)
+                        .WithMany()
+                        .HasForeignKey("CreatedBy")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired()
+                        .HasConstraintName("fk_staff_tasks_users_created_by");
+
+                    b.HasOne("BuildMind.Infrastructure.Persistence.Records.ProjectRecord", null)
+                        .WithMany()
+                        .HasForeignKey("ProjectId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .HasConstraintName("fk_staff_tasks_projects_project_id");
+                });
+
+            modelBuilder.Entity("BuildMind.Infrastructure.Persistence.Records.Administration.SystemPolicyRecord", b =>
+                {
+                    b.HasOne("BuildMind.Infrastructure.Persistence.Records.UserRecord", null)
+                        .WithMany()
+                        .HasForeignKey("UpdatedBy")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .HasConstraintName("fk_system_policies_users_updated_by");
                 });
 
             modelBuilder.Entity("BuildMind.Infrastructure.Persistence.Records.Deliverables.ArchitectRequestRecord", b =>
