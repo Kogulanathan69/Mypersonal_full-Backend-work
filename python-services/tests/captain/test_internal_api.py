@@ -225,3 +225,42 @@ def test_plan_schema_violations_are_reported_not_coerced():
     geometry["floors"][0]["level"] = "0"  # string, not an integer: no coercion
     result = post(client(), "/internal/v1/plans/validate", _plan_body(geometry)).json()
     assert result["geometryValid"] is False and result["diagnostics"][0]["code"] == "PLAN_SCHEMA_INVALID"
+
+
+# --- edit preview (existing M3 operations engine) ------------------------------------------------------------
+
+def _edit_body(geometry, command_type, target, payload):
+    return {"schemaVersion": "captain-plan-edit-preview/1", "baseRevisionId": str(UUID(int=0xBA5E)),
+            "sourceGeometry": geometry,
+            "command": {"commandId": str(UUID(int=0xC0DE)), "commandType": command_type,
+                        "floorId": geometry["floors"][0]["id"], "targetId": target, "payload": payload}}
+
+
+def test_edit_preview_moves_a_room_and_reports_changed_entities():
+    geometry = _generated_geometry()
+    room = geometry["floors"][0]["rooms"][0]
+    result = post(client(), "/internal/v1/plans/edit-preview",
+                  _edit_body(geometry, "moveRoom", room["id"], {"deltaX": 0.5, "deltaY": 0})).json()
+    assert result["status"] == "accepted" and result["validation"] is None
+    moved = next(r for r in result["candidateGeometry"]["floors"][0]["rooms"] if r["id"] == room["id"])
+    assert moved["polygon"][0]["x"] == room["polygon"][0]["x"] + 0.5
+    assert room["id"] in result["changedEntityIds"]
+
+
+def test_edit_preview_rejects_unknown_targets_without_geometry():
+    geometry = _generated_geometry()
+    result = post(client(), "/internal/v1/plans/edit-preview",
+                  _edit_body(geometry, "moveRoom", str(UUID(int=0xDEAD)), {"deltaX": 1, "deltaY": 0})).json()
+    assert result["status"] == "rejected" and result["candidateGeometry"] is None
+    assert result["diagnostics"][0]["code"] == "ROOM_NOT_FOUND"
+
+
+def test_edit_preview_requires_token_and_strict_json():
+    geometry = _generated_geometry()
+    body = _edit_body(geometry, "moveRoom", geometry["floors"][0]["rooms"][0]["id"], {"deltaX": 1, "deltaY": 0})
+    assert post(client(), "/internal/v1/plans/edit-preview", body, token=None).status_code == 401
+    body["command"]["commandId"] = 123  # not a UUID string: no coercion
+    assert post(client(), "/internal/v1/plans/edit-preview", body).status_code == 422
+    duplicate = client().post("/internal/v1/plans/edit-preview", content='{"schemaVersion":"a","schemaVersion":"b"}',
+                              headers={"Content-Type": "application/json", AUTH_HEADER: TOKEN})
+    assert duplicate.status_code == 422

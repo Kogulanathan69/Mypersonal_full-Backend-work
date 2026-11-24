@@ -140,4 +140,60 @@ The interrupted `generation.py` `_envelope()` edit had **not** been applied (ver
   - Result: `SessionSecurityLiveTests` passed 5/5 consecutive runs (9 tests each). No deadlock was observed in 80 mixed rounds. This is evidence, not proof.
 - **Database TLS: VerifyFull** (see DATABASE-SETUP §TLS). Two provider requirements were handled without weakening TLS: a client certificate, and a PKCS#1 key. Live MySQL 94/94 and live journey 32/32 under VerifyFull; CLI negative identity check passed.
 - **Internal Python auth:** fail closed. Covered by `tests/captain/test_internal_api.py`: missing → 401, invalid → 401, repeated header → 401, unconfigured → 503, valid → passes. Disabling is possible only with `BUILDMIND_PY_ENVIRONMENT=development`; production/missing environment raises at start-up. The live API used the real token.
+- **Readiness smoke (Phase 3 review):** see the end of the Phase 3 section.
+
+## Phase 4 — plan editing, revisions, confirmation
+
+The existing M3 services are reused unchanged:
+- `CandidatePreviewService`;
+- `EditValidationApplicationFacade` and `TrustedCandidateActionFacade`;
+- `FinalPlanConfirmationService`;
+- the full `PlanEditorEndpointModule` (history + candidates create/apply/reject).
+
+The Captain work supplies their adapters:
+
+| Adapter | Behaviour |
+|---|---|
+| `MySqlPlanRevisionStore` | `IPlanRevisionStore`: immutable revisions, protected head CAS via `PlanHead.AppendAsync` |
+| `CaptainApplicableInputs`, `CaptainConfirmedLandPort`, `CaptainAuthorizedRequirementPort` | Current land and requirement revisions; owner-authorized requirement access with the authorization snapshot |
+| `PlanEditorComputeClient` | Python `POST /internal/v1/plans/edit-preview` over the existing `apply_command` engine. Echoes the verified head as the base. Maps dependency failures to Timeout/HttpRequest exceptions so the existing M3 503/504 mapping applies. |
+| `EditGeometryHandoff` | Request-scoped. The M3 evidence port receives only the hash, so the accepted geometry is passed under that exact hash. |
+| `LedgerValidationEvidenceSource` | Server-side Python plan validation (parcel, buildable area, overlaps, openings, counts), then server-issued evidence recorded in `plan_validation_evidence` under the protected write |
+| `LedgerValidationEvidenceVerifier` | Verified only when the ledger row matches project, plan, hash and every field exactly |
+| `MySqlCandidatePreviewStore` (store + transaction) | Unique (project, plan, commandId). Apply / reject / expire are protected transactions with candidate state CAS, head CAS and immutable append. |
+| `ConfiguredValidationFreshnessPolicy` | `CaptainIntegration:ValidationFreshnessHours`, default 24 h. This is a provisional product value. |
+| `MySqlFinalConfirmationTransaction` | Protected write. The revision must be the head; one confirmation per plan. **No project lifecycle transition is applied**, because no approved M1 lifecycle writer exists. |
+| `DurableConfirmationSink` | The confirmation row is the durable hand-off to reports |
+| `MySqlPlanCatalog` | Plan list with head and confirmation |
+| `MicrosecondTimeProvider` | M3 compares timestamps exactly and MySQL keeps microseconds |
+| `PlanLifecycleEndpointModule` | `GET /projects/{id}/plans`, `GET /projects/{id}/plans/{planId}`, `POST /projects/{id}/plans/{planId}/confirmation` |
+
+- **Migration** `20261124112814_AddCaptainPlanLifecycle` (additive): `plan_edit_candidates`, `plan_confirmations`.
+- **Python change:** `ROOM_COUNTS_MISMATCH` is now severity WARNING, reported via `requirementsMatch=false`. Under M3 semantics it requires explicit acknowledgement; geometry failures stay CRITICAL (blocking).
+- **Honesty gates (existing M3 behaviour, verified live):** apply and confirmation require `acknowledgedWarnings=true` unless the evidence is `VERIFIED`. Synthetic evidence is never `VERIFIED`.
+
+### Results
+
+| Suite | Result |
+|---|---|
+| Captain Python tests | 20/20 (+3 edit preview) |
+| Application.UnitTests | 246/246 |
+| Infrastructure.Tests | 1160/1160 (run without live connection-string variables) |
+| Live MySQL | 94/94 |
+| Live journey phases 2–4 | 55/55 |
+
+Phase 4 journey coverage:
+- out-of-parcel edit → 422 `VALIDATION_EVIDENCE_INVALID`;
+- stale base revision → 409/404;
+- cross-user list/read/edit/apply/confirm → 404;
+- apply without acknowledgement → 422; apply → v2; duplicate apply → 409;
+- history [2, 1]; edit on the superseded revision → 409; explicit reject → 200;
+- confirmation: wrong hash → 409, superseded revision → 409, no acknowledgement → 422, success → 201 with a non-approval notice, duplicate → 409.
+
+**Observations:**
+1. Back-to-back journey runs hit HTTP 429 on register. The auth-strict limiter (10/min) is working; runs are spaced by more than 60 s.
+2. A harness defect: sourcing `env.sh` before the unit suites leaked `ConnectionStrings__BuildMind` and failed one startup test. This is not a product defect; it is fixed in the harness, and the rerun gave 1160/1160.
+
+**Not covered by dedicated live store tests:** the Phase 4 adapters are covered by the live API journey against real MySQL and Python, plus the unchanged M3 unit suites.
+
 - **Readiness smoke:** the `smoke_phase2.py` readiness check now asserts the exact `mysql` entry (`Healthy`/`reachable`); its requirements read-back now compares `revisionId` (it previously compared `None == None`). Rerun: 19/19.

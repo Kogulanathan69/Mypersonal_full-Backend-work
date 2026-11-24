@@ -25,6 +25,12 @@ All product routes are under `/api/v1`, use RFC 9457 errors, and require JWT plu
 | `/api/v1/projects/{projectId}/generation-jobs/{jobId}` | GET | Job + candidates | **Captain profile** | owner |
 | `/api/v1/projects/{projectId}/generation-jobs/{jobId}/candidates/{candidateId}/save` | POST | Save candidate as plan revision 1 | **Captain profile** | server re-validation + server-issued evidence + protected creation |
 
-Internal (python-services, loopback, `X-BuildMind-Internal-Token` required): `POST /internal/v1/land/validate`, `/internal/v1/generation/run`, `/internal/v1/plans/validate`; `GET /health` open.
+| `/api/v1/projects/{projectId}/plans` | GET | Plan list (head + confirmation) | **Captain profile** | fresh owner read |
+| `/api/v1/projects/{projectId}/plans/{planId}` | GET | Current plan revision (geometry, evidence) | **Captain profile** | fresh owner read |
+| `/api/v1/projects/{projectId}/plans/{planId}/candidates` | POST | M3 edit candidate (structured command → Python preview → server validation evidence) | **Captain profile** | M3 service + protected candidate insert |
+| `/api/v1/projects/{projectId}/plans/{planId}/candidates/{candidateId}/apply`, `/reject` | POST | M3 apply/reject | **Captain profile** | protected transaction: candidate CAS + head CAS + immutable append |
+| `/api/v1/projects/{projectId}/plans/{planId}/confirmation` | POST | Final confirmation of the exact current revision | **Captain profile** | M3 service + protected write (head check, one per plan) |
+
+Internal (python-services, loopback, `X-BuildMind-Internal-Token` required): `POST /internal/v1/land/validate`, `/internal/v1/generation/run`, `/internal/v1/plans/validate`, `/internal/v1/plans/edit-preview`; `GET /health` open.
 
 Phase updates append rows below.

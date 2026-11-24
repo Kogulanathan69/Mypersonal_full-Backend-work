@@ -39,6 +39,9 @@ public sealed class PersistenceRegistrationTests
              "fk_generation_jobs_land_revisions", "fk_generation_jobs_projects_project_id", "fk_generation_jobs_users_requested_by",
              "fk_land_revisions_projects_project_id", "fk_land_revisions_users_created_by",
              "fk_plan_validation_evidence_projects_project_id"]),
+        ("20261124112814_AddCaptainPlanLifecycle", ["plan_confirmations", "plan_edit_candidates"],
+            ["fk_plan_confirmations_plan_revisions", "fk_plan_confirmations_users_confirmed_by",
+             "fk_plan_edit_candidates_plan_validation_evidence", "fk_plan_edit_candidates_plans", "fk_plan_edit_candidates_users_owner_id"]),
     ];
 
     internal static readonly string[] ApprovedTables =

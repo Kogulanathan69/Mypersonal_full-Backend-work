@@ -1,4 +1,5 @@
 using BuildMind.Infrastructure.Persistence.Records;
+using BuildMind.Infrastructure.Persistence.Records.PlanEditor;
 using BuildMind.Infrastructure.Persistence.Records.Planning;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Metadata.Builders;
@@ -86,6 +87,65 @@ internal sealed class GenerationCandidateRecordConfiguration : IEntityTypeConfig
             .HasConstraintName("fk_generation_candidates_projects_project_id").OnDelete(DeleteBehavior.Restrict);
         builder.HasIndex(c => new { c.JobId, c.Ordinal }).IsUnique().HasDatabaseName("ux_generation_candidates_job_ordinal");
         builder.HasIndex(c => c.ProjectId).HasDatabaseName("ix_generation_candidates_project_id");
+    }
+}
+
+internal sealed class PlanEditCandidateRecordConfiguration : IEntityTypeConfiguration<PlanEditCandidateRecord>
+{
+    public void Configure(EntityTypeBuilder<PlanEditCandidateRecord> builder)
+    {
+        builder.ToTable("plan_edit_candidates");
+        builder.HasKey(c => c.CandidateId).HasName("pk_plan_edit_candidates");
+        builder.Property(c => c.CandidateId).HasColumnName("candidate_id").ValueGeneratedNever();
+        builder.Property(c => c.ProjectId).HasColumnName("project_id").IsRequired();
+        builder.Property(c => c.PlanId).HasColumnName("plan_id").IsRequired();
+        builder.Property(c => c.OwnerId).HasColumnName("owner_id").IsRequired();
+        builder.Property(c => c.BaseRevisionId).HasColumnName("base_revision_id").IsRequired();
+        builder.Property(c => c.LandRevisionId).HasColumnName("land_revision_id").IsRequired();
+        builder.Property(c => c.RequirementsRevisionId).HasColumnName("requirements_revision_id").IsRequired();
+        builder.Property(c => c.CommandId).HasColumnName("command_id").IsRequired();
+        builder.Property(c => c.GeometryJson).HasColumnName("geometry_json").HasColumnType("mediumtext").ForMySQLHasCharset("utf8mb4").IsRequired();
+        builder.Property(c => c.GeometryHash).HasColumnName("geometry_hash").HasMaxLength(71).IsRequired();
+        builder.Property(c => c.GeometrySchemaVersion).HasColumnName("geometry_schema_version").HasMaxLength(64).IsRequired();
+        builder.Property(c => c.ValidationId).HasColumnName("validation_id").IsRequired();
+        builder.Property(c => c.CreatedAtUtc).HasColumnName("created_at_utc").IsRequired();
+        builder.Property(c => c.ExpiresAtUtc).HasColumnName("expires_at_utc").IsRequired();
+        builder.Property(c => c.Status).HasColumnName("status").HasMaxLength(16).IsRequired();
+        builder.HasOne<PlanRecord>().WithMany().HasForeignKey(c => new { c.ProjectId, c.PlanId })
+            .HasConstraintName("fk_plan_edit_candidates_plans").OnDelete(DeleteBehavior.Restrict);
+        builder.HasOne<UserRecord>().WithMany().HasForeignKey(c => c.OwnerId)
+            .HasConstraintName("fk_plan_edit_candidates_users_owner_id").OnDelete(DeleteBehavior.Restrict);
+        builder.HasOne<PlanValidationEvidenceRecord>().WithMany().HasForeignKey(c => c.ValidationId)
+            .HasConstraintName("fk_plan_edit_candidates_plan_validation_evidence").OnDelete(DeleteBehavior.Restrict);
+        // One candidate per edit command on a plan: a replayed command cannot create a second pending candidate.
+        builder.HasIndex(c => new { c.ProjectId, c.PlanId, c.CommandId }).IsUnique().HasDatabaseName("ux_plan_edit_candidates_plan_command");
+        builder.HasIndex(c => c.OwnerId).HasDatabaseName("ix_plan_edit_candidates_owner_id");
+        builder.HasIndex(c => c.ValidationId).HasDatabaseName("ix_plan_edit_candidates_validation_id");
+    }
+}
+
+internal sealed class PlanConfirmationRecordConfiguration : IEntityTypeConfiguration<PlanConfirmationRecord>
+{
+    public void Configure(EntityTypeBuilder<PlanConfirmationRecord> builder)
+    {
+        builder.ToTable("plan_confirmations");
+        builder.HasKey(c => c.ConfirmationId).HasName("pk_plan_confirmations");
+        builder.Property(c => c.ConfirmationId).HasColumnName("confirmation_id").ValueGeneratedNever();
+        builder.Property(c => c.ProjectId).HasColumnName("project_id").IsRequired();
+        builder.Property(c => c.PlanId).HasColumnName("plan_id").IsRequired();
+        builder.Property(c => c.ConfirmedRevisionId).HasColumnName("confirmed_revision_id").IsRequired();
+        builder.Property(c => c.GeometryHash).HasColumnName("geometry_hash").HasMaxLength(71).IsRequired();
+        builder.Property(c => c.ValidationId).HasColumnName("validation_id").IsRequired();
+        builder.Property(c => c.ConfirmedBy).HasColumnName("confirmed_by").IsRequired();
+        builder.Property(c => c.ConfirmedAtUtc).HasColumnName("confirmed_at_utc").IsRequired();
+        builder.Property(c => c.WarningAcknowledgement).HasColumnName("warning_acknowledgement").IsRequired();
+        builder.HasOne<PlanRevisionRecord>().WithMany().HasForeignKey(c => new { c.ProjectId, c.PlanId, c.ConfirmedRevisionId })
+            .HasConstraintName("fk_plan_confirmations_plan_revisions").OnDelete(DeleteBehavior.Restrict);
+        builder.HasOne<UserRecord>().WithMany().HasForeignKey(c => c.ConfirmedBy)
+            .HasConstraintName("fk_plan_confirmations_users_confirmed_by").OnDelete(DeleteBehavior.Restrict);
+        builder.HasIndex(c => new { c.ProjectId, c.PlanId }).IsUnique().HasDatabaseName("ux_plan_confirmations_plan");
+        builder.HasIndex(c => c.ConfirmedBy).HasDatabaseName("ix_plan_confirmations_confirmed_by");
+        builder.HasIndex(c => new { c.ProjectId, c.PlanId, c.ConfirmedRevisionId }).HasDatabaseName("ix_plan_confirmations_revision");
     }
 }
 

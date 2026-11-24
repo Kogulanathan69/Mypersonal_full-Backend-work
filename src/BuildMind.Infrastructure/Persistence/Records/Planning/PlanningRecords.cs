@@ -51,6 +51,40 @@ internal sealed class GenerationCandidateRecord
     public DateTimeOffset CreatedAtUtc { get; init; }
 }
 
+/// <summary>M3 edit candidate (pending until applied, rejected or expired).</summary>
+internal sealed class PlanEditCandidateRecord
+{
+    public Guid CandidateId { get; init; }
+    public Guid ProjectId { get; init; }
+    public Guid PlanId { get; init; }
+    public Guid OwnerId { get; init; }
+    public Guid BaseRevisionId { get; init; }
+    public Guid LandRevisionId { get; init; }
+    public Guid RequirementsRevisionId { get; init; }
+    public Guid CommandId { get; init; }
+    public required string GeometryJson { get; init; }
+    public required string GeometryHash { get; init; }
+    public required string GeometrySchemaVersion { get; init; }
+    public Guid ValidationId { get; init; }
+    public DateTimeOffset CreatedAtUtc { get; init; }
+    public DateTimeOffset ExpiresAtUtc { get; init; }
+    public required string Status { get; set; }
+}
+
+/// <summary>Immutable final confirmation of an exact plan revision (one per plan).</summary>
+internal sealed class PlanConfirmationRecord
+{
+    public Guid ConfirmationId { get; init; }
+    public Guid ProjectId { get; init; }
+    public Guid PlanId { get; init; }
+    public Guid ConfirmedRevisionId { get; init; }
+    public required string GeometryHash { get; init; }
+    public Guid ValidationId { get; init; }
+    public Guid ConfirmedBy { get; init; }
+    public DateTimeOffset ConfirmedAtUtc { get; init; }
+    public bool WarningAcknowledgement { get; init; }
+}
+
 /// <summary>Server-issued plan validation evidence ledger; plan revisions may cite only these rows.</summary>
 internal sealed class PlanValidationEvidenceRecord
 {

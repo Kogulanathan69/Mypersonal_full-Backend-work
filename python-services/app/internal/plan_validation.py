@@ -71,7 +71,10 @@ def _result(valid: bool, requirements_match: bool | None, codes: list[str], geom
         "geometryValid": valid,
         "requirementsMatch": requirements_match,
         "geometryHash": geometry_hash,
-        "diagnostics": [{"code": c, "severity": "CRITICAL", "message": _MESSAGES[c]} for c in unique],
+        # A room-count mismatch is reported via requirementsMatch=false and needs explicit acknowledgement downstream;
+        # it is a WARNING. Every geometry failure is CRITICAL (blocking).
+        "diagnostics": [{"code": c, "severity": "WARNING" if c == "ROOM_COUNTS_MISMATCH" else "CRITICAL",
+                         "message": _MESSAGES[c]} for c in unique],
     }
 
 

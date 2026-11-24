@@ -44,6 +44,10 @@ public sealed class BuildMindMigrationTests(ITestOutputHelper output)
              "fk_generation_jobs_land_revisions=RESTRICT", "fk_generation_jobs_projects_project_id=RESTRICT",
              "fk_generation_jobs_users_requested_by=RESTRICT", "fk_land_revisions_projects_project_id=RESTRICT",
              "fk_land_revisions_users_created_by=RESTRICT", "fk_plan_validation_evidence_projects_project_id=RESTRICT"]),
+        ("20261124112814_AddCaptainPlanLifecycle", ["plan_confirmations", "plan_edit_candidates"],
+            ["fk_plan_confirmations_plan_revisions=RESTRICT", "fk_plan_confirmations_users_confirmed_by=RESTRICT",
+             "fk_plan_edit_candidates_plan_validation_evidence=RESTRICT", "fk_plan_edit_candidates_plans=RESTRICT",
+             "fk_plan_edit_candidates_users_owner_id=RESTRICT"]),
     ];
 
     private static readonly string[] ExpectedMigrations = [.. M4Migrations, .. CaptainMigrations.Select(m => m.Migration)];

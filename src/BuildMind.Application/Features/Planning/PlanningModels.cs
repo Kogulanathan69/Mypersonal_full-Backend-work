@@ -129,3 +129,15 @@ public interface IPlanCreationStore
     Task<ProtectedWriteStatus> TryCreateAsync(PlanRevisionSnapshot firstRevision, IssuedValidationEvidence evidence,
         long authorizationVersion, CancellationToken cancellationToken);
 }
+
+public sealed record PlanConfirmationSummary(Guid ConfirmationId, Guid ConfirmedRevisionId, string GeometryHash,
+    Guid ValidationId, DateTimeOffset ConfirmedAtUtc, bool WarningAcknowledgement);
+
+public sealed record PlanSummary(Guid PlanId, Guid? HeadRevisionId, long? HeadVersionNumber, DateTimeOffset? HeadCreatedAtUtc,
+    PlanConfirmationSummary? Confirmation);
+
+/// <summary>Read model of a project's plans (caller must establish ownership first).</summary>
+public interface IPlanCatalog
+{
+    Task<IReadOnlyList<PlanSummary>> ListAsync(Guid projectId, CancellationToken cancellationToken);
+}

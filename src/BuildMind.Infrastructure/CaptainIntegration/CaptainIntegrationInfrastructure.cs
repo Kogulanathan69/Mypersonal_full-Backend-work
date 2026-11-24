@@ -6,6 +6,7 @@ using BuildMind.Infrastructure.Persistence.Repositories.Projects;
 using BuildMind.Infrastructure.Persistence.Repositories.Requirements;
 using BuildMind.Application.Features.PlanEditor.Confirmation;
 using BuildMind.Application.Features.Survey.Abstractions;
+using BuildMind.Application.Features.PlanEditor.Editing;
 using BuildMind.Application.Features.Planning;
 using BuildMind.Infrastructure.Integration;
 using BuildMind.Infrastructure.Persistence.Repositories.Planning;
@@ -55,6 +56,24 @@ public static class CaptainIntegrationInfrastructure
         services.TryAddScoped<IPlanCreationStore, MySqlPlanCreationStore>();
         services.TryAddTransient<IPlanningComputeClient, PlanningComputeClient>();
         services.TryAddSingleton<IGenerationPolicyProvider, FileGenerationPolicyProvider>();
+
+        // Phase 4: adapters for the existing M3 plan editor, revision and confirmation services.
+        services.TryAddScoped<IPlanRevisionStore, MySqlPlanRevisionStore>();
+        services.TryAddScoped<IApplicableInputRevisionSource, CaptainApplicableInputs>();
+        services.TryAddScoped<IConfirmedLandRevisionPort, CaptainConfirmedLandPort>();
+        services.TryAddScoped<IAuthorizedRequirementRevisionPort, CaptainAuthorizedRequirementPort>();
+        services.TryAddScoped<EditGeometryHandoff>();
+        services.TryAddScoped<IPlanEditorComputeClient, PlanEditorComputeClient>();
+        services.TryAddScoped<ValidationLedgerWriter>();
+        services.TryAddScoped<ICandidateValidationEvidenceSource, LedgerValidationEvidenceSource>();
+        services.TryAddScoped<IPlanValidationEvidenceVerifier, LedgerValidationEvidenceVerifier>();
+        services.TryAddScoped<MySqlCandidatePreviewStore>();
+        services.TryAddScoped<ICandidatePreviewStore>(p => p.GetRequiredService<MySqlCandidatePreviewStore>());
+        services.TryAddScoped<ICandidatePreviewTransaction>(p => p.GetRequiredService<MySqlCandidatePreviewStore>());
+        services.TryAddSingleton<IValidationFreshnessPolicy, ConfiguredValidationFreshnessPolicy>();
+        services.TryAddScoped<IFinalConfirmationTransaction, MySqlFinalConfirmationTransaction>();
+        services.TryAddSingleton<IConfirmedPlanSnapshotSink, DurableConfirmationSink>();
+        services.TryAddScoped<IPlanCatalog, MySqlPlanCatalog>();
 
         return services;
     }

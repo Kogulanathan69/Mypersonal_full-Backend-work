@@ -2,6 +2,10 @@ using BuildMind.API.Endpoints.PlanEditor;
 using BuildMind.API.Endpoints.Requirements;
 using BuildMind.API.Endpoints.Planning;
 using BuildMind.API.Endpoints.Survey;
+using BuildMind.Application.Features.PlanEditor.Confirmation;
+using BuildMind.Application.Features.PlanEditor.Editing;
+using BuildMind.Application.Features.PlanEditor.Integration;
+using BuildMind.Application.Features.PlanEditor.Versioning;
 using BuildMind.Application.Features.Planning;
 using BuildMind.API.Routing;
 using BuildMind.Application.Features.Requirements.Abstractions;
@@ -29,6 +33,7 @@ namespace BuildMind.API.Composition;
 public static class CaptainLocalIntegration
 {
     public const string EnabledKey = "CaptainIntegration:Enabled";
+    public const string CandidateLifetimeKey = "CaptainIntegration:CandidateLifetimeMinutes";
 
     /// <returns>True when the profile was registered.</returns>
     public static bool AddCaptainLocalIntegration(this WebApplicationBuilder builder, bool authenticationEnabled)
@@ -66,8 +71,28 @@ public static class CaptainLocalIntegration
         services.AddSingleton<IRegulatoryEvidenceProvider, PolicyRegulatoryEvidenceProvider>();
         services.AddSingleton<IApiEndpointModule, PlanningEndpointModule>();
 
-        // M3 revision history: the two read routes only.
-        services.AddSingleton<IApiEndpointModule, PlanRevisionHistoryEndpointModule>();
+        // M3 plan editor (existing services and module): revision history, edit candidates (create/apply/reject),
+        // plus the Captain plan list/read and final confirmation routes. Time is truncated to microseconds because the
+        // M3 services compare stored timestamps exactly and MySQL datetime(6) keeps microseconds.
+        var candidateMinutes = builder.Configuration.GetValue<int?>(CandidateLifetimeKey) ?? 30;
+        if (candidateMinutes is < 1 or > 24 * 60)
+            throw new InvalidOperationException($"{CandidateLifetimeKey} must be between 1 and 1440 minutes.");
+        services.AddScoped(provider => new CandidatePreviewService(
+            provider.GetRequiredService<IProjectOwnershipGate>(), provider.GetRequiredService<IPlanRevisionStore>(),
+            provider.GetRequiredService<IApplicableInputRevisionSource>(), provider.GetRequiredService<IConfirmedLandRevisionPort>(),
+            provider.GetRequiredService<IAuthorizedRequirementRevisionPort>(), provider.GetRequiredService<IPlanEditorComputeClient>(),
+            provider.GetRequiredService<ICandidateValidationEvidenceSource>(), provider.GetRequiredService<IPlanValidationEvidenceVerifier>(),
+            provider.GetRequiredService<ICandidatePreviewStore>(), provider.GetRequiredService<ICandidatePreviewTransaction>(),
+            new MicrosecondTimeProvider(provider.GetRequiredService<TimeProvider>()), TimeSpan.FromMinutes(candidateMinutes)));
+        services.AddScoped<IEditValidationApplicationFacade, EditValidationApplicationFacade>();
+        services.AddScoped<ITrustedCandidateActionFacade, TrustedCandidateActionFacade>();
+        services.AddScoped(provider => new FinalPlanConfirmationService(
+            provider.GetRequiredService<IProjectOwnershipGate>(), provider.GetRequiredService<IPlanRevisionStore>(),
+            provider.GetRequiredService<IApplicableInputRevisionSource>(), provider.GetRequiredService<IValidationFreshnessPolicy>(),
+            provider.GetRequiredService<IFinalConfirmationTransaction>(), provider.GetRequiredService<IConfirmedPlanSnapshotSink>(),
+            new MicrosecondTimeProvider(provider.GetRequiredService<TimeProvider>())));
+        services.AddSingleton<IApiEndpointModule, PlanEditorEndpointModule>();
+        services.AddSingleton<IApiEndpointModule, PlanLifecycleEndpointModule>();
 
         return true;
     }

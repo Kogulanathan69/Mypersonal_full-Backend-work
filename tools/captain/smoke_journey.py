@@ -181,6 +181,96 @@ def phase3():
           and body["job"]["candidates"] == [], body)
 
 
+def phase4():
+    a, b, pid, plan = state["alice"]["access"], state["bob"]["access"], state["project"], state.get("plan")
+    if not check("phase 4 prerequisite: saved plan exists", plan):
+        return
+    status, plans, _ = call("GET", f"/api/v1/projects/{pid}/plans", token=a)
+    check("project plan list shows the saved plan", status == 200 and any(p["planId"] == plan for p in plans.get("plans", [])), plans)
+    status, _, _ = call("GET", f"/api/v1/projects/{pid}/plans", token=b)
+    check("cross-user plan list denied (404)", status == 404, status)
+    status, head, _ = call("GET", f"/api/v1/projects/{pid}/plans/{plan}", token=a)
+    check("current plan readable (version 1)", status == 200 and head.get("versionNumber") == 1, head)
+    status, _, _ = call("GET", f"/api/v1/projects/{pid}/plans/{plan}", token=b)
+    check("cross-user plan read denied (404)", status == 404, status)
+    floor = head["geometry"]["floors"][0]
+    room = floor["rooms"][0]
+    xs, ys = [p["x"] for p in room["polygon"]], [p["y"] for p in room["polygon"]]
+
+    def edit(command_type, target, payload, base=None):
+        return call("POST", f"/api/v1/projects/{pid}/plans/{plan}/candidates", {
+            "schemaVersion": "0.1-draft", "projectId": pid, "planId": plan, "baseRevisionId": base or head["revisionId"],
+            "command": {"commandId": str(uuid.uuid4()), "commandType": command_type, "floorId": floor["id"],
+                        "targetId": target, "payload": payload}}, token=a)
+
+    status, body, _ = edit("moveRoom", room["id"], {"deltaX": 100, "deltaY": 0})
+    check("edit moving a room outside the parcel rejected by server validation (422 VALIDATION_EVIDENCE_INVALID)",
+          status == 422 and code_of(body) == "VALIDATION_EVIDENCE_INVALID", body)
+    status, body, _ = edit("resizeRoom", room["id"], {"scaleX": 0.9, "scaleY": 1}, base=str(uuid.uuid4()))
+    check("edit against a stale/unknown base revision rejected (409/404)", status in (404, 409), body)
+    status, _, _ = call("POST", f"/api/v1/projects/{pid}/plans/{plan}/candidates", {
+        "schemaVersion": "0.1-draft", "projectId": pid, "planId": plan, "baseRevisionId": head["revisionId"],
+        "command": {"commandId": str(uuid.uuid4()), "commandType": "resizeRoom", "floorId": floor["id"], "targetId": room["id"],
+                    "payload": {"scaleX": 0.9, "scaleY": 1}}}, token=b)
+    check("cross-user edit denied (404)", status == 404, status)
+    status, candidate, _ = edit("resizeRoom", room["id"], {"scaleX": 0.9, "scaleY": 1, "anchorX": min(xs), "anchorY": min(ys)})
+    if not check("valid edit creates a validated candidate (201)", status == 201 and candidate.get("validation", {}).get("geometryValid") is True, candidate):
+        return
+    cid = candidate["candidateId"]
+    apply_path = f"/api/v1/projects/{pid}/plans/{plan}/candidates/{cid}/apply"
+    status, body, _ = call("POST", apply_path, {"acknowledgedWarnings": False}, token=a)
+    check("apply without acknowledging synthetic-evidence warnings refused (422)", status == 422, body)
+    status, _, _ = call("POST", apply_path, {"acknowledgedWarnings": True}, token=b)
+    check("cross-user apply denied (404)", status == 404, status)
+    status, applied, _ = call("POST", apply_path, {"acknowledgedWarnings": True}, token=a)
+    check("apply creates revision 2 (200)", status == 200 and applied.get("revision", {}).get("versionNumber") == 2, applied)
+    state["revision2"] = applied.get("revision", {}).get("revisionId")
+    status, body, _ = call("POST", apply_path, {"acknowledgedWarnings": True}, token=a)
+    check("duplicate apply rejected (409)", status == 409, body)
+    status, history, _ = call("GET", f"/api/v1/projects/{pid}/plans/{plan}/versions", token=a)
+    check("revision history lists versions 2,1", status == 200 and [r["versionNumber"] for r in history["revisions"]] == [2, 1], history)
+    status, body, _ = edit("resizeRoom", room["id"], {"scaleX": 0.9, "scaleY": 1})
+    check("edit against superseded revision 1 rejected (409)", status == 409, body)
+    status, rejected_candidate, _ = call("POST", f"/api/v1/projects/{pid}/plans/{plan}/candidates", {
+        "schemaVersion": "0.1-draft", "projectId": pid, "planId": plan, "baseRevisionId": state["revision2"],
+        "command": {"commandId": str(uuid.uuid4()), "commandType": "resizeRoom", "floorId": floor["id"], "targetId": room["id"],
+                    "payload": {"scaleX": 0.95, "scaleY": 1, "anchorX": min(xs), "anchorY": min(ys)}}}, token=a)
+    if status == 201:
+        status, body, _ = call("POST", f"/api/v1/projects/{pid}/plans/{plan}/candidates/{rejected_candidate['candidateId']}/reject", None, token=a)
+        check("explicit candidate rejection (200, Rejected)", status == 200 and body.get("status") == "Rejected", body)
+    else:
+        check("second candidate for rejection test created", False, rejected_candidate)
+
+    status, head2, _ = call("GET", f"/api/v1/projects/{pid}/plans/{plan}", token=a)
+    confirm = f"/api/v1/projects/{pid}/plans/{plan}/confirmation"
+    status, body, _ = call("POST", confirm, {"revisionId": head2["revisionId"], "expectedGeometryHash": "sha256:" + "0" * 64,
+                                             "acknowledgedWarnings": True}, token=a)
+    check("confirmation with a wrong geometry hash rejected (409)", status == 409 and code_of(body) == "GEOMETRY_HASH_MISMATCH", body)
+    status, body, _ = call("POST", confirm, {"revisionId": state["revision"], "expectedGeometryHash": head["geometryHash"],
+                                             "acknowledgedWarnings": True}, token=a)
+    check("confirmation of a superseded revision rejected (409)", status == 409 and code_of(body) == "NOT_CURRENT_REVISION", body)
+    status, body, _ = call("POST", confirm, {"revisionId": head2["revisionId"], "expectedGeometryHash": head2["geometryHash"],
+                                             "acknowledgedWarnings": False}, token=a)
+    check("confirmation without acknowledging warnings refused (422)", status == 422 and code_of(body) == "WARNING_ACKNOWLEDGEMENT_REQUIRED", body)
+    status, _, _ = call("POST", confirm, {"revisionId": head2["revisionId"], "expectedGeometryHash": head2["geometryHash"],
+                                          "acknowledgedWarnings": True}, token=b)
+    check("cross-user confirmation denied (404)", status == 404, status)
+    status, confirmed, _ = call("POST", confirm, {"revisionId": head2["revisionId"], "expectedGeometryHash": head2["geometryHash"],
+                                                  "acknowledgedWarnings": True}, token=a)
+    check("final plan confirmed (201) with non-approval notice", status == 201 and "not an architectural approval" in confirmed.get("notice", ""), confirmed)
+    state["confirmation"] = confirmed.get("confirmationId")
+    status, body, _ = call("POST", confirm, {"revisionId": head2["revisionId"], "expectedGeometryHash": head2["geometryHash"],
+                                             "acknowledgedWarnings": True}, token=a)
+    check("second confirmation rejected (409 ALREADY_CONFIRMED)", status == 409 and code_of(body) == "ALREADY_CONFIRMED", body)
+    status, plans, _ = call("GET", f"/api/v1/projects/{pid}/plans", token=a)
+    check("plan list reports the confirmation",
+          any(p["planId"] == plan and p.get("confirmation", {}) and p["confirmation"]["confirmedRevisionId"] == head2["revisionId"]
+              for p in plans.get("plans", [])), plans)
+
+
+EXTRA_PHASES = [(4, phase4)]
+
+
 def main():
     for number, phase in ((2, phase2), (3, phase3)):
         if number in PHASES or number == 2:

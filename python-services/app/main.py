@@ -4,6 +4,7 @@
 (app/internal/auth.py; fail closed). Interactive docs and the OpenAPI document are disabled. Error bodies carry fixed
 codes only: never exception text, request values, paths or tokens.
 """
+import json
 import logging
 
 from fastapi import FastAPI, Request
@@ -15,10 +16,26 @@ from app.internal.generation import GenerationRunRequest, run_generation
 from app.internal.land import DependencyUnavailable as LandDependencyUnavailable
 from app.internal.land import LandValidationRequest, validate_land
 from app.internal.plan_validation import DependencyUnavailable as PlanDependencyUnavailable
+from app.internal.plan_edit import parse_request as parse_edit_preview
+from app.internal.plan_edit import preview as edit_preview
 from app.internal.plan_validation import PlanValidationRequest, validate_plan
 from app.validation.boundary import ContractJsonError, parse_contract_json
+from app.validation.boundary import _unique_members as _unique_json_members
 
 MAX_BODY_BYTES = 2 * 1024 * 1024
+
+
+def _json_preflight(raw: bytes) -> None:
+    """Reject duplicate members and non-finite constants before model validation (same rules as M6 ingress)."""
+    def _bad_constant(_token):
+        raise ContractJsonError("Invalid JSON number.")
+
+    try:
+        json.loads(raw, object_pairs_hook=_unique_json_members, parse_constant=_bad_constant)
+    except ContractJsonError:
+        raise
+    except (ValueError, RecursionError):
+        raise ContractJsonError("Invalid contract JSON.") from None
 logger = logging.getLogger("buildmind-python")
 
 
@@ -44,12 +61,16 @@ def create_app(auth: InternalAuth = REQUIRED_WITHOUT_TOKENS) -> FastAPI:
             return _problem(413, "PAYLOAD_TOO_LARGE")
         return await call_next(request)
 
-    async def body(request: Request, model):
+    async def raw_json(request: Request) -> bytes:
         raw = await request.body()
         if len(raw) > MAX_BODY_BYTES:
             raise _Rejected(413, "PAYLOAD_TOO_LARGE")
         if request.headers.get("content-type", "").split(";")[0].strip().lower() != "application/json":
             raise _Rejected(415, "UNSUPPORTED_MEDIA_TYPE")
+        return raw
+
+    async def body(request: Request, model):
+        raw = await raw_json(request)
         try:
             return parse_contract_json(model, raw)
         except (ContractJsonError, ValidationError, ValueError):
@@ -85,6 +106,16 @@ def create_app(auth: InternalAuth = REQUIRED_WITHOUT_TOKENS) -> FastAPI:
     @application.post("/internal/v1/plans/validate")
     async def plan_validate(request: Request):
         return validate_plan(await body(request, PlanValidationRequest))
+
+    @application.post("/internal/v1/plans/edit-preview")
+    async def plan_edit_preview(request: Request):
+        raw = await raw_json(request)
+        try:
+            _json_preflight(raw)
+            parsed = parse_edit_preview(raw)
+        except (ContractJsonError, ValidationError, ValueError):
+            raise _Rejected(422, "VALIDATION_FAILED") from None
+        return edit_preview(parsed)
 
     return application
 

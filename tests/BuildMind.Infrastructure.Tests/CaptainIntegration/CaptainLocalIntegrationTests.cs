@@ -63,7 +63,7 @@ public sealed class CaptainLocalIntegrationTests
 
         Assert.Equal(HttpStatusCode.Unauthorized, response.StatusCode);
         Assert.Contains(factory.Services.GetServices<IApiEndpointModule>(), m => m is RequirementsEndpointModule);
-        Assert.Contains(factory.Services.GetServices<IApiEndpointModule>(), m => m is PlanRevisionHistoryEndpointModule);
+        Assert.Contains(factory.Services.GetServices<IApiEndpointModule>(), m => m is BuildMind.API.Endpoints.PlanEditor.PlanEditorEndpointModule);
     }
 
     [Fact]
