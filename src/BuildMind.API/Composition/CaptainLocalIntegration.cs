@@ -1,5 +1,6 @@
 using BuildMind.API.Endpoints.PlanEditor;
 using BuildMind.API.Endpoints.Requirements;
+using BuildMind.API.Endpoints.Survey;
 using BuildMind.API.Routing;
 using BuildMind.Application.Features.Requirements.Abstractions;
 using BuildMind.Application.Features.Requirements.Services;
@@ -51,6 +52,9 @@ public static class CaptainLocalIntegration
         services.AddScoped<IRequirementsSectionApplicationService, RequirementsSectionApplicationService>();
         services.AddSingleton<IApiEndpointModule, RequirementsEndpointModule>();
         services.AddSingleton<IApiEndpointModule, RequirementsSectionsEndpointModule>();
+
+        // M2 survey upload and status (existing services and module).
+        services.AddSurveyFeature();
 
         // M3 revision history: the two read routes only.
         services.AddSingleton<IApiEndpointModule, PlanRevisionHistoryEndpointModule>();

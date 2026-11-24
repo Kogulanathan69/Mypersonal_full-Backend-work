@@ -33,8 +33,15 @@ public sealed class SchemaModelTests
     [Fact]
     public void Model_maps_only_infrastructure_records_never_domain_types()
     {
+        // Records live under Persistence.Records (feature sub-namespaces allowed); domain types never appear.
+        var root = typeof(ProjectRecord).Namespace!;
+        Assert.Contains(typeof(PlanRecord).Namespace, new[] { root + ".PlanEditor" });
         Assert.All(Model().GetEntityTypes(), e =>
-            Assert.Contains(e.ClrType.Namespace, new[] { typeof(ProjectRecord).Namespace, typeof(PlanRecord).Namespace }));
+        {
+            Assert.True(e.ClrType.Namespace == root || e.ClrType.Namespace!.StartsWith(root + ".", StringComparison.Ordinal),
+                e.ClrType.FullName);
+            Assert.False(e.ClrType.Namespace!.StartsWith("BuildMind.Domain", StringComparison.Ordinal));
+        });
     }
 
     [Fact]
@@ -88,7 +95,7 @@ public sealed class SchemaModelTests
                 "fk_projects_users_owner_id",
                 "fk_refresh_tokens_users_user_id",
                 "fk_requirement_revisions_projects_project_id",
-            },
+            }.Concat(PersistenceRegistrationTests.CaptainMigrations.SelectMany(m => m.ForeignKeys)).Order(StringComparer.Ordinal),
             foreignKeys.Select(fk => fk.GetConstraintName()).OrderBy(n => n, StringComparer.Ordinal));
         Assert.All(foreignKeys, fk => Assert.Equal(
             fk.GetConstraintName() == "fk_plan_revisions_parent" ? DeleteBehavior.ClientNoAction : DeleteBehavior.Restrict,

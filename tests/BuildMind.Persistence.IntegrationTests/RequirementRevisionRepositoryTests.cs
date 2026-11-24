@@ -40,7 +40,9 @@ public sealed class RequirementRevisionRepositoryTests(ITestOutputHelper output)
         output.WriteLine("Tables: " + string.Join(", ", tables));
         output.WriteLine("FK/unique: " + string.Join(", ", constraints));
 
-        Assert.Equal(new[] { "password_reset_tokens", "plan_revisions", "plans", "project_requirement_heads", "projects", "refresh_tokens", "requirement_revisions", "users" }, tables);
+        // M4 baseline tables plus the additive Captain feature tables (see BuildMindMigrationTests.CaptainMigrations).
+        Assert.Equal(new[] { "password_reset_tokens", "plan_revisions", "plans", "project_requirement_heads", "projects", "refresh_tokens", "requirement_revisions", "users" }
+            .Concat(BuildMindMigrationTests.CaptainMigrations.SelectMany(m => m.Tables)).Order(StringComparer.Ordinal), tables);
         Assert.Contains("fk_refresh_tokens_users_user_id", constraints);
         Assert.Contains("ux_refresh_tokens_token_hash", constraints);
         Assert.Contains("fk_password_reset_tokens_users_user_id", constraints);

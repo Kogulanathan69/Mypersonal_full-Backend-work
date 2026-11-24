@@ -4,6 +4,11 @@ using BuildMind.Application.Features.Requirements.Abstractions;
 using BuildMind.Infrastructure.Persistence.Repositories.PlanEditor;
 using BuildMind.Infrastructure.Persistence.Repositories.Projects;
 using BuildMind.Infrastructure.Persistence.Repositories.Requirements;
+using BuildMind.Application.Features.PlanEditor.Confirmation;
+using BuildMind.Application.Features.Survey.Abstractions;
+using BuildMind.Infrastructure.Persistence.Repositories.Survey;
+using BuildMind.Infrastructure.Survey;
+using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
 
@@ -31,6 +36,19 @@ public static class CaptainIntegrationInfrastructure
         services.Replace(ServiceDescriptor.Scoped<IRequirementRevisionRepository, OwnerProtectedRequirementRevisionRepository>());
         services.TryAddSingleton<IRequirementCatalogueProvider, ConfiguredRequirementCatalogueProvider>();
 
+        // M2 survey upload/status: protected insert, CAS state updates, operator-provisioned private blob directory.
+        services.TryAddScoped<IProjectOwnershipGate, ProjectOwnershipGate>();
+        services.TryAddScoped<ISurveyRepository, SurveyRepository>();
+        services.TryAddSingleton<ISurveyStorage>(provider =>
+        {
+            var directory = provider.GetRequiredService<IConfiguration>()[SurveyStorageDirectoryKey];
+            return new PrivateSurveyFileStorage(directory
+                ?? throw new InvalidOperationException($"{SurveyStorageDirectoryKey} is required for survey upload."));
+        });
+
         return services;
     }
+
+    /// <summary>Absolute path of an operator-provisioned, exclusive private directory for survey files.</summary>
+    public const string SurveyStorageDirectoryKey = "CaptainIntegration:SurveyStorageDirectory";
 }

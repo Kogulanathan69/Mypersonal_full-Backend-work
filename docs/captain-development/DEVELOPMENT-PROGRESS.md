@@ -51,3 +51,25 @@ Existing gates are unchanged:
 - the M7 retrieval guard.
 
 Tests: the new focused suite passed 18/18. Full Infrastructure.Tests passed 1158/1158 (baseline 1140 + 18). Release build: 0 warnings.
+
+## Phase 2 — local MySQL, Survey persistence, live verification
+
+- **Database:** container `bm-captain-mysql` (MySQL 8.4.13, loopback 3417, verified TLS, least-privilege accounts). All 4 existing migrations applied with the Option B ranged script. See DATABASE-SETUP.
+- **Survey persistence (new):**
+  - `SurveyRecord`, `SurveyRecordConfiguration`;
+  - `SurveyRepository`:
+    - protected insert: fresh owner read, then project row `FOR UPDATE` + owner + version in the insert transaction;
+    - project-scoped reads;
+    - CAS state updates;
+  - migration `20261124095515_AddSurveys`.
+- **Composition:** Survey is registered under the Captain profile:
+  - existing `SurveyUploadService`, `SurveyStatusService` and `SurveyEndpointModule`;
+  - existing `PrivateSurveyFileStorage`, rooted at `CaptainIntegration:SurveyStorageDirectory`.
+- **Defect fixed (M1/M4 code):** `RefreshTokenStore.RotateAsync` intermittently deadlocked under concurrent presentation of the same token. It now takes a locking read on the presented token row first. Evidence: S03 failed in 1 of 3 full runs before the fix; after it, 10/10 consecutive runs of `SessionSecurityLiveTests` passed. Before the fix the failure was already fail-closed (deadlock → 503 by the approved D06 mapping) but it broke single-winner semantics.
+- **Migration pin tests updated:** `BuildMindMigrationTests` now has `M4Migrations`/`M4Tables` plus a `CaptainMigrations` registry, and `RequirementRevisionRepositoryTests.R01` was updated. The M4 assertions are unchanged; Captain tables are also verified to roll back to the M4 baseline.
+- **New live tests:**
+  - `SurveyRepositoryLiveTests` (4): owner insert/scoped read, non-owner denied, authorization change between read and write denied, CAS;
+  - `ProtectedRequirementLiveTests` (3): owner chain + stale expected revision, non-owner denied, stale authorization version denied inside the lock.
+- **Live API:** `tools/captain/run-api.sh` + `smoke_phase2.py`: 19/19.
+
+**Not done in Phase 2** (moved to their feature phases): generation jobs, plan candidates/revision writes, reports, architect requests.

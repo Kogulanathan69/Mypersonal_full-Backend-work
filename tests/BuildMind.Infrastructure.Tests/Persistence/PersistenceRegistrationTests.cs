@@ -23,8 +23,24 @@ public sealed class PersistenceRegistrationTests
     /// <summary>STEP 05 Batch 2A session-security schema (pending M4 migration approval).</summary>
     internal const string SessionSecurityMigrationId = "20261120202215_AddSessionSecurity";
     internal const string PlanRevisionHistoryMigrationId = "20261122080431_AddPlanRevisionHistory";
-    internal static readonly string[] ApprovedTables =
+    internal static readonly string[] M4Tables =
         ["password_reset_tokens", "plan_revisions", "plans", "project_requirement_heads", "projects", "refresh_tokens", "requirement_revisions", "users"];
+
+    /// <summary>
+    /// Captain full-backend completion: additive feature migrations after the M4 baseline, with their tables and
+    /// foreign keys. Mirrors <c>BuildMindMigrationTests.CaptainMigrations</c> in the live MySQL suite.
+    /// </summary>
+    internal static readonly (string Migration, string[] Tables, string[] ForeignKeys)[] CaptainMigrations =
+    [
+        ("20261124095515_AddSurveys", ["surveys"], ["fk_surveys_projects_project_id", "fk_surveys_users_uploaded_by"]),
+    ];
+
+    internal static readonly string[] ApprovedTables =
+        [.. M4Tables.Concat(CaptainMigrations.SelectMany(m => m.Tables)).Order(StringComparer.Ordinal)];
+
+    internal static readonly string[] AllMigrationIds =
+        [InitialMigrationId, AuthorizationMigrationId, SessionSecurityMigrationId, PlanRevisionHistoryMigrationId,
+         .. CaptainMigrations.Select(m => m.Migration)];
 
     [Fact]
     public async Task Shipped_configuration_starts_with_the_database_disabled()
@@ -155,9 +171,7 @@ public sealed class PersistenceRegistrationTests
             context.Model.GetEntityTypes().Select(e => e.GetTableName()).OrderBy(t => t, StringComparer.Ordinal));
         // The committed, reviewed migration is discoverable but never applied at start-up: the connection above
         // is still closed after the host started, so nothing connected to (let alone migrated) the database.
-        Assert.Equal(
-            new[] { InitialMigrationId, AuthorizationMigrationId, SessionSecurityMigrationId, PlanRevisionHistoryMigrationId },
-            context.Database.GetMigrations());
+        Assert.Equal(AllMigrationIds, context.Database.GetMigrations());
         Assert.All(factory.Logs.Entries, e => Assert.DoesNotContain(Secret, e.AllText, StringComparison.Ordinal));
     }
 

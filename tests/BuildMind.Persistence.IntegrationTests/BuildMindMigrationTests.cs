@@ -30,15 +30,28 @@ public sealed class BuildMindMigrationTests(ITestOutputHelper output)
     private const string AddSessionSecurity = "20261120202215_AddSessionSecurity";
 
     private const string AddPlanRevisionHistory = "20261122080431_AddPlanRevisionHistory";
-    private static readonly string[] ExpectedMigrations = [InitialFeatureSchema, AddProjectAuthorizationVersion, AddSessionSecurity, AddPlanRevisionHistory];
+    private static readonly string[] M4Migrations = [InitialFeatureSchema, AddProjectAuthorizationVersion, AddSessionSecurity, AddPlanRevisionHistory];
+
+    // Captain full-backend completion (feature/captain-full-backend-completion): additive feature migrations applied
+    // after the M4 baseline. Each entry lists the tables it creates and the foreign keys (with delete rule) it adds.
+    internal static readonly (string Migration, string[] Tables, string[] ForeignKeys)[] CaptainMigrations =
+    [
+        ("20261124095515_AddSurveys", ["surveys"],
+            ["fk_surveys_projects_project_id=RESTRICT", "fk_surveys_users_uploaded_by=RESTRICT"]),
+    ];
+
+    private static readonly string[] ExpectedMigrations = [.. M4Migrations, .. CaptainMigrations.Select(m => m.Migration)];
 
     private static readonly string[] InitialTables = ["project_requirement_heads", "projects", "requirement_revisions", "users"];
 
     private static readonly string[] SessionSecurityTables =
         ["password_reset_tokens", "project_requirement_heads", "projects", "refresh_tokens", "requirement_revisions", "users"];
 
-    private static readonly string[] Tables =
+    private static readonly string[] M4Tables =
         ["password_reset_tokens", "plan_revisions", "plans", "project_requirement_heads", "projects", "refresh_tokens", "requirement_revisions", "users"];
+
+    private static readonly string[] Tables =
+        [.. M4Tables.Concat(CaptainMigrations.SelectMany(m => m.Tables)).Order(StringComparer.Ordinal)];
 
     [Fact]
     public async Task M01_migrations_exist_in_order_and_match_the_model()
@@ -81,7 +94,7 @@ public sealed class BuildMindMigrationTests(ITestOutputHelper output)
                 "fk_projects_users_owner_id=RESTRICT",
                 "fk_refresh_tokens_users_user_id=RESTRICT",
                 "fk_requirement_revisions_projects_project_id=RESTRICT",
-            },
+            }.Concat(CaptainMigrations.SelectMany(m => m.ForeignKeys)).Order(StringComparer.Ordinal),
             deleteRules.Where(rule => !rule.StartsWith("fk_plan_revisions_parent=", StringComparison.Ordinal)));
 
         var indexes = await ListAsync(database,
@@ -144,12 +157,17 @@ public sealed class BuildMindMigrationTests(ITestOutputHelper output)
         await ExecuteAsync(database,
             $"INSERT INTO users (id, email, normalized_email, password_hash, is_active, created_at_utc, token_version) VALUES ('{userId}', 'rollback@example.invalid', 'ROLLBACK@EXAMPLE.INVALID', 'synthetic-hash', 1, UTC_TIMESTAMP(6), 1);");
 
+        // Captain feature migrations roll back to exactly the M4 baseline schema.
+        await migrator.MigrateAsync(AddPlanRevisionHistory);
+        Assert.Equal(M4Tables, await FeatureTablesAsync(database));
+        Assert.Equal(M4Migrations, await context.Database.GetAppliedMigrationsAsync());
+
         await migrator.MigrateAsync(AddSessionSecurity);
         Assert.Equal(SessionSecurityTables, await FeatureTablesAsync(database));
-        Assert.Equal(ExpectedMigrations[..^1], await context.Database.GetAppliedMigrationsAsync());
+        Assert.Equal(M4Migrations[..^1], await context.Database.GetAppliedMigrationsAsync());
         Assert.Equal(new[] { userId }, await ListAsync(database, "SELECT id FROM users;"));
         await migrator.MigrateAsync(AddPlanRevisionHistory);
-        Assert.Equal(Tables, await FeatureTablesAsync(database));
+        Assert.Equal(M4Tables, await FeatureTablesAsync(database));
 
         await migrator.MigrateAsync(AddProjectAuthorizationVersion);
         Assert.Equal(InitialTables, await FeatureTablesAsync(database));
@@ -210,8 +228,8 @@ public sealed class BuildMindMigrationTests(ITestOutputHelper output)
 
         await ExecuteScriptAsync(database, script);
 
-        Assert.Equal(Tables, await FeatureTablesAsync(database));
-        Assert.Equal(ExpectedMigrations, await context.Database.GetAppliedMigrationsAsync());
+        Assert.Equal(M4Tables, await FeatureTablesAsync(database));
+        Assert.Equal(M4Migrations, await context.Database.GetAppliedMigrationsAsync());
         // Existing users receive the column default (token_version = 1): no data fix is needed after the upgrade.
         Assert.Equal(new[] { "1" }, await ListAsync(database, $"SELECT token_version FROM users WHERE id = '{userId}';"));
     }

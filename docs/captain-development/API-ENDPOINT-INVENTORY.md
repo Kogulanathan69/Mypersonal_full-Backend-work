@@ -17,4 +17,7 @@ All product routes are under `/api/v1`, use RFC 9457 errors, and require JWT plu
 | `/api/v1/projects/{id}/requirements/spaces`, `/relationships`, `/summary`; `/projects/{id}/design-method` | GET/PUT | M5 requirement sections | **`CaptainIntegration:Enabled`** | as above |
 | `/api/v1/projects/{projectId}/plans/{planId}/versions`, `/versions/{revisionId}` | GET | M3 revision history | **`CaptainIntegration:Enabled`** | fresh owner authorization read before and after the history read |
 
+| `/api/v1/projects/{id}/surveys` | POST (multipart `file`) | M2 survey upload | **`CaptainIntegration:Enabled`** + `CaptainIntegration:SurveyStorageDirectory` | owner gate, then protected insert (project row lock + owner + version) |
+| `/api/v1/projects/{id}/surveys/{surveyId}` | GET | M2 survey status | **`CaptainIntegration:Enabled`** | owner gate + project-scoped read |
+
 Phase updates append rows below.

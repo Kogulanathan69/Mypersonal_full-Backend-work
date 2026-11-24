@@ -394,6 +394,91 @@ namespace BuildMind.Infrastructure.Persistence.Migrations
                     b.ToTable("requirement_revisions", (string)null);
                 });
 
+            modelBuilder.Entity("BuildMind.Infrastructure.Persistence.Records.Survey.SurveyRecord", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .HasColumnType("char(36)")
+                        .HasColumnName("id");
+
+                    b.Property<long>("ByteLength")
+                        .HasColumnType("bigint")
+                        .HasColumnName("byte_length");
+
+                    b.Property<DateTime?>("CompletedAtUtc")
+                        .HasColumnType("datetime(6)")
+                        .HasColumnName("completed_at_utc");
+
+                    b.Property<DateTime?>("FailedAtUtc")
+                        .HasColumnType("datetime(6)")
+                        .HasColumnName("failed_at_utc");
+
+                    b.Property<string>("FailureCode")
+                        .HasMaxLength(64)
+                        .HasColumnType("varchar(64)")
+                        .HasColumnName("failure_code");
+
+                    b.Property<string>("MediaType")
+                        .IsRequired()
+                        .HasMaxLength(32)
+                        .HasColumnType("varchar(32)")
+                        .HasColumnName("media_type");
+
+                    b.Property<string>("OriginalFileName")
+                        .IsRequired()
+                        .HasMaxLength(255)
+                        .HasColumnType("varchar(255)")
+                        .HasColumnName("original_file_name");
+
+                    b.Property<Guid>("ProjectId")
+                        .HasColumnType("char(36)")
+                        .HasColumnName("project_id");
+
+                    b.Property<string>("Sha256Hash")
+                        .IsRequired()
+                        .HasMaxLength(64)
+                        .HasColumnType("char(64)")
+                        .HasColumnName("sha256_hash")
+                        .IsFixedLength();
+
+                    b.Property<long>("StateVersion")
+                        .IsConcurrencyToken()
+                        .HasColumnType("bigint")
+                        .HasColumnName("state_version");
+
+                    b.Property<string>("Status")
+                        .IsRequired()
+                        .HasMaxLength(16)
+                        .HasColumnType("varchar(16)")
+                        .HasColumnName("status");
+
+                    b.Property<Guid>("StorageId")
+                        .HasColumnType("char(36)")
+                        .HasColumnName("storage_id");
+
+                    b.Property<DateTime>("UploadedAtUtc")
+                        .HasColumnType("datetime(6)")
+                        .HasColumnName("uploaded_at_utc");
+
+                    b.Property<Guid>("UploadedBy")
+                        .HasColumnType("char(36)")
+                        .HasColumnName("uploaded_by");
+
+                    b.HasKey("Id")
+                        .HasName("pk_surveys");
+
+                    b.HasIndex("StorageId")
+                        .IsUnique()
+                        .HasDatabaseName("ux_surveys_storage_id");
+
+                    b.HasIndex("UploadedBy")
+                        .HasDatabaseName("ix_surveys_uploaded_by");
+
+                    b.HasIndex("ProjectId", "UploadedAtUtc")
+                        .HasDatabaseName("ix_surveys_project_id_uploaded_at_utc");
+
+                    b.ToTable("surveys", (string)null);
+                });
+
             modelBuilder.Entity("BuildMind.Infrastructure.Persistence.Records.UserRecord", b =>
                 {
                     b.Property<Guid>("Id")
@@ -540,6 +625,23 @@ namespace BuildMind.Infrastructure.Persistence.Migrations
                         .OnDelete(DeleteBehavior.Restrict)
                         .IsRequired()
                         .HasConstraintName("fk_requirement_revisions_projects_project_id");
+                });
+
+            modelBuilder.Entity("BuildMind.Infrastructure.Persistence.Records.Survey.SurveyRecord", b =>
+                {
+                    b.HasOne("BuildMind.Infrastructure.Persistence.Records.ProjectRecord", null)
+                        .WithMany()
+                        .HasForeignKey("ProjectId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired()
+                        .HasConstraintName("fk_surveys_projects_project_id");
+
+                    b.HasOne("BuildMind.Infrastructure.Persistence.Records.UserRecord", null)
+                        .WithMany()
+                        .HasForeignKey("UploadedBy")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired()
+                        .HasConstraintName("fk_surveys_users_uploaded_by");
                 });
 #pragma warning restore 612, 618
         }

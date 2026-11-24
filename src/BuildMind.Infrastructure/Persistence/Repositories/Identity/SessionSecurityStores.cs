@@ -76,6 +76,15 @@ internal sealed class RefreshTokenStore(BuildMindDbContext context, TransactionR
         CancellationToken cancellationToken) =>
         transactions.ExecuteAsync(async token =>
         {
+            // Serialize every presenter of this token on its row BEFORE any other lock is taken. Without this the
+            // winner (claim, then insert under the users FK) and a loser (replay: revoke the family, bump the user's
+            // token_version) acquired locks in opposite orders and InnoDB intermittently chose a deadlock victim
+            // (observed in SessionSecurityLiveTests.S03, Captain run 2026-11-24). Losers now wait here and observe
+            // the committed claim, so they take the replay path without contending with the winner.
+            await context.Database
+                .SqlQuery<int>($"SELECT 1 AS Value FROM refresh_tokens WHERE token_hash = {presentedTokenHash} FOR UPDATE")
+                .ToListAsync(token);
+
             var current = await context.Set<RefreshTokenRecord>()
                 .AsNoTracking()
                 .Where(t => t.TokenHash == presentedTokenHash)
