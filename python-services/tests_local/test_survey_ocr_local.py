@@ -8,6 +8,8 @@ import os
 import subprocess
 import tempfile
 
+import pytest
+
 from app.internal.survey_extract import SurveyExtractRequest, extract
 from app.survey import ocr
 from tests.test_survey_pdf_text_extractor import make_text_pdf
@@ -45,3 +47,14 @@ def test_real_ocr_on_blank_image_finds_nothing_and_requires_manual_review():
     png = _png_from_text("")
     extraction = extract(_request(png, "image/png"))["extraction"]
     assert extraction["status"] == "NEEDS_REVIEW" and extraction["measurements"] == []
+
+
+def test_installed_languages_include_english_and_report_sinhala_tamil_when_present():
+    langs = ocr.languages().split("+")
+    assert "eng" in langs
+
+
+def test_malformed_pdf_fails_closed_with_fixed_message():
+    with pytest.raises(ocr.OcrFailed) as error:
+        ocr.ocr_pages(b"%PDF-1.4\nthis is not a pdf", "application/pdf")
+    assert str(error.value) == "PDF could not be rasterised."

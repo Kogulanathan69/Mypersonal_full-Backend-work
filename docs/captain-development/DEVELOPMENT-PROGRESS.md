@@ -334,3 +334,20 @@ Phase 6 journey coverage:
 - E: admin/AI/email/dispatch/cost-3D out of scope or blocked by decision.
 
 **Next task** (requires owner decisions; see the handover): contract ratification by M2/M3/M6 and M4 review of the migrations. No push or merge without explicit authorization.
+
+## Extended execution order (2026-11-24/25): continuity log
+
+| Checkpoint | Content | Evidence |
+|---|---|---|
+| `252d29f` | Phase 1: Admin/Staff RBAC, proposal queue, tasks, audit chain, SMTP + Mailpit, staff invitations | 9 live admin tests; `smoke_admin.py` 54/54 |
+| `167078d` | Phase 2: password change, email verification, security events | `smoke_admin.py` 65/65 |
+| (next) | Phase 4: lease heartbeat (lease < timeout defect fixed), deferred blob delete + authoritative orphan reconciler (uncertain-commit defect fixed), OCR sandbox, eng+sin+tam (was English-only), survey review/correction workflow | 12 live survey tests; python 992 (+43 Captain/local); journey 2,3,8 66/66 |
+
+**Resume notes:**
+- Stack: `tools/captain/restart-stack.sh` (Mailpit included). Admin credentials live in `~/bm-captain/secrets/captain-admin.*`; the bootstrap is inert now.
+- Journeys:
+  - `smoke_journey.py` (customer, phases 2–8);
+  - `smoke_admin.py` (admin/staff/account security).
+
+  Allow at least 60 s between runs (auth limiter).
+- Next phases: lifecycle (X-11), requirements catalogue (X-17), architect portal + outbox + notifications (X-24/25), AI edit local adapter (X-21), RH09 investigation, internal mTLS, infrastructure/backup, documentation.

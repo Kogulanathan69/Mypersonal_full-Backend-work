@@ -47,8 +47,9 @@ public static class CaptainIntegrationInfrastructure
         services.TryAddSingleton<ISurveyStorage>(provider =>
         {
             var directory = provider.GetRequiredService<IConfiguration>()[SurveyStorageDirectoryKey];
-            return new PrivateSurveyFileStorage(directory
-                ?? throw new InvalidOperationException($"{SurveyStorageDirectoryKey} is required for survey upload."));
+            return new DeferredDeleteSurveyStorage(new PrivateSurveyFileStorage(directory
+                ?? throw new InvalidOperationException($"{SurveyStorageDirectoryKey} is required for survey upload.")),
+                provider.GetRequiredService<Microsoft.Extensions.Logging.ILogger<DeferredDeleteSurveyStorage>>());
         });
 
         // Captain planning: land revisions, generation jobs/candidates, plan creation, Python compute routes.
@@ -89,6 +90,8 @@ public static class CaptainIntegrationInfrastructure
         services.TryAddScoped<SurveyWorkQueue>();
         services.TryAddScoped<SurveyExtractionProcessor>();
         services.TryAddScoped<ISurveyExtractionWork, SurveyExtractionWork>();
+        services.TryAddScoped<SurveyStorageReconciler>();
+        services.TryAddScoped<ISurveyReviewStore, MySqlSurveyReviewStore>();
         services.TryAddTransient<ISurveyExtractionClient, SurveyExtractionClient>();
         services.TryAddScoped<ISurveyExtractionReader, MySqlSurveyExtractionReader>();
         services.TryAddScoped<IPlanVersionAppendStore, MySqlPlanVersionAppendStore>();

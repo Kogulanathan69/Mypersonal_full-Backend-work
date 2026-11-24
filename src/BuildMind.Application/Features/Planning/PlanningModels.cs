@@ -188,4 +188,7 @@ public interface ISurveyExtractionWork
 
     /// <summary>Claims and processes one survey; returns a short outcome label (never document content).</summary>
     Task<string> ProcessAsync(Guid surveyId, CancellationToken cancellationToken);
+
+    /// <summary>Deletes survey blobs that no survey row references and that are older than the grace period.</summary>
+    Task<string> ReconcileStorageAsync(CancellationToken cancellationToken);
 }

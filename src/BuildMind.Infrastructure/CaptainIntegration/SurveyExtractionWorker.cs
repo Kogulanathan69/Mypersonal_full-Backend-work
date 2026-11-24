@@ -149,6 +149,19 @@ internal sealed class SurveyWorkQueue(BuildMindDbContext context, TransactionRun
         };
     }
 
+    /// <summary>Extends the lease only while this claimer still owns it (lease-token CAS). Null when the claim was lost.</summary>
+    public async Task<Claim?> TryRenewAsync(Claim claim, DateTimeOffset now, TimeSpan lease, CancellationToken token)
+    {
+        var raw = now + lease;
+        var next = raw.AddTicks(-(raw.Ticks % 10));
+        if (next <= claim.LeaseUntil) return claim;
+        var renewed = await context.Set<SurveyRecord>()
+            .Where(s => s.Id == claim.Survey.Id && s.Status == nameof(SurveyStatus.Processing) && s.StateVersion == 2
+                        && s.ProcessingLeaseUntilUtc == claim.LeaseUntil)
+            .ExecuteUpdateAsync(u => u.SetProperty(s => s.ProcessingLeaseUntilUtc, next), token).ConfigureAwait(false);
+        return renewed == 1 ? claim with { LeaseUntil = next } : null;
+    }
+
     public async Task<bool> FailAsync(Claim claim, string code, DateTimeOffset now, CancellationToken token) =>
         await context.Set<SurveyRecord>()
             .Where(s => s.Id == claim.Survey.Id && s.Status == nameof(SurveyStatus.Processing) && s.StateVersion == 2
@@ -185,10 +198,48 @@ internal sealed class SurveyExtractionProcessor(
         using (var bounded = CancellationTokenSource.CreateLinkedTokenSource(token))
         {
             bounded.CancelAfter(options.ProcessingTimeout);
+            // Lease heartbeat: renews this claim's lease (CAS on its own lease token) every third of the lease while
+            // Python runs, so a healthy long extraction is never reclaimed. If the lease is lost, processing stops.
+            var lost = false;
+            using var heartbeatStop = new CancellationTokenSource();
+            var heartbeat = Task.Run(async () =>
+            {
+                try
+                {
+                    while (true)
+                    {
+                        await Task.Delay(options.Lease / 3, heartbeatStop.Token).ConfigureAwait(false);
+                        if (await queue.TryRenewAsync(claim, clock.GetUtcNow(), options.Lease, heartbeatStop.Token).ConfigureAwait(false)
+                            is { } renewed)
+                            claim = renewed;
+                        else
+                        {
+                            lost = true;
+                            await bounded.CancelAsync().ConfigureAwait(false);
+                            return;
+                        }
+                    }
+                }
+                catch (OperationCanceledException) { }
+            }, CancellationToken.None);
             try
             {
-                output = await extraction.ExtractAsync(new SurveyExtractionInput(extractionId, survey.StorageId, survey.MediaType,
-                    blob.Content, survey.Sha256Hash), bounded.Token).ConfigureAwait(false);
+                try
+                {
+                    output = await extraction.ExtractAsync(new SurveyExtractionInput(extractionId, survey.StorageId, survey.MediaType,
+                        blob.Content, survey.Sha256Hash), bounded.Token).ConfigureAwait(false);
+                }
+                finally
+                {
+                    await heartbeatStop.CancelAsync().ConfigureAwait(false);
+                    await heartbeat.ConfigureAwait(false); // the DbContext is never used concurrently
+                }
+                if (lost) return "LOST";
+            }
+            catch (OperationCanceledException) when (lost)
+            {
+                logger.LogWarning("Survey extraction lease lost; result discarded (survey {SurveyId})", survey.Id);
+                return "LOST";
             }
             catch (DependencyFailureException failure) when (failure.Kind == DependencyFailureKind.MalformedResponse)
             {
@@ -241,8 +292,14 @@ internal sealed class MySqlSurveyExtractionReader(BuildMindDbContext context) : 
 
 /// <summary>Scoped facade for the hosted loop (which lives in the API host): find claimable surveys, process one.</summary>
 internal sealed class SurveyExtractionWork(SurveyWorkQueue queue, SurveyExtractionProcessor processor, IConfiguration configuration,
-    TimeProvider time) : ISurveyExtractionWork
+    TimeProvider time, SurveyStorageReconciler reconciler) : ISurveyExtractionWork
 {
+    public async Task<string> ReconcileStorageAsync(CancellationToken token)
+    {
+        var r = await reconciler.ReconcileAsync(SurveyStorageReconciler.DefaultGrace, 5000, token).ConfigureAwait(false);
+        return $"scanned={r.Scanned} referenced={r.Referenced} recent={r.TooRecent} deleted={r.Deleted} unparsable={r.UnparsableNames}";
+    }
+
     public async Task<IReadOnlyList<Guid>> FindClaimableAsync(int limit, CancellationToken token) =>
         await queue.FindClaimableAsync(time.GetUtcNow(), limit, token).ConfigureAwait(false);
 

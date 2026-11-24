@@ -44,6 +44,33 @@ internal sealed class SurveyRecordConfiguration : IEntityTypeConfiguration<Surve
     }
 }
 
+internal sealed class SurveyExtractionReviewRecordConfiguration : IEntityTypeConfiguration<SurveyExtractionReviewRecord>
+{
+    public void Configure(EntityTypeBuilder<SurveyExtractionReviewRecord> builder)
+    {
+        builder.ToTable("survey_extraction_reviews");
+        builder.HasKey(r => r.ReviewId).HasName("pk_survey_extraction_reviews");
+        builder.Property(r => r.ReviewId).HasColumnName("review_id").ValueGeneratedNever();
+        builder.Property(r => r.ExtractionId).HasColumnName("extraction_id").IsRequired();
+        builder.Property(r => r.SurveyId).HasColumnName("survey_id").IsRequired();
+        builder.Property(r => r.ProjectId).HasColumnName("project_id").IsRequired();
+        builder.Property(r => r.Version).HasColumnName("version").IsRequired();
+        builder.Property(r => r.ReviewedBy).HasColumnName("reviewed_by").IsRequired();
+        builder.Property(r => r.DecisionsJson).HasColumnName("decisions_json").HasColumnType("mediumtext").IsRequired();
+        builder.Property(r => r.Note).HasColumnName("note").HasMaxLength(1000);
+        builder.Property(r => r.CreatedAtUtc).HasColumnName("created_at_utc").IsRequired();
+        builder.HasOne<SurveyExtractionRecord>().WithMany().HasForeignKey(r => r.ExtractionId)
+            .HasConstraintName("fk_survey_extraction_reviews_extractions").OnDelete(DeleteBehavior.Restrict);
+        builder.HasOne<ProjectRecord>().WithMany().HasForeignKey(r => r.ProjectId)
+            .HasConstraintName("fk_survey_extraction_reviews_projects").OnDelete(DeleteBehavior.Restrict);
+        builder.HasOne<UserRecord>().WithMany().HasForeignKey(r => r.ReviewedBy)
+            .HasConstraintName("fk_survey_extraction_reviews_users").OnDelete(DeleteBehavior.Restrict);
+        builder.HasIndex(r => new { r.ExtractionId, r.Version }).IsUnique().HasDatabaseName("ux_survey_extraction_reviews_version");
+        builder.HasIndex(r => r.ProjectId).HasDatabaseName("ix_survey_extraction_reviews_project_id");
+        builder.HasIndex(r => r.ReviewedBy).HasDatabaseName("ix_survey_extraction_reviews_reviewed_by");
+    }
+}
+
 internal sealed class SurveyExtractionRecordConfiguration : IEntityTypeConfiguration<SurveyExtractionRecord>
 {
     public void Configure(EntityTypeBuilder<SurveyExtractionRecord> builder)

@@ -16,10 +16,18 @@ public sealed class SurveyExtractionHostedService(IServiceScopeFactory scopes, I
         var options = SurveyWorkerOptions.From(configuration);
         using var gate = new SemaphoreSlim(options.Concurrency);
         var running = new List<Task>();
+        var nextReconciliation = DateTimeOffset.MinValue;
         while (!stoppingToken.IsCancellationRequested)
         {
             try
             {
+                if (DateTimeOffset.UtcNow >= nextReconciliation)
+                {
+                    nextReconciliation = DateTimeOffset.UtcNow.AddMinutes(10);
+                    await using var reconcileScope = scopes.CreateAsyncScope();
+                    var report = await reconcileScope.ServiceProvider.GetRequiredService<ISurveyExtractionWork>().ReconcileStorageAsync(stoppingToken);
+                    logger.LogInformation("Survey storage reconciliation: {Report}", report);
+                }
                 IReadOnlyList<Guid> candidates;
                 await using (var scope = scopes.CreateAsyncScope())
                     candidates = await scope.ServiceProvider.GetRequiredService<ISurveyExtractionWork>()

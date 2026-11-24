@@ -94,5 +94,13 @@ def extract(request: SurveyExtractRequest) -> dict:
     payload = result.model_dump(mode="json")
     payload["measurements"] = payload["measurements"][:MAX_MEASUREMENTS]
     payload["diagnostics"] = [re.sub(r"[\x00-\x1f\x7f]", " ", d)[:300] for d in payload["diagnostics"][:MAX_DIAGNOSTICS]]
-    return {"schemaVersion": SCHEMA, "method": method, "ocrLanguages": ocr.LANGUAGES if method == "OCR" else None,
+    return {"schemaVersion": SCHEMA, "method": method, "ocrLanguages": _reported_languages() if method == "OCR" else None,
             "extraction": payload}
+
+
+def _reported_languages() -> str | None:
+    """Installed OCR languages actually used (None when OCR is unavailable)."""
+    try:
+        return ocr.languages()
+    except ocr.OcrUnavailable:
+        return None

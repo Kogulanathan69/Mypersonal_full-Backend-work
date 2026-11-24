@@ -179,13 +179,82 @@ public sealed class SurveyExtractionLiveTests : IDisposable
         public int Calls { get; private set; }
         public string Outcome { get; init; } = "COMPLETED";
         public Exception? Failure { get; set; }
+        public TimeSpan Delay { get; init; }
 
-        public Task<SurveyExtractionOutput> ExtractAsync(SurveyExtractionInput input, CancellationToken token)
+        public async Task<SurveyExtractionOutput> ExtractAsync(SurveyExtractionInput input, CancellationToken token)
         {
             Calls++;
+            if (Delay > TimeSpan.Zero) await Task.Delay(Delay, token);
             if (Failure is not null) throw Failure;
-            return Task.FromResult(new SurveyExtractionOutput(Outcome, "OCR",
-                $$"""{"extraction_id":"{{input.ExtractionId}}","file_id":"{{input.FileId}}","status":"{{Outcome}}","measurements":[],"diagnostics":[]}"""));
+            return new SurveyExtractionOutput(Outcome, "OCR",
+                $$"""{"extraction_id":"{{input.ExtractionId}}","file_id":"{{input.FileId}}","status":"{{Outcome}}","measurements":[],"diagnostics":[]}""");
         }
+    }
+
+    [Fact]
+    public async Task H01_heartbeat_keeps_a_long_extraction_from_being_reclaimed()
+    {
+        await using var db = await SchemaAsync();
+        var survey = await QueuedAsync(db, [0x25, 0x50, 0x44, 0x46, 7]);
+        var options = new SurveyWorkerOptions(TimeSpan.FromSeconds(1), 1, TimeSpan.FromSeconds(3), 3, TimeSpan.FromSeconds(30));
+        await using var context = Context(db);
+        var work = Processor(context, new FakeExtraction { Delay = TimeSpan.FromSeconds(7) }).ProcessAsync(survey.Id, options, default);
+        await Task.Delay(TimeSpan.FromSeconds(5)); // beyond the initial 3 s lease
+        await using (var competitor = Context(db))
+            Assert.Null(await Queue(competitor).TryClaimAsync(survey.Id, DateTimeOffset.UtcNow, TimeSpan.FromSeconds(3), 3, default));
+        Assert.Equal("COMPLETED", await work);
+    }
+
+    [Fact]
+    public async Task H02_a_worker_whose_lease_was_taken_over_discards_its_result()
+    {
+        await using var db = await SchemaAsync();
+        var survey = await QueuedAsync(db, [0x25, 0x50, 0x44, 0x46, 8]);
+        var options = new SurveyWorkerOptions(TimeSpan.FromSeconds(1), 1, TimeSpan.FromSeconds(30), 3, TimeSpan.FromSeconds(60));
+        await using var context = Context(db);
+        var slow = new FakeExtraction { Delay = TimeSpan.FromSeconds(15) };
+        var work = Processor(context, slow).ProcessAsync(survey.Id, options with { Lease = TimeSpan.FromSeconds(9) }, default);
+        await Task.Delay(TimeSpan.FromSeconds(1));
+        await using (var other = Context(db))
+        {
+            // Simulate the first worker stalling: its lease expires and another worker reclaims the survey.
+            await other.Database.ExecuteSqlInterpolatedAsync(
+                $"UPDATE surveys SET processing_lease_until_utc = {DateTime.UtcNow.AddMinutes(-1)} WHERE id = {survey.Id}");
+            Assert.NotNull(await Queue(other).TryClaimAsync(survey.Id, DateTimeOffset.UtcNow, TimeSpan.FromMinutes(5), 3, default));
+        }
+        Assert.Equal("LOST", await work);
+        await using var check = Context(db);
+        Assert.Equal(0, await check.Set<SurveyExtractionRecord>().CountAsync(e => e.SurveyId == survey.Id));
+        Assert.Equal(nameof(SurveyStatus.Processing), (await check.Set<SurveyRecord>().AsNoTracking().SingleAsync(s => s.Id == survey.Id)).Status);
+    }
+
+    [Fact]
+    public async Task R01_deferred_delete_keeps_blobs_and_reconciliation_removes_only_old_unreferenced_ones()
+    {
+        await using var db = await SchemaAsync();
+        var referenced = await QueuedAsync(db, [0x25, 0x50, 0x44, 0x46, 9]);
+        var referencedPath = Path.Combine(storage, referenced.StorageId.ToString("N") + ".blob");
+        var oldOrphan = Path.Combine(storage, Guid.NewGuid().ToString("N") + ".blob");
+        var recentOrphan = Path.Combine(storage, Guid.NewGuid().ToString("N") + ".blob");
+        await File.WriteAllBytesAsync(oldOrphan, [1]);
+        await File.WriteAllBytesAsync(recentOrphan, [2]);
+        File.SetLastWriteTimeUtc(oldOrphan, DateTime.UtcNow.AddHours(-2));
+        File.SetLastWriteTimeUtc(referencedPath, DateTime.UtcNow.AddHours(-2));
+
+        var deferred = new DeferredDeleteSurveyStorage(new BuildMind.Infrastructure.Survey.PrivateSurveyFileStorage(storage),
+            NullLogger<DeferredDeleteSurveyStorage>.Instance);
+        await deferred.DeleteAsync(referenced.StorageId, default); // the uncertain-commit cleanup path
+        Assert.True(File.Exists(referencedPath));
+
+        var config = new ConfigurationBuilder().AddInMemoryCollection(
+            new Dictionary<string, string?> { [CaptainIntegrationInfrastructure.SurveyStorageDirectoryKey] = storage }).Build();
+        await using var context = Context(db);
+        var report = await new SurveyStorageReconciler(context, config, TimeProvider.System).ReconcileAsync(TimeSpan.FromMinutes(30), 100, default);
+        Assert.Equal((3, 1, 1, 1), (report.Scanned, report.Referenced, report.TooRecent, report.Deleted));
+        Assert.True(File.Exists(referencedPath));
+        Assert.True(File.Exists(recentOrphan));
+        Assert.False(File.Exists(oldOrphan));
+        await Assert.ThrowsAsync<ArgumentOutOfRangeException>(() =>
+            new SurveyStorageReconciler(context, config, TimeProvider.System).ReconcileAsync(TimeSpan.FromMinutes(1), 100, default));
     }
 }

@@ -1536,6 +1536,62 @@ namespace BuildMind.Infrastructure.Persistence.Migrations
                     b.ToTable("survey_extractions", (string)null);
                 });
 
+            modelBuilder.Entity("BuildMind.Infrastructure.Persistence.Records.Survey.SurveyExtractionReviewRecord", b =>
+                {
+                    b.Property<Guid>("ReviewId")
+                        .HasColumnType("char(36)")
+                        .HasColumnName("review_id");
+
+                    b.Property<DateTime>("CreatedAtUtc")
+                        .HasColumnType("datetime(6)")
+                        .HasColumnName("created_at_utc");
+
+                    b.Property<string>("DecisionsJson")
+                        .IsRequired()
+                        .HasColumnType("mediumtext")
+                        .HasColumnName("decisions_json");
+
+                    b.Property<Guid>("ExtractionId")
+                        .HasColumnType("char(36)")
+                        .HasColumnName("extraction_id");
+
+                    b.Property<string>("Note")
+                        .HasMaxLength(1000)
+                        .HasColumnType("varchar(1000)")
+                        .HasColumnName("note");
+
+                    b.Property<Guid>("ProjectId")
+                        .HasColumnType("char(36)")
+                        .HasColumnName("project_id");
+
+                    b.Property<Guid>("ReviewedBy")
+                        .HasColumnType("char(36)")
+                        .HasColumnName("reviewed_by");
+
+                    b.Property<Guid>("SurveyId")
+                        .HasColumnType("char(36)")
+                        .HasColumnName("survey_id");
+
+                    b.Property<int>("Version")
+                        .HasColumnType("int")
+                        .HasColumnName("version");
+
+                    b.HasKey("ReviewId")
+                        .HasName("pk_survey_extraction_reviews");
+
+                    b.HasIndex("ProjectId")
+                        .HasDatabaseName("ix_survey_extraction_reviews_project_id");
+
+                    b.HasIndex("ReviewedBy")
+                        .HasDatabaseName("ix_survey_extraction_reviews_reviewed_by");
+
+                    b.HasIndex("ExtractionId", "Version")
+                        .IsUnique()
+                        .HasDatabaseName("ux_survey_extraction_reviews_version");
+
+                    b.ToTable("survey_extraction_reviews", (string)null);
+                });
+
             modelBuilder.Entity("BuildMind.Infrastructure.Persistence.Records.Survey.SurveyRecord", b =>
                 {
                     b.Property<Guid>("Id")
@@ -2086,6 +2142,30 @@ namespace BuildMind.Infrastructure.Persistence.Migrations
                         .OnDelete(DeleteBehavior.Restrict)
                         .IsRequired()
                         .HasConstraintName("fk_survey_extractions_surveys");
+                });
+
+            modelBuilder.Entity("BuildMind.Infrastructure.Persistence.Records.Survey.SurveyExtractionReviewRecord", b =>
+                {
+                    b.HasOne("BuildMind.Infrastructure.Persistence.Records.Survey.SurveyExtractionRecord", null)
+                        .WithMany()
+                        .HasForeignKey("ExtractionId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired()
+                        .HasConstraintName("fk_survey_extraction_reviews_extractions");
+
+                    b.HasOne("BuildMind.Infrastructure.Persistence.Records.ProjectRecord", null)
+                        .WithMany()
+                        .HasForeignKey("ProjectId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired()
+                        .HasConstraintName("fk_survey_extraction_reviews_projects");
+
+                    b.HasOne("BuildMind.Infrastructure.Persistence.Records.UserRecord", null)
+                        .WithMany()
+                        .HasForeignKey("ReviewedBy")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired()
+                        .HasConstraintName("fk_survey_extraction_reviews_users");
                 });
 
             modelBuilder.Entity("BuildMind.Infrastructure.Persistence.Records.Survey.SurveyRecord", b =>

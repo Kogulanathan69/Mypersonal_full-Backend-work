@@ -42,3 +42,17 @@ internal sealed class SurveyExtractionRecord
     public required string ResultJson { get; init; }
     public DateTimeOffset CreatedAtUtc { get; init; }
 }
+
+/// <summary>Row of <c>survey_extraction_reviews</c>: immutable, versioned customer review of extracted measurements.</summary>
+internal sealed class SurveyExtractionReviewRecord
+{
+    public Guid ReviewId { get; init; }
+    public Guid ExtractionId { get; init; }
+    public Guid SurveyId { get; init; }
+    public Guid ProjectId { get; init; }
+    public int Version { get; init; }
+    public Guid ReviewedBy { get; init; }
+    public required string DecisionsJson { get; init; }
+    public string? Note { get; init; }
+    public DateTimeOffset CreatedAtUtc { get; init; }
+}

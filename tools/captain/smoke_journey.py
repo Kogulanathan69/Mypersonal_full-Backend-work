@@ -554,6 +554,31 @@ def phase8():
     status, _, _ = call("GET", f"/api/v1/projects/{pid}/surveys/{sid}/extraction", token=b)
     check("cross-user extraction read denied (404)", status == 404, status)
 
+    # Customer review of extracted values: versioned, unit-normalised, never becomes land geometry.
+    eid = ((extraction or {}).get("extraction") or {}).get("extractionId")
+    reviews_path = f"/api/v1/projects/{pid}/surveys/{sid}/extraction/reviews"
+    status, body, _ = call("POST", reviews_path, {"extractionId": eid, "expectedVersion": 0,
+                                                  "decisions": [{"measurementIndex": 99, "action": "CONFIRM"}]}, token=a)
+    check("review of a non-existent measurement refused (422)", status == 422, body)
+    status, r1, _ = call("POST", reviews_path, {"extractionId": eid, "expectedVersion": 0,
+                                                "decisions": [{"measurementIndex": 0, "action": "CONFIRM"}]}, token=a)
+    check("customer confirms the extracted 14 m (review v1, 14 m)", status == 201 and r1["review"]["version"] == 1
+          and r1["review"]["measurements"][0]["valueMetres"] == 14, r1)
+    status, r2, _ = call("POST", reviews_path, {"extractionId": eid, "expectedVersion": 1, "note": "Surveyor's figure is in feet",
+                                                "decisions": [{"measurementIndex": 0, "action": "CORRECT", "correctedValue": 46, "correctedUnit": "ft"}]},
+                         token=a)
+    check("correction in feet normalised to metres (v2, 14.0208 m)", status == 201 and r2["review"]["measurements"][0]["valueMetres"] == 14.0208, r2)
+    status, body, _ = call("POST", reviews_path, {"extractionId": eid, "expectedVersion": 1,
+                                                  "decisions": [{"measurementIndex": 0, "action": "REJECT"}]}, token=a)
+    check("review against a superseded version refused (409)", status == 409, body)
+    status, _, _ = call("POST", reviews_path, {"extractionId": eid, "expectedVersion": 2,
+                                               "decisions": [{"measurementIndex": 0, "action": "REJECT"}]}, token=b)
+    check("cross-user review denied (404)", status == 404, status)
+    status, history, _ = call("GET", reviews_path, token=a)
+    check("review history keeps both versions", status == 200 and [r["version"] for r in history["reviews"]] == [2, 1], history)
+    status, _, _ = call("GET", f"/api/v1/projects/{pid}/land", token=a)
+    check("reviewing survey values does not create land (204)", status == 204, status)
+
     # Land: dry-run validation persists nothing; confirmation is an explicit customer action.
     status, dry, _ = call("POST", f"/api/v1/projects/{pid}/land/validate", {"exterior": rectangle(14, 12)}, token=a)
     check("land/validate dry run (200, valid, persisted=false)", status == 200 and dry.get("valid") is True and dry.get("persisted") is False, dry)

@@ -111,6 +111,7 @@ public static class CaptainLocalIntegration
         // V3 register completion: extraction results, land validate/confirm, alternatives/select, create plan, edit
         // validation (no persistence), server-validated version save, confirm alias, AI proposals (no provider), reports list.
         services.AddScoped<PlanVersionService>();
+        services.AddScoped<SurveyReviewService>();
         services.AddScoped<AiEditOrchestrationService>();
         services.AddSingleton<IApiEndpointModule, V3RouteCompletionEndpointModule>();
 

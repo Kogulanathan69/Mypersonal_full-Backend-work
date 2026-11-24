@@ -33,6 +33,31 @@ public sealed class V3RouteCompletionEndpointModule : IApiEndpointModule
 
         var project =apiV1.MapGroup("/projects/{projectId}").WithTags("Planning").RequireAuthorization();
         project.MapGet("/surveys/{surveyId}/extraction", ExtractionAsync).WithName("GetSurveyExtraction");
+        project.MapPost("/surveys/{surveyId}/extraction/reviews", async (string projectId, string surveyId, HttpContext c,
+            SurveyReviewService reviews, CancellationToken t) =>
+        {
+            NoStore(c);
+            if (!P.TryId(projectId, out var pid) || !P.TryId(surveyId, out var sid)) return P.Invalid("id");
+            var body = await P.ReadAsync<SurveyReviewHttpRequest>(c, t);
+            if (body.Failure is not null) return body.Failure;
+            var r = body.Value!;
+            if (r.ExtractionId is not { } extractionId || r.ExpectedVersion is not { } expected) return P.Invalid("request");
+            var decisions = r.Decisions?.Select(d => d is null ? null! : new MeasurementDecision(d.MeasurementIndex ?? -1, d.Action ?? "",
+                d.CorrectedValue, d.CorrectedUnit)).ToArray();
+            return P.Map(await reviews.ReviewAsync(pid, sid, extractionId, expected, decisions, r.Note, t), x => new
+            {
+                review = x, notice = "Reviewed values are your own evidence. They do not confirm the land boundary; confirm the boundary separately.",
+            }, created: true);
+        }).WithName("ReviewSurveyExtraction");
+        project.MapGet("/surveys/{surveyId}/extraction/reviews", async (string projectId, string surveyId, HttpContext c, PlanningAccess access,
+            ISurveyReviewStore store, CancellationToken t) =>
+        {
+            NoStore(c);
+            if (!P.TryId(projectId, out var pid) || !P.TryId(surveyId, out var sid)) return P.Invalid("id");
+            var (status, _, _) = await access.AuthorizeAsync(pid, t);
+            if (status != PlanningStatus.Success) return P.Map(new PlanningResult<object>(status), o => o);
+            return Results.Ok(new { reviews = await store.ListAsync(pid, sid, t) });
+        }).WithName("ListSurveyExtractionReviews");
         project.MapPost("/land/validate", ValidateLandAsync).WithName("ValidateProjectLand");
         project.MapPost("/land/confirm", P.PutLandAsync).WithName("ConfirmProjectLand");
         project.MapGet("/generation-jobs/{jobId}/alternatives", AlternativesAsync).WithName("GetGenerationAlternatives");
@@ -217,3 +242,5 @@ public sealed record SaveVersionHttpRequest(
     [property: JsonPropertyName("geometry")] PlanGeometryDto? Geometry,
     [property: JsonPropertyName("changeSummary")] string? ChangeSummary);
 public sealed record AiProposalHttpRequest(Guid? ExpectedBaseRevisionId, string? Instruction);
+public sealed record SurveyReviewHttpRequest(Guid? ExtractionId, int? ExpectedVersion, MeasurementDecisionHttp?[]? Decisions, string? Note);
+public sealed record MeasurementDecisionHttp(int? MeasurementIndex, string? Action, double? CorrectedValue, string? CorrectedUnit);
