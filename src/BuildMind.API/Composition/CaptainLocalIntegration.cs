@@ -116,6 +116,8 @@ public static class CaptainLocalIntegration
 
         // Admin and delegated staff (proposed Captain-local role model; privileges read fresh per request).
         services.AddScoped<StaffInvitationService>();
+        services.AddScoped<AccountSecurityService>();
+        services.AddSingleton<IApiEndpointModule, BuildMind.API.Endpoints.Administration.AccountSecurityEndpointModule>();
         services.AddSingleton<IApiEndpointModule, BuildMind.API.Endpoints.Administration.AdministrationEndpointModule>();
         services.AddHostedService<AdminBootstrapHostedService>();
         // SMTP delivery (loopback-only unless explicitly allowed) replaces the non-delivering recovery sender.

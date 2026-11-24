@@ -19,6 +19,32 @@ namespace BuildMind.Infrastructure.Persistence.Migrations
                 .HasAnnotation("ProductVersion", "10.0.12")
                 .HasAnnotation("Relational:MaxIdentifierLength", 64);
 
+            modelBuilder.Entity("BuildMind.Infrastructure.Persistence.Records.Administration.AccountSecurityRecord", b =>
+                {
+                    b.Property<Guid>("UserId")
+                        .HasColumnType("char(36)")
+                        .HasColumnName("user_id");
+
+                    b.Property<DateTime?>("EmailVerifiedAtUtc")
+                        .HasColumnType("datetime(6)")
+                        .HasColumnName("email_verified_at_utc");
+
+                    b.Property<string>("VerificationCodeHash")
+                        .HasMaxLength(64)
+                        .HasColumnType("char(64)")
+                        .HasColumnName("verification_code_hash")
+                        .IsFixedLength();
+
+                    b.Property<DateTime?>("VerificationExpiresAtUtc")
+                        .HasColumnType("datetime(6)")
+                        .HasColumnName("verification_expires_at_utc");
+
+                    b.HasKey("UserId")
+                        .HasName("pk_account_security");
+
+                    b.ToTable("account_security", (string)null);
+                });
+
             modelBuilder.Entity("BuildMind.Infrastructure.Persistence.Records.Administration.AdminAuditChainHeadRecord", b =>
                 {
                     b.Property<int>("Id")
@@ -170,6 +196,40 @@ namespace BuildMind.Infrastructure.Persistence.Migrations
                         .HasDatabaseName("ux_principal_roles_user_id_role");
 
                     b.ToTable("principal_roles", (string)null);
+                });
+
+            modelBuilder.Entity("BuildMind.Infrastructure.Persistence.Records.Administration.SecurityEventRecord", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .HasColumnType("char(36)")
+                        .HasColumnName("id");
+
+                    b.Property<string>("DetailsJson")
+                        .IsRequired()
+                        .HasColumnType("text")
+                        .HasColumnName("details_json");
+
+                    b.Property<string>("Kind")
+                        .IsRequired()
+                        .HasMaxLength(32)
+                        .HasColumnType("varchar(32)")
+                        .HasColumnName("kind");
+
+                    b.Property<DateTime>("OccurredAtUtc")
+                        .HasColumnType("datetime(6)")
+                        .HasColumnName("occurred_at_utc");
+
+                    b.Property<Guid>("UserId")
+                        .HasColumnType("char(36)")
+                        .HasColumnName("user_id");
+
+                    b.HasKey("Id")
+                        .HasName("pk_security_events");
+
+                    b.HasIndex("UserId", "OccurredAtUtc")
+                        .HasDatabaseName("ix_security_events_user_id_occurred");
+
+                    b.ToTable("security_events", (string)null);
                 });
 
             modelBuilder.Entity("BuildMind.Infrastructure.Persistence.Records.Administration.StaffChangeProposalRecord", b =>
@@ -1632,6 +1692,16 @@ namespace BuildMind.Infrastructure.Persistence.Migrations
                     b.ToTable("users", (string)null);
                 });
 
+            modelBuilder.Entity("BuildMind.Infrastructure.Persistence.Records.Administration.AccountSecurityRecord", b =>
+                {
+                    b.HasOne("BuildMind.Infrastructure.Persistence.Records.UserRecord", null)
+                        .WithOne()
+                        .HasForeignKey("BuildMind.Infrastructure.Persistence.Records.Administration.AccountSecurityRecord", "UserId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired()
+                        .HasConstraintName("fk_account_security_users_user_id");
+                });
+
             modelBuilder.Entity("BuildMind.Infrastructure.Persistence.Records.Administration.AdminAuditEventRecord", b =>
                 {
                     b.HasOne("BuildMind.Infrastructure.Persistence.Records.UserRecord", null)
@@ -1661,6 +1731,16 @@ namespace BuildMind.Infrastructure.Persistence.Migrations
                         .OnDelete(DeleteBehavior.Restrict)
                         .IsRequired()
                         .HasConstraintName("fk_principal_roles_users_user_id");
+                });
+
+            modelBuilder.Entity("BuildMind.Infrastructure.Persistence.Records.Administration.SecurityEventRecord", b =>
+                {
+                    b.HasOne("BuildMind.Infrastructure.Persistence.Records.UserRecord", null)
+                        .WithMany()
+                        .HasForeignKey("UserId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired()
+                        .HasConstraintName("fk_security_events_users_user_id");
                 });
 
             modelBuilder.Entity("BuildMind.Infrastructure.Persistence.Records.Administration.StaffChangeProposalRecord", b =>

@@ -198,6 +198,38 @@ def main():
     status, _, _ = auth("POST", "/api/v1/auth/forgot-password", {"email": "nobody-" + uuid.uuid4().hex[:6] + "@example.invalid"})
     check("unknown email gets the same generic response (no enumeration)", status == 202, status)
 
+    # Account security: email verification, password change, own security history.
+    status, ctok = login(customer["email"], new_password)
+    status, _, _ = auth("POST", "/api/v1/users/me/email-verification", token=ctok)
+    check("email verification requested (202)", status == 202, status)
+    vcode = mail_code(customer["email"], "verification")
+    check("verification email captured locally", vcode is not None)
+    status, _, _ = auth("POST", "/api/v1/users/me/email-verification/confirm", {"code": "0" * 64}, token=ctok)
+    check("wrong verification code refused (422)", status == 422, status)
+    status, _, _ = auth("POST", "/api/v1/users/me/email-verification/confirm", {"code": vcode}, token=ctok)
+    check("verification code confirms the email (204)", status == 204, status)
+    status, _, _ = auth("POST", "/api/v1/users/me/email-verification/confirm", {"code": vcode}, token=ctok)
+    check("verification code is single-use (422)", status == 422, status)
+    status, sec, _ = call("GET", "/api/v1/users/me/security", token=ctok)
+    check("security status shows the verified email", status == 200 and sec.get("emailVerified") is True, sec)
+    status, body, _ = auth("POST", "/api/v1/users/me/password", {"currentPassword": "Wrong-password-123456!", "newPassword": "Changed-" + uuid.uuid4().hex,
+                                                                 "confirmPassword": "x"}, token=ctok)
+    check("password change with mismatched confirmation refused (400)", status == 400, body)
+    changed = "Changed-" + uuid.uuid4().hex[:16] + "9a!"
+    status, body, _ = auth("POST", "/api/v1/users/me/password", {"currentPassword": "Wrong-password-123456!", "newPassword": changed,
+                                                                 "confirmPassword": changed}, token=ctok)
+    check("password change with a wrong current password refused (422)", status == 422 and code_of(body) == "CURRENT_PASSWORD_INCORRECT", body)
+    status, _, _ = auth("POST", "/api/v1/users/me/password", {"currentPassword": new_password, "newPassword": changed,
+                                                              "confirmPassword": changed}, token=ctok)
+    check("password changed (204)", status == 204, status)
+    status, _, _ = call("GET", "/api/v1/users/me/security", token=ctok)
+    check("password change revokes the current session (401)", status == 401, status)
+    status, ctok = login(customer["email"], changed)
+    status, events, _ = call("GET", "/api/v1/users/me/security-events", token=ctok)
+    kinds = {e["kind"] for e in events.get("items", [])}
+    check("own security history lists role, verification and password events",
+          {"ROLE_GRANTED", "EMAIL_VERIFICATION_REQUESTED", "EMAIL_VERIFIED", "PASSWORD_CHANGED"} <= kinds, sorted(kinds))
+
     status, audit, _ = call("GET", "/api/v1/admin/audit?pageSize=100", token=admin)
     actions = {e["action"] for e in audit.get("items", [])}
     check("audit trail records staff, proposal, task, review and suspension events",

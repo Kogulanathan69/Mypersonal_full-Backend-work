@@ -92,6 +92,25 @@ internal sealed class StaffTaskNoteRecord
     public DateTimeOffset CreatedAtUtc { get; init; }
 }
 
+/// <summary>Row of <c>account_security</c>: email verification state and a single outstanding hashed code.</summary>
+internal sealed class AccountSecurityRecord
+{
+    public Guid UserId { get; init; }
+    public DateTimeOffset? EmailVerifiedAtUtc { get; set; }
+    public string? VerificationCodeHash { get; set; }
+    public DateTimeOffset? VerificationExpiresAtUtc { get; set; }
+}
+
+/// <summary>Row of <c>security_events</c>: per-user security history (no secrets, no tokens).</summary>
+internal sealed class SecurityEventRecord
+{
+    public Guid Id { get; init; }
+    public Guid UserId { get; init; }
+    public required string Kind { get; init; }
+    public DateTimeOffset OccurredAtUtc { get; init; }
+    public required string DetailsJson { get; init; }
+}
+
 internal sealed class SystemPolicyRecord
 {
     public const int ValueMaxBytes = 16 * 1024;

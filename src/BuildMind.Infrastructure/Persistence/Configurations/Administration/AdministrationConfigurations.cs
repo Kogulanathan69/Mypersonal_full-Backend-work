@@ -169,6 +169,38 @@ internal sealed class StaffTaskNoteRecordConfiguration : IEntityTypeConfiguratio
     }
 }
 
+internal sealed class AccountSecurityRecordConfiguration : IEntityTypeConfiguration<AccountSecurityRecord>
+{
+    public void Configure(EntityTypeBuilder<AccountSecurityRecord> b)
+    {
+        b.ToTable("account_security");
+        b.HasKey(a => a.UserId).HasName("pk_account_security");
+        b.Property(a => a.UserId).HasColumnName("user_id").ValueGeneratedNever();
+        b.Property(a => a.EmailVerifiedAtUtc).HasColumnName("email_verified_at_utc");
+        b.Property(a => a.VerificationCodeHash).HasColumnName("verification_code_hash").HasMaxLength(64).IsFixedLength();
+        b.Property(a => a.VerificationExpiresAtUtc).HasColumnName("verification_expires_at_utc");
+        b.HasOne<UserRecord>().WithOne().HasForeignKey<AccountSecurityRecord>(a => a.UserId)
+            .HasConstraintName("fk_account_security_users_user_id").OnDelete(DeleteBehavior.Restrict);
+    }
+}
+
+internal sealed class SecurityEventRecordConfiguration : IEntityTypeConfiguration<SecurityEventRecord>
+{
+    public void Configure(EntityTypeBuilder<SecurityEventRecord> b)
+    {
+        b.ToTable("security_events");
+        b.HasKey(e => e.Id).HasName("pk_security_events");
+        b.Property(e => e.Id).HasColumnName("id").ValueGeneratedNever();
+        b.Property(e => e.UserId).HasColumnName("user_id").IsRequired();
+        b.Property(e => e.Kind).HasColumnName("kind").HasMaxLength(32).IsRequired();
+        b.Property(e => e.OccurredAtUtc).HasColumnName("occurred_at_utc").IsRequired();
+        b.Property(e => e.DetailsJson).HasColumnName("details_json").HasColumnType("text").IsRequired();
+        b.HasOne<UserRecord>().WithMany().HasForeignKey(e => e.UserId)
+            .HasConstraintName("fk_security_events_users_user_id").OnDelete(DeleteBehavior.Restrict);
+        b.HasIndex(e => new { e.UserId, e.OccurredAtUtc }).HasDatabaseName("ix_security_events_user_id_occurred");
+    }
+}
+
 internal sealed class SystemPolicyRecordConfiguration : IEntityTypeConfiguration<SystemPolicyRecord>
 {
     public void Configure(EntityTypeBuilder<SystemPolicyRecord> b)

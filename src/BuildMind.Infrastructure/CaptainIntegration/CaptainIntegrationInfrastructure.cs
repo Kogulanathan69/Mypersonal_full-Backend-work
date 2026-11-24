@@ -98,6 +98,7 @@ public static class CaptainIntegrationInfrastructure
         // Administration: fresh principal reads, store with audit chain, proposal appliers, email.
         services.TryAddScoped<IPrincipalDirectory, MySqlPrincipalDirectory>();
         services.TryAddScoped<IAdministrationStore, MySqlAdministrationStore>();
+        services.TryAddScoped<IAccountSecurityStore, MySqlAccountSecurityStore>();
         services.AddScoped<IProposalApplier, SystemPolicyProposalApplier>();
         services.TryAddSingleton<SmtpEmailSender>();
         services.TryAddSingleton<ISystemEmailSender>(p => p.GetRequiredService<SmtpEmailSender>());

@@ -244,6 +244,8 @@ internal sealed partial class MySqlAdministrationStore(
                 .SetProperty(u => u.IsActive, active).SetProperty(u => u.TokenVersion, u => u.TokenVersion + 1), inner).ConfigureAwait(false);
             await SessionSql.RevokeUserRefreshTokensAsync(context, target, now, active ? "account_reactivated" : "account_suspended", inner)
                 .ConfigureAwait(false);
+            SecurityEvents.Add(context, target, active ? "ACCOUNT_ACTIVATED" : "ACCOUNT_SUSPENDED", null, now);
+            await context.SaveChangesAsync(inner).ConfigureAwait(false);
             await AdminAudit.AppendAsync(context, actor, active ? "ACCOUNT_ACTIVATED" : "ACCOUNT_SUSPENDED", "USER", target.ToString("D"),
                 reason.Trim(), null, now, inner).ConfigureAwait(false);
             var detail = await GetAccountAsync(target, inner).ConfigureAwait(false);
@@ -280,6 +282,8 @@ internal sealed partial class MySqlAdministrationStore(
             }
             await context.SaveChangesAsync(inner).ConfigureAwait(false);
             await RevokeSessionsAsync(target, now, "privileges_changed", inner).ConfigureAwait(false);
+            SecurityEvents.Add(context, target, granted ? "ROLE_GRANTED" : "ROLE_REVOKED", new { role }, now);
+            await context.SaveChangesAsync(inner).ConfigureAwait(false);
             await AdminAudit.AppendAsync(context, actor, granted ? "ROLE_GRANTED" : "ROLE_REVOKED", "USER", target.ToString("D"), null,
                 new { role }, now, inner).ConfigureAwait(false);
             return AdminResult<bool>.Ok(true);
@@ -377,6 +381,8 @@ internal sealed partial class MySqlAdministrationStore(
             profile.ScopeVersion++;
             await context.SaveChangesAsync(inner).ConfigureAwait(false);
             await RevokeSessionsAsync(staff, now, "privileges_changed", inner).ConfigureAwait(false);
+            SecurityEvents.Add(context, staff, "STAFF_SCOPE_CHANGED", null, now);
+            await context.SaveChangesAsync(inner).ConfigureAwait(false);
             await AdminAudit.AppendAsync(context, actor, "STAFF_SCOPE_CHANGED", "USER", staff.ToString("D"), null,
                 new { before = before.Split(','), after = modules.Order().ToArray() }, now, inner).ConfigureAwait(false);
             var user = await context.Set<UserRecord>().AsNoTracking().SingleAsync(u => u.Id == staff, inner).ConfigureAwait(false);
