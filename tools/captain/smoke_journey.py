@@ -397,6 +397,8 @@ def _claims(token):
 
 
 def phase7():
+    import time
+    time.sleep(61)  # fresh auth-strict window: phase 7 performs several logins and ends with the limiter test
     import base64
     import os
     import subprocess
@@ -698,6 +700,7 @@ def phase9():
     import os
     import time
     import urllib.request as ur
+    time.sleep(61)  # fresh auth-strict window for the logins below
     secrets_dir = os.path.expanduser("~/bm-captain/secrets")
     if not check("phase 9 prerequisite: admin credentials and the phase 6 report",
                  os.path.exists(secrets_dir + "/captain-admin.email") and state.get("report")):

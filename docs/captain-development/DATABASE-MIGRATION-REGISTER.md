@@ -27,3 +27,14 @@
 - **Backup check** before applying #10: the migration is additive and `Down` drops only the new objects. The Captain database holds synthetic data only. `DATABASE-SETUP.md` gives the `mysqldump` command for an explicit backup when a non-synthetic database is involved.
 - **Production:** no migration has been applied to any non-local database. Production is NO-GO.
 - **Single writer:** M4 coordinates DbContext/migrations for the shared branch. These Captain migrations live only on `feature/captain-full-backend-completion` and need M4 review before any merge.
+
+## Extended execution additions (all additive, FK RESTRICT, pinned in both lists, applied to the Captain DB via `migrate.sh`)
+
+| # | Migration | Adds |
+|---|---|---|
+| 11 | 20261124182132_AddAdministration | `principal_roles`, `staff_profiles`, `admin_audit_events`, `admin_audit_chain_head` (genesis row), `staff_change_proposals`, `staff_tasks`, `staff_task_notes`, `system_policies` |
+| 12 | 20261124184000_AddAccountSecurity | `account_security`, `security_events` |
+| 13 | 20261124185244_AddSurveyExtractionReviews | `survey_extraction_reviews` (unique extraction + version) |
+| 14 | 20261124190404_AddCatalogueAndArchitectPortal | `requirement_catalogue_versions`, `architect_profiles`, `architect_request_responses`, `architect_feedback`, `notifications`, `outbox_messages`, `notification_preferences` |
+
+The Captain database now has 37 base tables (counted by the restore drill).

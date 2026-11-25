@@ -126,3 +126,21 @@ Nothing below is inferred from file existence. Columns: PASS / FAIL / SKIP; NOT 
 | `POST …/versions` body rejected: M3 strict JSON is case-sensitive without a naming policy | V3 module | explicit `JsonPropertyName` on the wrapper; journey phase 8 green |
 | Full live suite hit `Too many connections` (152/151) after adding 9 disposable-DB tests | Captain live helpers | unpooled Captain contexts; 103/103, 0 leftovers |
 | Journey expected 404 for "no land"; the API returns 204 | tooling | expectation corrected (existing API behaviour) |
+
+## Extended execution: final results (2026-11-25, build after `cb48556`, WSL Ubuntu-24.04)
+
+| Suite | PASS | FAIL | SKIP | Command / note |
+|---|---:|---:|---:|---|
+| Customer journey, phases 2–9 (RAG stack) | 188 | 0 | — | `smoke_journey.py`; log `~/bm-captain/results/journey-final.log` |
+| Admin/staff/account-security journey | 65 | 0 | — | `smoke_admin.py` (Mailpit local capture) |
+| Persistence.IntegrationTests (live MySQL, VerifyFull) | 115 | 0 | 0 | `persistence-tests.sh`; 0 leftover databases |
+| Application.UnitTests | 252 | 0 | 0 | `unit-suites.sh` |
+| Infrastructure.Tests | 1160 | 0 | 0 | final run green; one earlier run had 1 intermittent failure of the pre-existing M4 `RequestBodyLimitTests.Kestrel_applies_a_configured_override` (broken pipe; passed on rerun) |
+| Reports.Tests | 163 | 0 | 1 | PDF-QA skip without `BUILDMIND_PDF_QA_PYTHON` (executed earlier via `python-and-pdf-checks.sh`) |
+| Requirements.Tests / Workflow.Tests | 456 / 197 | 0 | 0 | |
+| ContractTests | exit 0 | — | — | |
+| python-services pytest | 995 | 0 | 0 | includes 11 OCR sandbox + 3 token-file tests |
+| python-services `tests_local` (real Tesseract) | 5 | 0 | 0 | not in CI |
+| Backup → restore drill | pass | — | — | 37 tables, 0 mismatches, disposable DB dropped |
+| NuGet vulnerability check | none found | — | — | all 10 projects |
+| Not run | — | — | — | rag-service pytest this round (unchanged code); RH09; container builds; compose validation; pip-audit |
