@@ -108,7 +108,25 @@ BUILDMIND_RAG_INTERNAL_TOKENS=%s
   echo "prepared $V"
 }
 
+# Upgrade path for an EXISTING verification volume: the init script only runs on an empty volume, so pending migrations
+# are applied as a ranged script (from the last applied migration) by the least-privilege migrator over verified TLS.
+migrate() {
+  "${COMPOSE[@]}" up -d mysql >/dev/null
+  for i in $(seq 1 60); do docker inspect -f '{{.State.Health.Status}}' bm-captain-verify-mysql-1 2>/dev/null | grep -q healthy && break; sleep 3; done
+  local mysqlx=(docker exec -i -e MYSQL_PWD="$(cat "$V/secrets/migrator.password")" bm-captain-verify-mysql-1
+                mysql -ubm_migrator -hmysql --ssl-mode=VERIFY_IDENTITY --ssl-ca=/etc/mysql/tls/ca.pem buildmind_dev)
+  local applied; applied=$("${mysqlx[@]}" -N -e "SELECT MigrationId FROM __EFMigrationsHistory ORDER BY MigrationId DESC LIMIT 1")
+  [ -n "$applied" ] || { echo "migrate: no history (volume not initialised)"; return 1; }
+  . tools/captain/env.sh
+  local script="$V/initdb/pending-$(date +%s).sql"
+  dotnet tool run dotnet-ef migrations script "$applied" --context BuildMindDbContext --configuration Release     --project src/BuildMind.Infrastructure --startup-project src/BuildMind.API --output "$script" >/dev/null
+  if grep -qE "CREATE|ALTER|INSERT" "$script"; then "${mysqlx[@]}" < "$script" && echo "migrate: applied pending migrations after $applied"
+  else echo "migrate: up to date ($applied)"; fi
+  rm -f "$script"
+}
+
 case "${1:-status}" in
+  migrate) migrate ;;
   prepare) prepare ;;
   build)
     docker build -f deploy/captain/python.Dockerfile -t buildmind-python:verify . 2>&1 | tail -2
@@ -116,7 +134,7 @@ case "${1:-status}" in
     docker build -f deploy/captain/rag.Dockerfile -t buildmind-rag:verify . 2>&1 | tail -2
     [ "${LLM:-0}" = 1 ] && docker build -f "$PWD/deploy/captain/llm.Dockerfile" -t buildmind-llm:verify "$HOME/bm-captain/tools/llama-b12237/llama-b12237" 2>&1 | tail -2
     docker image ls --format '{{.Repository}}:{{.Tag}} {{.ID}} {{.Size}}' | grep -E "buildmind-(api|python|rag|llm):verify" ;;
-  up) "${COMPOSE[@]}" up -d && "${COMPOSE[@]}" ps ;;
+  up) migrate && "${COMPOSE[@]}" up -d && "${COMPOSE[@]}" ps ;;
   down) "${COMPOSE[@]}" down ;;
   reset) "${COMPOSE[@]}" down -v ;;  # disposable verification volumes only
   status) "${COMPOSE[@]}" ps ;;
