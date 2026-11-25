@@ -150,6 +150,48 @@ def main():
     status, detail, _ = call("GET", f"/api/v1/admin/tasks/{tid}", token=admin)
     check("admin sees the escalation note", status == 200 and any(n["kind"] == "ESCALATION" for n in detail.get("notes", [])), detail)
 
+    # ---- R-05 contract coverage: successful calls for every admin/staff operation the earlier flow did not exercise
+    for route in ("/api/v1/admin/accounts", f"/api/v1/admin/accounts/{staff_id}", "/api/v1/admin/architects",
+                  "/api/v1/admin/catalogues", "/api/v1/admin/modules", "/api/v1/admin/monitoring/projects",
+                  "/api/v1/admin/proposals", "/api/v1/admin/tasks"):
+        status, body, _ = call("GET", route, token=admin)
+        check(f"admin GET {route.replace('/api/v1', '')} (200)", status == 200 and isinstance(body, dict), (status, body))
+    for route in ("/api/v1/admin/accounts", "/api/v1/admin/proposals", "/api/v1/admin/tasks"):
+        check(f"staff cannot use admin {route.replace('/api/v1', '')} (403)", call("GET", route, token=staff)[0] == 403)
+    pkey = "captain.coverage." + uuid.uuid4().hex[:8]
+    status, policy, _ = call("PUT", f"/api/v1/admin/policies/{pkey}", {"value": {"enabled": True}, "expectedVersion": None}, token=admin)
+    check("admin creates a system policy (200, version 1)", status == 200 and policy.get("version") == 1, (status, policy))
+    status, body, _ = call("PUT", f"/api/v1/admin/policies/{pkey}", {"value": {"enabled": False}, "expectedVersion": 7}, token=admin)
+    check("stale policy version refused (409)", status == 409, (status, body))
+    status, body, _ = call("PUT", f"/api/v1/admin/policies/{pkey}", {"value": {"enabled": False}, "expectedVersion": 1}, token=admin)
+    check("admin updates the policy with the current version (200, version 2)", status == 200 and body.get("version") == 2, (status, body))
+    for route in ("/api/v1/staff/tasks", f"/api/v1/staff/tasks/{tid}", "/api/v1/staff/proposals"):
+        status, body, _ = call("GET", route, token=staff)
+        check(f"staff GET {route.replace('/api/v1', '')} (200)", status == 200 and isinstance(body, dict), (status, body))
+    status, note, _ = call("POST", f"/api/v1/staff/tasks/{tid}/notes", {"body": "Checked the survey queue; no backlog."}, token=staff)
+    check("staff adds a task note (201)", status in (200, 201), (status, note))
+    check("empty task note refused (400/422)", call("POST", f"/api/v1/staff/tasks/{tid}/notes", {"body": " "}, token=staff)[0] in (400, 422))
+    status, moved, _ = call("POST", f"/api/v1/admin/tasks/{tid}/status", {"status": "IN_PROGRESS", "expectedVersion": 2,
+                                                                          "note": "Admin picked up the escalation"}, token=admin)
+    check("admin moves the escalated task back to IN_PROGRESS (200)", status == 200 and moved.get("status") == "IN_PROGRESS", (status, moved))
+    status, body, _ = call("POST", f"/api/v1/admin/tasks/{tid}/status", {"status": "OPEN", "expectedVersion": 3}, token=admin)
+    check("disallowed task transition refused (409)", status == 409, (status, body))
+    p3 = call("POST", "/api/v1/staff/proposals", {"module": "SYSTEM_POLICIES", "targetType": "SYSTEM_POLICY", "targetKey": key + "r",
+                                                  "changeType": "CREATE", "payload": {"days": 7}}, token=staff)[1]
+    status, rejected, _ = call("POST", f"/api/v1/admin/proposals/{p3['proposalId']}/reject", {"expectedRowVersion": 1,
+                                                                                              "note": "Not needed"}, token=admin)
+    check("admin rejects a staff proposal (200, REJECTED)", status == 200 and rejected.get("status") == "REJECTED", (status, rejected))
+    p4 = call("POST", "/api/v1/staff/proposals", {"module": "SYSTEM_POLICIES", "targetType": "SYSTEM_POLICY", "targetKey": key + "w",
+                                                  "changeType": "CREATE", "payload": {"days": 9}}, token=staff)[1]
+    status, withdrawn, _ = call("POST", f"/api/v1/staff/proposals/{p4['proposalId']}/withdraw", {"expectedRowVersion": 1}, token=staff)
+    check("staff withdraws their own pending proposal (200, WITHDRAWN)", status == 200 and withdrawn.get("status") == "WITHDRAWN",
+          (status, withdrawn))
+    check("withdrawn proposal cannot be approved (409)",
+          call("POST", f"/api/v1/admin/proposals/{p4['proposalId']}/approve", {"expectedRowVersion": 2}, token=admin)[0] == 409)
+    status, body, _ = call("POST", f"/api/v1/admin/accounts/{staff_id}/invitation", {}, token=admin)
+    check("admin re-sends the staff invitation (200/202) or it is refused for an already-active account (409)",
+          status in (200, 202, 409), (status, body))
+
     # Privilege changes take effect immediately and revoke sessions.
     status, staff_list, _ = call("GET", "/api/v1/admin/staff?search=" + staff_email.split("@")[0], token=admin)
     scope_version = next(s["scopeVersion"] for s in staff_list["items"] if s["userId"] == staff_id)

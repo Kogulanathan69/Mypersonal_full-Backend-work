@@ -12,7 +12,7 @@ import urllib.request
 import uuid
 
 BASE = next((a for a in sys.argv[1:] if a.startswith("http")), "http://127.0.0.1:5180")
-PHASES = {int(p) for p in (sys.argv[sys.argv.index("--phases") + 1].split(",") if "--phases" in sys.argv else "2,3,4,5,6,7,8,9,10,11,12".split(","))}
+PHASES = {int(p) for p in (sys.argv[sys.argv.index("--phases") + 1].split(",") if "--phases" in sys.argv else "2,3,4,5,6,7,8,9,10,11,12,13".split(","))}
 results = []
 state = {}
 
@@ -1127,8 +1127,88 @@ def phase12():
     call("POST", f"/api/v1/projects/{pid}/architect-requests/{req2}/withdraw", {"expectedStateVersion": 1}, token=a)
 
 
+
+def phase13():
+    """R-05 contract coverage: successful + negative live calls for the remaining customer and architect operations."""
+    a, b, pid = state["alice"]["access"], state["bob"]["access"], state.get("project")
+    check("liveness GET /health (200)", call("GET", "/health")[0] == 200)
+    status, prof, _ = call("GET", "/api/v1/profile", token=a)
+    check("GET /profile (200)", status == 200 and isinstance(prof, dict), prof)
+    check("GET /profile unauthenticated (401)", call("GET", "/api/v1/profile")[0] == 401)
+    status, body, _ = call("PUT", "/api/v1/profile", {"fullName": "Alice Synthetic", "phoneNumber": None}, token=a)
+    check("PUT /profile (200)", status == 200, (status, body))
+    check("PUT /profile without fullName (400)", call("PUT", "/api/v1/profile", {"phoneNumber": None}, token=a)[0] == 400)
+    status, body, _ = call("PUT", "/api/v1/users/me", {"fullName": "Alice Synthetic 2", "phoneNumber": None}, token=a)
+    check("PUT /users/me (200)", status == 200, (status, body))
+    status, prefs, _ = call("GET", "/api/v1/users/me/notification-preferences", token=a)
+    check("GET notification preferences (200)", status == 200 and isinstance(prefs, dict), prefs)
+    status, body, _ = call("PUT", "/api/v1/users/me/notification-preferences", {"emailEnabled": True}, token=a)
+    check("PUT notification preferences (200)", status == 200, (status, body))
+    check("PUT notification preferences invalid body (400)",
+          call("PUT", "/api/v1/users/me/notification-preferences", {"emailEnabled": "maybe"}, token=a)[0] == 400)
+    items = call("GET", "/api/v1/notifications?pageSize=5", token=a)[1].get("items", [])
+    if check("a notification exists to mark read", items, items):
+        nid = items[0]["notificationId"] if "notificationId" in items[0] else items[0].get("id")
+        status, body, _ = call("POST", f"/api/v1/notifications/{nid}/read", {}, token=a)
+        check("POST notification read (200/204)", status in (200, 204), (status, body))
+        check("another user cannot mark it read (404)", call("POST", f"/api/v1/notifications/{nid}/read", {}, token=b)[0] == 404)
+
+    # Projects + requirement sections (fresh project)
+    p3 = call("POST", "/api/v1/projects", {"name": "Contract coverage", "projectType": "Residential"}, token=a)[1]["id"]
+    status, proj, _ = call("GET", f"/api/v1/projects/{p3}", token=a)
+    check("GET /projects/{id} (200)", status == 200 and proj.get("id") == p3, proj)
+    status, patched, _ = call("PATCH", f"/api/v1/projects/{p3}", {"name": "Contract coverage 2", "revision": proj.get("revision")}, token=a)
+    check("PATCH /projects/{id} with the current revision (200)", status == 200, (status, patched))
+    check("PATCH /projects/{id} stale revision (409)",
+          call("PATCH", f"/api/v1/projects/{p3}", {"name": "Contract coverage stale", "revision": proj.get("revision")}, token=a)[0] == 409)
+    check("PATCH /projects/{id} cross-user (404)", call("PATCH", f"/api/v1/projects/{p3}", {"name": "Contract coverage other", "revision": 1}, token=b)[0] == 404)
+    req = call("PUT", f"/api/v1/projects/{p3}/requirements", {
+        "expectedRevisionId": None, "catalogueVersion": "synthetic-fixture-v1", "floorCount": 1,
+        "groundFloorRooms": [{"roomType": "bedroom", "count": 1}, {"roomType": "livingRoom", "count": 1},
+                             {"roomType": "kitchen", "count": 1}, {"roomType": "bathroom", "count": 1}],
+        "additionalSpaces": [], "relationships": [], "designMethod": None}, token=a)[1]
+    rev = req.get("revisionId")
+    for route in ("requirements", "requirements/spaces", "requirements/relationships", "requirements/summary"):
+        status, body, _ = call("GET", f"/api/v1/projects/{p3}/{route}", token=a)
+        check(f"GET /projects/{{id}}/{route} (200)", status == 200 and isinstance(body, dict), (status, body))
+        check(f"GET /projects/{{id}}/{route} cross-user (404)", call("GET", f"/api/v1/projects/{p3}/{route}", token=b)[0] == 404)
+    for route, extra in (("requirements/spaces", {"additionalSpaces": []}), ("requirements/relationships", {"relationships": []}),
+                         ("design-method", {"designMethod": "AI_GENERATED"})):
+        status, body, _ = call("PUT", f"/api/v1/projects/{p3}/{route}",
+                               {"expectedRevisionId": rev, "catalogueVersion": "synthetic-fixture-v1", **extra}, token=a)
+        check(f"PUT /projects/{{id}}/{route} with the current revision (200)", status == 200, (status, body))
+        rev = (body or {}).get("revisionId", rev) if isinstance(body, dict) else rev
+        status, body, _ = call("PUT", f"/api/v1/projects/{p3}/{route}",
+                               {"expectedRevisionId": str(uuid.uuid4()), "catalogueVersion": "synthetic-fixture-v1", **extra}, token=a)
+        check(f"PUT /projects/{{id}}/{route} stale revision (409)", status == 409, (status, body))
+
+    # Survey metadata (original route), land read, customer architect-request detail
+    if state.get("survey"):
+        status, body, _ = call("GET", f"/api/v1/projects/{pid}/surveys/{state['survey']}", token=a)
+        check("GET /projects/{id}/surveys/{surveyId} (200)", status == 200, (status, body))
+        check("GET /projects/{id}/surveys/{surveyId} cross-user (404)",
+              call("GET", f"/api/v1/projects/{pid}/surveys/{state['survey']}", token=b)[0] == 404)
+    status, land, _ = call("GET", f"/api/v1/projects/{pid}/land", token=a)
+    check("GET /projects/{projectId}/land (200)", status == 200 and isinstance(land, dict), (status, land))
+    arch, rec, rid = state.get("architect"), state.get("recipient"), state.get("report")
+    if check("architect fixtures for coverage", arch and rec and rid):
+        atok = call("POST", "/api/v1/auth/login", {"email": arch["email"], "password": arch["password"]})[1]["accessToken"]
+        share = {"recipientId": rec, "reportId": rid, "documentIds": [], "explicitConsent": True, "acknowledgedPolicyVersion": POLICY}
+        req_id = call("POST", f"/api/v1/projects/{pid}/architect-requests", share, token=a)[1]["requestId"]
+        status, body, _ = call("GET", f"/api/v1/projects/{pid}/architect-requests/{req_id}", token=a)
+        check("customer GET architect request detail (200)", status == 200, (status, body))
+        check("customer architect request detail cross-user (404)",
+              call("GET", f"/api/v1/projects/{pid}/architect-requests/{req_id}", token=b)[0] == 404)
+        status, body, _ = call("GET", "/api/v1/architect/dashboard", token=atok)
+        check("architect dashboard (200)", status == 200 and isinstance(body, dict), (status, body))
+        check("customer cannot open the architect dashboard (403)", call("GET", "/api/v1/architect/dashboard", token=a)[0] == 403)
+        status, body, _ = call("GET", f"/api/v1/architect/requests/{req_id}", token=atok)
+        check("architect GET request detail (200)", status == 200, (status, body))
+        call("POST", f"/api/v1/projects/{pid}/architect-requests/{req_id}/withdraw", {"expectedStateVersion": 1}, token=a)
+
+
 # Phase 8 runs before phase 7, which stops python-services and exercises rate limiting.
-EXTRA_PHASES = [(4, phase4), (5, phase5), (6, phase6), (8, phase8), (9, phase9), (10, phase10), (11, phase11), (12, phase12), (7, phase7)]
+EXTRA_PHASES = [(4, phase4), (5, phase5), (6, phase6), (8, phase8), (9, phase9), (10, phase10), (11, phase11), (12, phase12), (13, phase13), (7, phase7)]
 
 
 def main():
