@@ -117,6 +117,9 @@ if ! grep -q "BEGIN RSA PRIVATE KEY" "$TLS/client-key.pem"; then
   echo "client key converted to PKCS#1 for MySql.Data"
 fi
 
+# RH09 containment (MySql.Data client-timeout hang): the SERVER ends long SELECTs and lock waits before the 30 s client
+# CommandTimeout, so the broken client timeout path is not entered for those cases (see RH09-RESOLUTION-REPORT).
+root_sql -e "SET PERSIST max_execution_time = 25000; SET PERSIST innodb_lock_wait_timeout = 20;"
 echo "server: $(root_sql -e 'SELECT VERSION();')"
 echo "tls:    $(docker exec -e MYSQL_PWD="$(pw runtime)" "$NAME" mysql -ubm_runtime -h127.0.0.1 --ssl-mode=VERIFY_IDENTITY \
   --ssl-ca=/etc/mysql/captain-tls/ca.pem -N -e "SHOW SESSION STATUS LIKE 'Ssl_version';" | tr '\t' ' ') (VERIFY_IDENTITY)"
