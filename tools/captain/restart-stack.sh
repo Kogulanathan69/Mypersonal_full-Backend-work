@@ -25,9 +25,9 @@ if [ "${RAG:-0}" = 1 ]; then
     PY_PORT=8091 nohup bash tools/captain/run-api.sh 5181 > ~/bm-captain/logs/api-rag.log 2>&1 &
 fi
 for _ in $(seq 1 60); do
-  curl -fsS http://127.0.0.1:5180/health >/dev/null 2>&1 && curl -fsS http://127.0.0.1:8091/health >/dev/null 2>&1 && break
+  curl -fsS http://127.0.0.1:5180/health >/dev/null 2>&1 && curl -fsS --cacert ~/bm-captain/secrets/pki/server-ca.crt --cert ~/bm-captain/secrets/pki/api-client.crt --key ~/bm-captain/secrets/pki/api-client.key https://127.0.0.1:8091/health >/dev/null 2>&1 && break
   sleep 1
 done
-curl -fsS http://127.0.0.1:5180/health && echo && curl -fsS http://127.0.0.1:8091/health && echo
+curl -fsS http://127.0.0.1:5180/health && echo && curl -fsS --cacert ~/bm-captain/secrets/pki/server-ca.crt --cert ~/bm-captain/secrets/pki/api-client.crt --key ~/bm-captain/secrets/pki/api-client.key https://127.0.0.1:8091/health && echo
 # Keep the services attached to this session (a detached wsl.exe session would terminate them on exit).
 [ "${DETACH:-0}" = 1 ] || wait

@@ -115,6 +115,11 @@ public static class CaptainLocalIntegration
         services.AddScoped<AiEditOrchestrationService>();
         services.AddSingleton<IApiEndpointModule, V3RouteCompletionEndpointModule>();
 
+        // Internal mTLS to python-services (Python client only; the protected RAG client is unchanged, STEP 8B).
+        if (InternalMtls.IsConfigured(builder.Configuration))
+            services.AddHttpClient<BuildMind.Infrastructure.Integration.PythonServiceClient>()
+                .ConfigurePrimaryHttpMessageHandler(provider => InternalMtls.CreatePythonHandler(provider.GetRequiredService<IConfiguration>()));
+
         // Admin and delegated staff (proposed Captain-local role model; privileges read fresh per request).
         services.AddScoped<StaffInvitationService>();
         services.AddScoped<AccountSecurityService>();
