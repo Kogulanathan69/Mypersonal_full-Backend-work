@@ -4,7 +4,7 @@ No new placement, feasibility or regulatory rules are introduced. This module on
 * builds the trusted D02/D03/D04 inputs from one GenerationInput;
 * maps every non-success to a truthful M6 outcome with a fixed reason code (never a partial or invalid layout);
 * converts the three D04 candidates (axis-aligned room rectangles) into M3 draft PlanGeometry: one floor at level 0,
-  four walls per room, no openings;
+  four walls per room, plus generated doors (entrance + internal access tree) and windows (app.internal.openings);
 * validates the envelope with the existing GenerationResult model, so an inconsistent result can never leave the
   service.
 
@@ -12,7 +12,8 @@ Limitations (recorded, not hidden):
 * Setback evidence is accepted ONLY as an explicit synthetic reviewed snapshot (D02/D04 design). Real reviewed
   constraints are not available (G06), so any other evidence yields NEEDS_REVIEW.
 * Adjacency preferences are treated as optional preferences.
-* Physical access (doors/corridors) is not evaluated, and each alternative carries a WARNING diagnostic saying so.
+* Physical access is validated (every room reachable through doors from an external entrance); door/window sizes are
+  design preferences (WARNING), not regulatory minimums. There are no corridors: rooms connect directly.
 * Walls are room-boundary segments with a fixed nominal thickness. Shared-wall topology (JC-01/JC-02) is open, so
   adjacent rooms keep coincident walls.
 """
@@ -26,6 +27,7 @@ from uuid import UUID, uuid5
 from pydantic import StrictBool
 
 from app.geometry.footprint.area import AreaAssumptions
+from app.internal.openings import generate_openings
 from app.geometry.footprint.contracts import ContractModel, Diagnostic
 from app.geometry.footprint.feasibility import ReviewedSetbackSnapshot, assess_feasibility
 from app.geometry.footprint.parcel import ConfirmedMetricParcel
@@ -52,6 +54,11 @@ _MESSAGES = {
     "GENERATION_FAILED": "Generation could not complete safely.",
     "SYNTHETIC_REGULATORY_EVIDENCE": "Setbacks come from a synthetic local fixture; no regulatory compliance is established.",
     "PHYSICAL_ACCESS_NOT_EVALUATED": "Doors, corridors and physical access were not evaluated.",
+    "PHYSICAL_ACCESS_UNSATISFIABLE": "No layout lets every room be reached through doors from an entrance.",
+    "OPENING_DIMENSIONS_DESIGN_PREFERENCE": "Door and window sizes are configurable design preferences, not regulatory minimums.",
+    "ROOM_WITHOUT_EXTERNAL_WINDOW": "A habitable room has no external wall long enough for a window.",
+    "ACCESS_THROUGH_BEDROOM": "Some rooms are reached through a bedroom.",
+    "CIRCULATION_IS_RESIDUAL_SPACE": "Circulation is the unoccupied space inside the envelope, closed by generated exterior walls.",
 }
 
 _D04_OUTCOME = {
@@ -145,16 +152,25 @@ def _geometry(request: GenerationInput, plan_id: UUID, rooms) -> dict:
     }
 
 
+def _with_openings(geometry: dict, plan_id: UUID) -> list[tuple[str, str]]:
+    """Doors (entrance + internal spanning tree) and windows; returns access/opening diagnostics."""
+    return generate_openings(geometry["floors"][0], plan_id).diagnostics
+
+
 def _alternative(request: GenerationInput, ordinal: int, candidate, validated_at: str) -> dict:
     revision = (request.projectId, request.landRevisionId, request.requirementsRevisionId)
     plan_id = _id(*revision, request.seed, ordinal, candidate.validation.candidate_id)
     geometry = _geometry(request, plan_id, candidate.rooms)
+    access = _with_openings(geometry, plan_id)
+    if any(severity == "CRITICAL" for _, severity in access):
+        return None
     geometry_hash = _canonical_hash(geometry)
     area = sum((r.bounds[2] - r.bounds[0]) * (r.bounds[3] - r.bounds[1]) for r in candidate.rooms)
     layout_key = sorted((str(r.slot_id), tuple(float(v) for v in r.bounds)) for r in candidate.rooms)
     warnings = [
         _diagnostic("SYNTHETIC_REGULATORY_EVIDENCE", "WARNING").model_dump(mode="json"),
-        _diagnostic("PHYSICAL_ACCESS_NOT_EVALUATED", "WARNING").model_dump(mode="json"),
+        _diagnostic("OPENING_DIMENSIONS_DESIGN_PREFERENCE", "WARNING").model_dump(mode="json"),
+        *[_diagnostic(code, "WARNING").model_dump(mode="json") for code in dict.fromkeys(c for c, s in access if s == "WARNING")],
     ]
     return {
         "projectId": str(request.projectId),
@@ -231,5 +247,8 @@ def run_generation(run: GenerationRunRequest) -> dict:
     validated_at = datetime.now(timezone.utc).isoformat(timespec="microseconds").replace("+00:00", "Z")
     alternatives = [_alternative(request, index, candidate, validated_at)
                     for index, candidate in enumerate(generation.candidates)]
+    if any(alternative is None for alternative in alternatives):
+        # Truthful failure: never return a layout whose rooms cannot all be reached.
+        return _failure(request, "INFEASIBLE", "PHYSICAL_ACCESS_UNSATISFIABLE")
     warning = _diagnostic("SYNTHETIC_REGULATORY_EVIDENCE", "WARNING")
     return _envelope(request, "SUCCESS", None, [warning], alternatives)

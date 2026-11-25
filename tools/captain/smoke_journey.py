@@ -130,13 +130,16 @@ def phase3():
     state["candidates"] = [c["candidateId"] for c in job["candidates"]]
     check("candidates are distinct and ranked 1..3",
           len({c["geometryHash"] for c in job["candidates"]}) == 3 and [c["rank"] for c in job["candidates"]] == [1, 2, 3])
-    check("candidates are labelled synthetic + access not evaluated",
+    check("candidates are labelled synthetic; access validated (no PHYSICAL_ACCESS_NOT_EVALUATED)",
           all(c["validation"]["regulatoryEvidenceStatus"] == "SYNTHETIC_FIXTURE"
-              and {"SYNTHETIC_REGULATORY_EVIDENCE", "PHYSICAL_ACCESS_NOT_EVALUATED"} <= {d["code"] for d in c["validation"]["diagnostics"]}
+              and "SYNTHETIC_REGULATORY_EVIDENCE" in {d["code"] for d in c["validation"]["diagnostics"]}
+              and "PHYSICAL_ACCESS_NOT_EVALUATED" not in {d["code"] for d in c["validation"]["diagnostics"]}
               for c in job["candidates"]))
     check("preliminary notice present", "not construction-ready" in job.get("notice", ""))
-    check("every candidate has 5 rooms and no openings",
-          all(len(c["geometry"]["floors"][0]["rooms"]) == 5 and c["geometry"]["floors"][0]["openings"] == [] for c in job["candidates"]))
+    check("every candidate has 5 rooms, an entrance and internal doors, and windows",
+          all(len(c["geometry"]["floors"][0]["rooms"]) == 5
+              and sum(o["type"] == "door" for o in c["geometry"]["floors"][0]["openings"]) >= 5
+              and any(o["type"] == "window" for o in c["geometry"]["floors"][0]["openings"]) for c in job["candidates"]))
     status, replay, _ = call("POST", f"/api/v1/projects/{pid}/generation-jobs", request, token=a)
     check("idempotent replay returns the same job", status == 201 and replay.get("jobId") == state["job"], status)
     status, body, _ = call("POST", f"/api/v1/projects/{pid}/generation-jobs", {**request, "seed": 8}, token=a)

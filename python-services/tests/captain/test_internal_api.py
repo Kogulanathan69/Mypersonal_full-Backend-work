@@ -8,6 +8,7 @@ from uuid import UUID
 import pytest
 from fastapi.testclient import TestClient
 
+from app.internal.openings import validate_openings
 from app.internal.auth import AUTH_HEADER, InternalAuth
 from app.main import create_app
 from app.plans.generation.contracts import GenerationResult
@@ -153,9 +154,13 @@ def test_success_returns_three_distinct_contract_valid_alternatives():
     for alternative in result["alternatives"]:
         floor = alternative["geometry"]["floors"][0]
         assert sorted(r["type"] for r in floor["rooms"]) == ["bathroom", "bedroom", "kitchen", "livingRoom"]
-        assert floor["openings"] == []
+        doors = [o for o in floor["openings"] if o["type"] == "door"]
+        windows = [o for o in floor["openings"] if o["type"] == "window"]
+        assert len(doors) >= len(floor["rooms"]) and windows  # entrance + one door per other room; windows present
+        assert not [c for c, s in validate_openings(floor) if s == "CRITICAL" or c in {"ROOM_NOT_REACHABLE", "NO_ENTRANCE"}]
         codes = {d["code"] for d in alternative["validation"]["diagnostics"]}
-        assert codes == {"SYNTHETIC_REGULATORY_EVIDENCE", "PHYSICAL_ACCESS_NOT_EVALUATED"}
+        assert {"SYNTHETIC_REGULATORY_EVIDENCE", "OPENING_DIMENSIONS_DESIGN_PREFERENCE"} <= codes
+        assert "PHYSICAL_ACCESS_NOT_EVALUATED" not in codes
         assert alternative["validation"]["hasBlockingIssues"] is False
         UUID(alternative["validation"]["validationId"])
 

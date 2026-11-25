@@ -12,6 +12,7 @@ Checks the M3 draft PlanGeometry against the confirmed metric land boundary only
 It establishes NO regulatory compliance, structural soundness, physical access or construction readiness.
 """
 import json
+from app.internal.openings import validate_openings
 from collections import Counter
 from hashlib import sha256
 from typing import Annotated, Literal
@@ -37,6 +38,14 @@ _MESSAGES = {
     "ROOM_OUTSIDE_BUILDABLE_AREA": "A room lies outside the buildable area implied by the supplied setbacks.",
     "ROOMS_OVERLAP": "Two rooms overlap.",
     "OPENING_OUTSIDE_WALL": "An opening does not fit inside its wall.",
+    "OPENING_WALL_NOT_FOUND": "An opening references a wall that does not exist.",
+    "OPENINGS_OVERLAP": "Two openings overlap on the same wall.",
+    "WINDOW_NOT_ON_EXTERIOR": "A window does not open from a room to the outside.",
+    "DOOR_CONNECTS_NO_SPACES": "A door does not connect two different spaces.",
+    "OPENING_CORNER_CLEARANCE": "An opening is closer to a wall corner than the design preference.",
+    "PHYSICAL_ACCESS_NOT_EVALUATED": "The plan has no doors; physical access was not evaluated.",
+    "NO_ENTRANCE": "No door opens to the outside.",
+    "ROOM_NOT_REACHABLE": "At least one room cannot be reached through doors from an entrance.",
     "ROOM_COUNTS_MISMATCH": "Room counts per type differ from the saved requirements.",
     "SETBACKS_INVALID": "The supplied setback distances cannot be applied to this parcel.",
     "NO_ROOMS": "The plan contains no rooms.",
@@ -59,6 +68,11 @@ class DependencyUnavailable(RuntimeError):
     pass
 
 
+# Non-blocking findings: they require explicit acknowledgement downstream (apply/confirm), never silent acceptance.
+WARNING_CODES = frozenset({"ROOM_COUNTS_MISMATCH", "OPENING_CORNER_CLEARANCE", "PHYSICAL_ACCESS_NOT_EVALUATED", "NO_ENTRANCE",
+                           "ROOM_NOT_REACHABLE"})
+
+
 def canonical_hash(value: object) -> str:
     return sha256(json.dumps(value, sort_keys=True, separators=(",", ":")).encode()).hexdigest()
 
@@ -73,14 +87,14 @@ def _result(valid: bool, requirements_match: bool | None, codes: list[str], geom
         "geometryHash": geometry_hash,
         # A room-count mismatch is reported via requirementsMatch=false and needs explicit acknowledgement downstream;
         # it is a WARNING. Every geometry failure is CRITICAL (blocking).
-        "diagnostics": [{"code": c, "severity": "WARNING" if c == "ROOM_COUNTS_MISMATCH" else "CRITICAL",
+        "diagnostics": [{"code": c, "severity": "WARNING" if c in WARNING_CODES else "CRITICAL",
                          "message": _MESSAGES[c]} for c in unique],
     }
 
 
 def validate_plan(request: PlanValidationRequest) -> dict:
     try:
-        from shapely.geometry import LineString, Polygon
+        from shapely.geometry import Polygon
     except ImportError:
         raise DependencyUnavailable() from None
 
@@ -132,12 +146,8 @@ def validate_plan(request: PlanValidationRequest) -> dict:
             if first.intersection(second).area > OVERLAP_TOLERANCE_M2:
                 codes.append("ROOMS_OVERLAP")
 
-    walls = {wall.id: wall for wall in floor.walls}
-    for opening in floor.openings:
-        wall = walls[opening.wallId]
-        length = LineString([(wall.start.x, wall.start.y), (wall.end.x, wall.end.y)]).length
-        if opening.offset + opening.width > length + COVER_TOLERANCE_M:
-            codes.append("OPENING_OUTSIDE_WALL")
+    # Openings and physical access (shared with generation; see app.internal.openings).
+    codes.extend(code for code, _ in validate_openings(request.geometry["floors"][0]))
 
     requirements_match = None
     if request.expectedRoomCounts is not None:
@@ -147,4 +157,4 @@ def validate_plan(request: PlanValidationRequest) -> dict:
         if not requirements_match:
             codes.append("ROOM_COUNTS_MISMATCH")
 
-    return _result(not any(c != "ROOM_COUNTS_MISMATCH" for c in codes), requirements_match, codes, geometry_hash)
+    return _result(not any(c not in WARNING_CODES for c in codes), requirements_match, codes, geometry_hash)
