@@ -9,7 +9,9 @@ set -euo pipefail
 cd ~/bm-captain/src
 V=~/bm-captain/compose-verify
 S=~/bm-captain/secrets
+export BM_UID="$(id -u)" BM_GID="$(id -g)" BM_VERIFY_DIR="$V" BM_SAMPLES="$PWD/docs/captain-development/samples" BM_RAG_CORPUS="$HOME/bm-captain/rag-corpus"        BM_LLM_MODELS="$HOME/bm-captain/models"
 COMPOSE=(docker compose -p bm-captain-verify -f deploy/captain/compose.verify.yml)
+[ "${LLM:-0}" = 1 ] && COMPOSE+=(--profile llm)
 
 prepare() {
   mkdir -p "$V"/{mysql-certs,initdb,pki,secrets} && chmod 700 "$V"
@@ -65,7 +67,44 @@ EOF
           -e "s#$HOME/bm-captain/src/docs/captain-development/samples/#/app/samples/#g" \
           -e "/CaptainIntegration__Email__/d; /Services__Rag__/d; /Regulations__/d" \
     > "$V/secrets/api.env"
-  chmod 600 "$V/secrets/api.env"
+  # Email: TLS-required capture (mailpit) reached over the internal network with the unchanged external-SMTP policy.
+  mkdir -p "$V/mail"
+  openssl ecparam -name prime256v1 -genkey -noout -out "$V/mail/mailpit.key"
+  openssl req -new -key "$V/mail/mailpit.key" -subj "/CN=mailpit" -out "$V/mail/mailpit.csr"
+  printf 'subjectAltName=DNS:mailpit\nextendedKeyUsage=serverAuth\nkeyUsage=digitalSignature\n' > "$V/mail/mailpit.ext"
+  openssl x509 -req -in "$V/mail/mailpit.csr" -CA "$S/pki/server-ca.crt" -CAkey "$S/pki/server-ca.key" -CAcreateserial \
+    -days 30 -sha256 -extfile "$V/mail/mailpit.ext" -out "$V/mail/mailpit.crt" 2>/dev/null
+  rm -f "$V/mail/mailpit.csr" "$V/mail/mailpit.ext"
+  { docker run --rm --entrypoint cat buildmind-api:verify /etc/ssl/certs/ca-certificates.crt; cat "$S/pki/server-ca.crt"; } > "$V/mail/ca-bundle.pem"
+  chmod 755 "$V/mail"; chmod 644 "$V/mail/"*
+  {
+    echo "SSL_CERT_FILE=/run/bm/ca-bundle.pem"
+    echo "CaptainIntegration__Email__SmtpHost=mailpit"
+    echo "CaptainIntegration__Email__SmtpPort=1025"
+    echo "CaptainIntegration__Email__FromAddress=no-reply@buildmind.invalid"
+    echo "CaptainIntegration__Email__UseStartTls=true"
+    echo "CaptainIntegration__Email__AllowExternalDelivery=true"
+  } >> "$V/secrets/api.env"
+  # RAG over internal mTLS (same handler and trust as python-services) with the staged approved corpus.
+  {
+    echo "Services__Rag__Enabled=true"
+    echo "Services__Rag__BaseUrl=https://rag-service:8092"
+    echo "Services__Rag__AuthToken=$(cat "$S/rag-internal.token")"
+    echo "Regulations__Retrieval__Enabled=true"
+  } >> "$V/secrets/api.env"
+  if [ "${LLM:-0}" = 1 ]; then
+    {
+      echo "CaptainIntegration__AiEdit__Provider=openai-compatible"
+      echo "CaptainIntegration__AiEdit__BaseUrl=http://llm:8093"
+      echo "CaptainIntegration__AiEdit__Model=qwen2.5-1.5b-instruct-q4_k_m"
+      echo "CaptainIntegration__AiEdit__TimeoutSeconds=300"
+    } >> "$V/secrets/api.env"
+  fi
+  printf 'BUILDMIND_RAG_AUTH=required
+BUILDMIND_RAG_INTERNAL_TOKENS=%s
+' "$(cat "$S/rag-internal.token")" > "$V/secrets/rag.env"
+  chmod 600 "$V/secrets/api.env" "$V/secrets/rag.env"
+  cp "$S/pki/rag-server.crt" "$S/pki/rag-server.key" "$V/pki/"; chmod 644 "$V/pki/"*
   echo "prepared $V"
 }
 
@@ -74,9 +113,12 @@ case "${1:-status}" in
   build)
     docker build -f deploy/captain/python.Dockerfile -t buildmind-python:verify . 2>&1 | tail -2
     docker build -f deploy/captain/api.Dockerfile -t buildmind-api:verify . 2>&1 | tail -2
-    docker image ls --format '{{.Repository}}:{{.Tag}} {{.ID}} {{.Size}}' | grep -E "buildmind-(api|python):verify" ;;
-  up) BM_VERIFY_DIR=$V BM_SAMPLES="$PWD/docs/captain-development/samples" "${COMPOSE[@]}" up -d && BM_VERIFY_DIR=$V BM_SAMPLES="$PWD/docs/captain-development/samples" "${COMPOSE[@]}" ps ;;
-  down) BM_VERIFY_DIR=$V BM_SAMPLES="$PWD/docs/captain-development/samples" "${COMPOSE[@]}" down ;;
-  reset) BM_VERIFY_DIR=$V BM_SAMPLES="$PWD/docs/captain-development/samples" "${COMPOSE[@]}" down -v ;;  # disposable verification volumes only
-  status) BM_VERIFY_DIR=$V BM_SAMPLES="$PWD/docs/captain-development/samples" "${COMPOSE[@]}" ps ;;
+    docker build -f deploy/captain/rag.Dockerfile -t buildmind-rag:verify . 2>&1 | tail -2
+    [ "${LLM:-0}" = 1 ] && docker build -f "$PWD/deploy/captain/llm.Dockerfile" -t buildmind-llm:verify "$HOME/bm-captain/tools/llama-b12237/llama-b12237" 2>&1 | tail -2
+    docker image ls --format '{{.Repository}}:{{.Tag}} {{.ID}} {{.Size}}' | grep -E "buildmind-(api|python|rag|llm):verify" ;;
+  up) "${COMPOSE[@]}" up -d && "${COMPOSE[@]}" ps ;;
+  down) "${COMPOSE[@]}" down ;;
+  reset) "${COMPOSE[@]}" down -v ;;  # disposable verification volumes only
+  status) "${COMPOSE[@]}" ps ;;
+  llm-up) "${COMPOSE[@]}" up -d --no-deps llm api ;;  # LLM=1: start the model and recreate the API with AiEdit settings
 esac

@@ -2,7 +2,7 @@
 
 Usage: ~/bm-captain/venv-python-services/bin/python tools/captain/rag_acceptance.py [base_url]
 (that venv has pypdf). Checks are independent of the retrieval engine where possible:
-  - every cited page is re-extracted from the ORIGINAL approved PDF with pypdf, and the excerpt's words must be on
+  - every cited page is re-extracted from the ORIGINAL approved PDF with poppler pdftotext, and the excerpt's words must be on
     that page (and markedly less on a distant page), so page references are verified, not trusted;
   - unapproved document ids are refused; unknown jurisdictions are reported, not guessed;
   - a tampered copy of the corpus is refused by the unchanged loader (integrity failure);
@@ -19,7 +19,6 @@ import time
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import smoke_journey as j  # noqa: E402
 
-from pypdf import PdfReader  # noqa: E402
 
 CORPUS = os.path.expanduser("~/bm-captain/rag-corpus")
 PINS = {
@@ -43,10 +42,14 @@ def words(text):
 
 
 def page_text(document_id, page):
-    reader = _readers.setdefault(document_id, PdfReader(os.path.join(CORPUS, "input_pdfs", PINS[document_id])))
-    if not 1 <= page <= len(reader.pages):
+    """One page via poppler's pdftotext (streams; the 232 MB Colombo PDF must not be loaded whole: memory)."""
+    import subprocess
+    if page < 1:
         return ""
-    return reader.pages[page - 1].extract_text() or ""
+    result = subprocess.run(["pdftotext", "-q", "-f", str(page), "-l", str(page), "-layout",
+                             os.path.join(CORPUS, "input_pdfs", PINS[document_id]), "-"],
+                            capture_output=True, text=True, timeout=120)
+    return result.stdout if result.returncode == 0 else ""
 
 
 def overlap(excerpt, text):
