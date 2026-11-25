@@ -28,7 +28,13 @@ export CaptainIntegration__SharingPolicyVersion="captain-sharing-policy-dev-1"
 export CaptainIntegration__SurveyWorker__PollSeconds=2
 export CaptainIntegration__SurveyWorker__LeaseSeconds=120
 # Natural-language edits: local RULE-BASED parser (not an AI model); no external provider is configured.
-export CaptainIntegration__AiEdit__Provider=rule-based-local
+if [ -n "${LLM_PORT:-}" ]; then
+  # Real LLM (local llama.cpp, OpenAI-compatible; no project data leaves the host).
+  export CaptainIntegration__AiEdit__Provider=openai-compatible CaptainIntegration__AiEdit__BaseUrl="http://127.0.0.1:$LLM_PORT"
+  export CaptainIntegration__AiEdit__Model=qwen2.5-1.5b-instruct-q4_k_m CaptainIntegration__AiEdit__TimeoutSeconds=300
+else
+  export CaptainIntegration__AiEdit__Provider=rule-based-local
+fi
 # Local email capture (Mailpit, loopback only) for recovery and staff invitations; no real recipients.
 export Authentication__PasswordRecovery__Enabled=true
 export CaptainIntegration__Email__SmtpHost=127.0.0.1
