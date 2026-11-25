@@ -40,7 +40,19 @@ class InternalAuth:
     @staticmethod
     def from_environment() -> "InternalAuth":
         mode = os.environ.get(MODE_VARIABLE, "required").strip().lower()
-        tokens = [t.strip() for t in os.environ.get(TOKENS_VARIABLE, "").split(",") if t.strip()]
+        raw = os.environ.get(TOKENS_VARIABLE, "")
+        token_file = os.environ.get(TOKENS_VARIABLE + "_FILE", "").strip()
+        if token_file:
+            # Container secret file (e.g. /run/secrets/...). Unreadable or oversized files fail closed (no tokens).
+            if raw.strip():
+                raise RuntimeError(f"Set only one of {TOKENS_VARIABLE} and {TOKENS_VARIABLE}_FILE")
+            try:
+                if os.path.getsize(token_file) <= 64 * 1024:
+                    with open(token_file, encoding="ascii") as handle:
+                        raw = handle.read()
+            except (OSError, UnicodeDecodeError):
+                raw = ""
+        tokens = [t.strip() for t in raw.replace("\n", ",").split(",") if t.strip()]
         if mode == "disabled" and os.environ.get(ENVIRONMENT_VARIABLE, "").strip().lower() != "development":
             raise RuntimeError(f"{MODE_VARIABLE}=disabled requires {ENVIRONMENT_VARIABLE}=development")
         return InternalAuth.from_tokens(tokens, required=(mode != "disabled"))
