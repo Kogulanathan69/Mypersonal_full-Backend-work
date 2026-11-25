@@ -661,10 +661,11 @@ def phase8():
 
     ai_path = f"/api/v1/projects/{pid}/plans/{plan}/ai-edit/proposals"
     status, body, _ = call("POST", ai_path, {"expectedBaseRevisionId": saved.get("revisionId"), "instruction": "Paint the walls blue"}, token=a)
-    check("unsupported natural-language instruction refused (422; M3 reports AI_PROPOSAL_INVALID)",
-          status == 422 and code_of(body) == "AI_PROPOSAL_INVALID", body)
+    check("unsupported natural-language instruction refused with its specific reason (422 INSTRUCTION_NOT_SUPPORTED)",
+          status == 422 and code_of(body) == "INSTRUCTION_NOT_SUPPORTED", body)
     status, body, _ = call("POST", ai_path, {"expectedBaseRevisionId": saved.get("revisionId"), "instruction": "Make the bedroom larger"}, token=a)
-    check("ambiguous room reference refused (422 AI_PROPOSAL_INVALID)", status == 422 and code_of(body) == "AI_PROPOSAL_INVALID", body)
+    check("ambiguous room reference refused with its specific reason (422 AMBIGUOUS_TARGET)",
+          status == 422 and code_of(body) == "AMBIGUOUS_TARGET", body)
     status, _, _ = call("POST", ai_path, {"expectedBaseRevisionId": saved.get("revisionId"), "instruction": "Make the kitchen larger by 5%"}, token=b)
     check("cross-user AI proposal denied (404)", status == 404, status)
     status, proposal, _ = call("POST", ai_path, {"expectedBaseRevisionId": saved.get("revisionId"),

@@ -105,10 +105,12 @@ public static class CaptainIntegrationInfrastructure
         services.TryAddScoped<IAiEditProposalPort>(p =>
             p.GetRequiredService<IConfiguration>()["CaptainIntegration:AiEdit:Provider"] switch
             {
-                "rule-based-local" => new RuleBasedAiEditProposalPort(p.GetRequiredService<IPlanRevisionStore>()),
+                "rule-based-local" => new RecordingAiEditProposalPort(new RuleBasedAiEditProposalPort(p.GetRequiredService<IPlanRevisionStore>()),
+                    p.GetRequiredService<AiProposalRejectionContext>()),
 
                 _ => new UnconfiguredAiEditProposalPort(),
             });
+        services.TryAddScoped<AiProposalRejectionContext>();
 
         // Administration: fresh principal reads, store with audit chain, proposal appliers, email.
         services.TryAddScoped<IPrincipalDirectory, MySqlPrincipalDirectory>();

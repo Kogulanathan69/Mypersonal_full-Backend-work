@@ -9,6 +9,7 @@ using BuildMind.Application.Features.PlanEditor.Diagnostics;
 using BuildMind.Application.Features.PlanEditor.Editing;
 using BuildMind.Application.Features.Planning;
 using BuildMind.Application.Features.Survey.Services;
+using BuildMind.Infrastructure.CaptainIntegration;
 using P = BuildMind.API.Endpoints.Planning.PlanningEndpointModule;
 
 namespace BuildMind.API.Endpoints.Planning;
@@ -212,7 +213,7 @@ public sealed class V3RouteCompletionEndpointModule : IApiEndpointModule
     }
 
     private static async Task<IResult> AiProposalAsync(string projectId, string planId, HttpContext context, ICurrentUser user,
-        AiEditOrchestrationService orchestration, IConfiguration configuration, CancellationToken token)
+        AiEditOrchestrationService orchestration, IConfiguration configuration, AiProposalRejectionContext rejection, CancellationToken token)
     {
         var provider = configuration["CaptainIntegration:AiEdit:Provider"];
         var source = provider switch { "openai-compatible" => "LLM:" + (configuration["CaptainIntegration:AiEdit:Model"] ?? "unknown"), "rule-based-local" => "RULE_BASED_LOCAL", _ => "NONE" };
@@ -244,7 +245,9 @@ public sealed class V3RouteCompletionEndpointModule : IApiEndpointModule
                     ? "Proposal from a language model, checked by the server. Review, then apply or reject it."
                     : "Proposal from the local rule-based instruction parser (not an AI model). Review, then apply or reject it.",
             }, statusCode: 201),
-            AiEditOrchestrationStatus.ProposalRejected => Problem(422, result.Diagnostic?.Code ?? "INSTRUCTION_NOT_SUPPORTED"),
+            // The Captain port's specific reason (recorded in the request scope); M3 reports every rejection generically.
+            AiEditOrchestrationStatus.ProposalRejected when rejection.Code == "STALE_BASE_REVISION" => Problem(409, "STALE_BASE_REVISION"),
+            AiEditOrchestrationStatus.ProposalRejected => Problem(422, rejection.Code ?? result.Diagnostic?.Code ?? "INSTRUCTION_NOT_SUPPORTED"),
             _ => Problem(422, result.Diagnostic?.Code ?? PlanEditorErrorCodes.InvalidEditCommand),
         };
     }

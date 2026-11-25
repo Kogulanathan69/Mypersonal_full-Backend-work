@@ -132,9 +132,11 @@ public static class CaptainLocalIntegration
             .RemoveAllLoggers();
         if (builder.Configuration["CaptainIntegration:AiEdit:Provider"] == "openai-compatible")
             services.Replace(ServiceDescriptor.Scoped<BuildMind.Application.Features.PlanEditor.Integration.IAiEditProposalPort>(provider =>
-                new OpenAiCompatibleEditProposalPort(provider.GetRequiredService<BuildMind.Application.Features.PlanEditor.Versioning.IPlanRevisionStore>(),
-                    provider.GetRequiredService<IHttpClientFactory>().CreateClient(OpenAiCompatibleEditProposalPort.ClientName),
-                    provider.GetRequiredService<IConfiguration>(), provider.GetRequiredService<ILogger<OpenAiCompatibleEditProposalPort>>())));
+                new RecordingAiEditProposalPort(
+                    new OpenAiCompatibleEditProposalPort(provider.GetRequiredService<BuildMind.Application.Features.PlanEditor.Versioning.IPlanRevisionStore>(),
+                        provider.GetRequiredService<IHttpClientFactory>().CreateClient(OpenAiCompatibleEditProposalPort.ClientName),
+                        provider.GetRequiredService<IConfiguration>(), provider.GetRequiredService<ILogger<OpenAiCompatibleEditProposalPort>>()),
+                    provider.GetRequiredService<AiProposalRejectionContext>())));
 
         // Admin and delegated staff (proposed Captain-local role model; privileges read fresh per request).
         services.AddScoped<StaffInvitationService>();
