@@ -20,6 +20,8 @@ from app.internal.plan_validation import DependencyUnavailable as PlanDependency
 from app.internal.plan_edit import parse_request as parse_edit_preview
 from app.internal.plan_edit import preview as edit_preview
 from app.internal.plan_validation import PlanValidationRequest, validate_plan
+from app.internal.land_frame import LandFrameRequest, frame_from_request
+from app.geometry.land.validation import LandGeometryError
 from app.internal.survey_extract import IntegrityRejected, SurveyExtractRequest
 from app.internal.survey_extract import extract as extract_survey
 from app.validation.boundary import ContractJsonError, parse_contract_json
@@ -108,6 +110,15 @@ def create_app(auth: InternalAuth = REQUIRED_WITHOUT_TOKENS) -> FastAPI:
     @application.post("/internal/v1/land/validate")
     async def land_validate(request: Request):
         return validate_land(await body(request, LandValidationRequest))
+
+    @application.post("/internal/v1/land/frame")
+    async def land_frame(request: Request):
+        parsed = await body(request, LandFrameRequest)
+        try:
+            return {"valid": True, "code": "VALID", **await run_in_threadpool(frame_from_request, parsed)}
+        except LandGeometryError as error:
+            # Invalid geometry or CRS is a validation result (like land/validate), not a dependency failure.
+            return {"schemaVersion": "captain-land-frame/1", "valid": False, "code": str(error.args[0]) if error.args else "LAND_FRAME_INVALID"}
 
     @application.post("/internal/v1/generation/run")
     async def generation_run(request: Request):

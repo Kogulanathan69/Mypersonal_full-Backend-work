@@ -52,10 +52,10 @@ public sealed class PlanningEndpointModule : IApiEndpointModule
         var body = await ReadAsync<PutLandHttpRequest>(context, token);
         if (body.Failure is not null) return body.Failure;
         var request = body.Value!;
-        if (request.Exterior is null) return Invalid("exterior");
+        if (request.Exterior is null && request.Georeference is null) return Invalid("exterior");
         var result = await service.SubmitAsync(project, new SubmitLandCommand(
-            request.Exterior.Select(p => p is null ? null! : new CoordinatePointDto { X = p.X, Y = p.Y }).ToArray(),
-            request.ExpectedCurrentLandRevisionId, request.SurveyId), token);
+            request.Exterior?.Select(p => p is null ? null! : new CoordinatePointDto { X = p.X, Y = p.Y }).ToArray(),
+            request.ExpectedCurrentLandRevisionId, request.SurveyId, ToGeoreference(request.Georeference)), token);
         return Map(result, Land, created: true);
     }
 
@@ -126,10 +126,15 @@ public sealed class PlanningEndpointModule : IApiEndpointModule
         return Results.Problem(statusCode: status, type: ProblemDetailsDefaults.GetTypeForCode(code), extensions: extensions);
     }
 
+    internal static GeoreferenceInput? ToGeoreference(GeoreferenceHttpInput? g) => g is null ? null
+        : new GeoreferenceInput(g.SourceCrs ?? "", g.SourceUnit, g.CalculationCrs,
+            (g.SourceExterior ?? []).Select(p => p is null ? null! : new CoordinatePointDto { X = p.X, Y = p.Y }).ToArray());
+
     internal static object Land(LandRevision land) => new
     {
         landRevisionId = land.Id, land.ProjectId, land.RevisionNumber, exterior = land.Land.Boundary.Exterior,
         coordinateSystem = land.Land.CoordinateSystem, areaM2 = land.AreaM2, land.EdgeCount, land.SurveyId, land.CreatedAtUtc,
+        geometryDigest = land.GeometryDigest,
         provenance = "User-confirmed boundary in a local metric frame; not a cadastral survey verification.",
     };
 
@@ -187,7 +192,11 @@ public sealed class PlanningEndpointModule : IApiEndpointModule
 }
 
 public sealed record PointHttpInput(double X, double Y);
-public sealed record PutLandHttpRequest(PointHttpInput?[]? Exterior, Guid? ExpectedCurrentLandRevisionId, Guid? SurveyId);
+public sealed record PutLandHttpRequest(PointHttpInput?[]? Exterior, Guid? ExpectedCurrentLandRevisionId, Guid? SurveyId,
+    GeoreferenceHttpInput? Georeference = null);
+
+/// <summary>Explicit source CRS (EPSG code or LOCAL), unit for LOCAL (m|ft), optional projected calculation CRS.</summary>
+public sealed record GeoreferenceHttpInput(string? SourceCrs, string? SourceUnit, string? CalculationCrs, PointHttpInput?[]? SourceExterior);
 public sealed record StartGenerationHttpRequest(string? IdempotencyKey, Guid? ExpectedLandRevisionId,
     Guid? ExpectedRequirementsRevisionId, int? Seed);
 public sealed record SaveCandidateHttpRequest(string? ChangeSummary);

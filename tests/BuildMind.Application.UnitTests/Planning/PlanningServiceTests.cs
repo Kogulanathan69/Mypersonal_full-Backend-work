@@ -286,6 +286,14 @@ public sealed class PlanningServiceTests
         public Exception? Failure { get; set; }
         public bool PlanValid { get; set; } = true;
 
+        public Task<LandFrameResult> BuildLandFrameAsync(LandFrameInput input, CancellationToken cancellationToken)
+        {
+            var local = input.Exterior.ToArray();
+            var digest = LandFrameDigest.Compute("LOCAL", 0, 0, local.Select(p => (p.X, p.Y)).ToArray());
+            return Task.FromResult(new LandFrameResult(true, "VALID", local, """{"frameId":"00000000-0000-0000-0000-000000000000","crs":"LOCAL"}""",
+                digest, [], "LOCAL", [0, 0]));
+        }
+
         public Task<LandCheckResult> ValidateLandAsync(Guid projectId, Guid landRevisionId, MetricLandDto land, CancellationToken token) =>
             Task.FromResult(new LandCheckResult(true, "LAND_VALID", 120, 4));
 

@@ -22,6 +22,8 @@ internal sealed class LandRevisionRecordConfiguration : IEntityTypeConfiguration
         builder.Property(r => r.SurveyId).HasColumnName("survey_id");
         builder.Property(r => r.CreatedBy).HasColumnName("created_by").IsRequired();
         builder.Property(r => r.CreatedAtUtc).HasColumnName("created_at_utc").IsRequired();
+        builder.Property(r => r.FrameJson).HasColumnName("frame_json").HasColumnType("mediumtext");
+        builder.Property(r => r.GeometryDigest).HasColumnName("geometry_digest").HasMaxLength(64).IsFixedLength();
         builder.HasOne<ProjectRecord>().WithMany().HasForeignKey(r => r.ProjectId)
             .HasConstraintName("fk_land_revisions_projects_project_id").OnDelete(DeleteBehavior.Restrict);
         builder.HasOne<UserRecord>().WithMany().HasForeignKey(r => r.CreatedBy)

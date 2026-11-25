@@ -1418,6 +1418,16 @@ namespace BuildMind.Infrastructure.Persistence.Migrations
                         .HasColumnType("int")
                         .HasColumnName("edge_count");
 
+                    b.Property<string>("FrameJson")
+                        .HasColumnType("mediumtext")
+                        .HasColumnName("frame_json");
+
+                    b.Property<string>("GeometryDigest")
+                        .HasMaxLength(64)
+                        .HasColumnType("char(64)")
+                        .HasColumnName("geometry_digest")
+                        .IsFixedLength();
+
                     b.Property<string>("LandJson")
                         .IsRequired()
                         .HasColumnType("mediumtext")

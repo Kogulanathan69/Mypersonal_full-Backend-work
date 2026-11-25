@@ -54,7 +54,8 @@ public static class DeterministicIds
     }
 }
 
-public sealed record SubmitLandCommand(IReadOnlyList<CoordinatePointDto>? Exterior, Guid? ExpectedCurrentLandRevisionId, Guid? SurveyId);
+public sealed record SubmitLandCommand(IReadOnlyList<CoordinatePointDto>? Exterior, Guid? ExpectedCurrentLandRevisionId, Guid? SurveyId,
+    GeoreferenceInput? Georeference = null);
 
 public sealed class LandService(
     PlanningAccess access, ILandRevisionStore store, IPlanningComputeClient compute, ISurveyRepository surveys,
@@ -94,8 +95,10 @@ public sealed class LandService(
         var (status, actor, version) = await access.AuthorizeAsync(projectId, token).ConfigureAwait(false);
         if (status != PlanningStatus.Success) return new(status);
 
-        var ring = NormalizeRing(command.Exterior);
-        if (ring is null)
+        if (command.Georeference is not null && command.Exterior is { Count: > 0 })
+            return new(PlanningStatus.ValidationFailed, Code: "EXTERIOR_AND_GEOREFERENCE_BOTH_SUPPLIED");
+        IReadOnlyList<CoordinatePointDto>? ring = command.Georeference is null ? NormalizeRing(command.Exterior) : null;
+        if (command.Georeference is null && ring is null)
             return new(PlanningStatus.ValidationFailed, Code: "LAND_BOUNDARY_INVALID");
         if (command.ExpectedCurrentLandRevisionId == Guid.Empty)
             return new(PlanningStatus.ValidationFailed, Code: "EXPECTED_REVISION_INVALID");
@@ -106,6 +109,41 @@ public sealed class LandService(
         var current = await store.GetCurrentAsync(projectId, token).ConfigureAwait(false);
         if (current?.Id != command.ExpectedCurrentLandRevisionId)
             return new(PlanningStatus.Conflict, Code: "REVISION_CONFLICT");
+
+        // Captain coordinate frame (captain-frame-v1) for every boundary: explicit source CRS, or local engineering metres.
+        var geo = command.Georeference;
+        if (geo is null)
+        {
+            // Local boundaries keep the established validation contract (codes such as POLYGON_INVALID) first.
+            try
+            {
+                var pre = await compute.ValidateLandAsync(projectId, Guid.NewGuid(), new MetricLandDto
+                {
+                    SchemaVersion = PlanningSchemas.MetricLand, CoordinateSystem = LocalFrame(),
+                    Boundary = new PolygonBoundaryDto { Exterior = ring!, Holes = [] },
+                }, token).ConfigureAwait(false);
+                if (!pre.Valid) return new(PlanningStatus.ValidationFailed, Code: pre.Code);
+            }
+            catch (DependencyFailureException failure) { return DependencyFailure<LandRevision>(failure); }
+        }
+        LandFrameResult frame;
+        try
+        {
+            frame = await compute.BuildLandFrameAsync(new LandFrameInput(geo?.SourceCrs ?? "LOCAL", geo is null ? "m" : geo.SourceUnit,
+                geo?.CalculationCrs, geo?.SourceExterior ?? ring!, PreviousEdges(current)), token).ConfigureAwait(false);
+        }
+        catch (DependencyFailureException failure) { return DependencyFailure<LandRevision>(failure); }
+        if (!frame.Valid || frame.LocalExterior is null)
+            return new(PlanningStatus.ValidationFailed, Code: frame.Code);
+        // The land contract uses a closed ring (as NormalizeRing produces).
+        ring = [.. frame.LocalExterior, new CoordinatePointDto { X = frame.LocalExterior[0].X, Y = frame.LocalExterior[0].Y }];
+        var frameJson = System.Text.Json.JsonSerializer.Serialize(new
+        {
+            frame = System.Text.Json.JsonDocument.Parse(frame.FrameJson!).RootElement,
+            edges = frame.Edges,
+            sourceExterior = (geo?.SourceExterior ?? command.Exterior!).Select(p => new[] { p.X, p.Y }),
+            geometryDigest = frame.GeometryDigest,
+        }, new System.Text.Json.JsonSerializerOptions(System.Text.Json.JsonSerializerDefaults.Web));
 
         var land = new MetricLandDto
         {
@@ -121,13 +159,40 @@ public sealed class LandService(
             return new(PlanningStatus.ValidationFailed, Code: check.Code);
 
         var revision = new LandRevision(id, projectId, (current?.RevisionNumber ?? 0) + 1, land, area, edges,
-            command.SurveyId, actor, PlanningClock.Now(time));
+            command.SurveyId, actor, PlanningClock.Now(time), frameJson, frame.GeometryDigest);
         return await store.TryAppendAsync(revision, command.ExpectedCurrentLandRevisionId, version, token).ConfigureAwait(false) switch
         {
             ProtectedWriteStatus.Written => PlanningResult<LandRevision>.Ok(revision),
             ProtectedWriteStatus.Conflict => new(PlanningStatus.Conflict, Code: "REVISION_CONFLICT"),
             _ => new(PlanningStatus.NotFound),
         };
+    }
+
+    /// <summary>Edges of the current revision, for split lineage of the next one.</summary>
+    private static IReadOnlyList<LandEdge>? PreviousEdges(LandRevision? current)
+    {
+        if (current?.FrameJson is not { } json) return null;
+        using var document = System.Text.Json.JsonDocument.Parse(json);
+        return document.RootElement.TryGetProperty("edges", out var edges)
+            ? System.Text.Json.JsonSerializer.Deserialize<LandEdge[]>(edges.GetRawText(), new System.Text.Json.JsonSerializerOptions(System.Text.Json.JsonSerializerDefaults.Web))
+            : null;
+    }
+
+    /// <summary>Coordinate transformation preview (V3 land workflow): no persistence.</summary>
+    public async Task<PlanningResult<LandFrameResult>> PreviewFrameAsync(Guid projectId, GeoreferenceInput? geo, CancellationToken token)
+    {
+        var (status, _, _) = await access.AuthorizeAsync(projectId, token).ConfigureAwait(false);
+        if (status != PlanningStatus.Success) return new(status);
+        if (geo is null || geo.SourceExterior is not { Count: >= 3 } || string.IsNullOrWhiteSpace(geo.SourceCrs))
+            return new(PlanningStatus.ValidationFailed, Code: "GEOREFERENCE_INVALID");
+        try
+        {
+            var current = await store.GetCurrentAsync(projectId, token).ConfigureAwait(false);
+            var frame = await compute.BuildLandFrameAsync(new LandFrameInput(geo.SourceCrs, geo.SourceUnit, geo.CalculationCrs, geo.SourceExterior,
+                PreviousEdges(current)), token).ConfigureAwait(false);
+            return frame.Valid ? PlanningResult<LandFrameResult>.Ok(frame) : new(PlanningStatus.ValidationFailed, Code: frame.Code);
+        }
+        catch (DependencyFailureException failure) { return DependencyFailure<LandFrameResult>(failure); }
     }
 
     internal static CoordinateSystemDto LocalFrame() => new()

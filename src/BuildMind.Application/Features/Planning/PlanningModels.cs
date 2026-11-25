@@ -48,7 +48,7 @@ public enum ProtectedWriteStatus { Written, Denied, Conflict }
 /// <summary>Immutable, user-confirmed land boundary in a local metric frame. Survey link is provenance only.</summary>
 public sealed record LandRevision(
     Guid Id, Guid ProjectId, long RevisionNumber, MetricLandDto Land, double AreaM2, int EdgeCount,
-    Guid? SurveyId, Guid CreatedBy, DateTimeOffset CreatedAtUtc);
+    Guid? SurveyId, Guid CreatedBy, DateTimeOffset CreatedAtUtc, string? FrameJson = null, string? GeometryDigest = null);
 
 public enum GenerationJobStatus { Running, Succeeded, Failed }
 
@@ -112,6 +112,9 @@ public interface IGenerationJobStore
 public interface IPlanningComputeClient
 {
     Task<LandCheckResult> ValidateLandAsync(Guid projectId, Guid landRevisionId, MetricLandDto land, CancellationToken cancellationToken);
+
+    /// <summary>Captain coordinate frame (CRS transformation, anchor, digest, physical edges). No persistence.</summary>
+    Task<LandFrameResult> BuildLandFrameAsync(LandFrameInput input, CancellationToken cancellationToken);
     Task<GenerationResultDto> RunGenerationAsync(GenerationInputDto input, bool syntheticReviewedSetbacks, CancellationToken cancellationToken);
     Task<PlanCheckResult> ValidatePlanAsync(PlanCheckRequest request, CancellationToken cancellationToken);
 }
@@ -204,4 +207,50 @@ public sealed record ProjectLifecycleView(Guid ProjectId, string Stage, IReadOnl
 public interface IProjectLifecycleReader
 {
     Task<ProjectLifecycleView> GetAsync(Guid projectId, CancellationToken cancellationToken);
+}
+
+/// <summary>Georeferenced source boundary (explicit CRS; never guessed). Captain-local frame contract captain-frame-v1.</summary>
+public sealed record GeoreferenceInput(string SourceCrs, string? SourceUnit, string? CalculationCrs, IReadOnlyList<CoordinatePointDto> SourceExterior);
+
+public sealed record LandFrameInput(string SourceCrs, string? SourceUnit, string? CalculationCrs, IReadOnlyList<CoordinatePointDto> Exterior,
+    IReadOnlyList<LandEdge>? PreviousEdges);
+
+public sealed record LandEdge(Guid EdgeId, double[] Start, double[] End, double LengthM, double GridBearingDeg, string Role, Guid? ParentEdgeId);
+
+public sealed record LandFrameResult(bool Valid, string Code, IReadOnlyList<CoordinatePointDto>? LocalExterior, string? FrameJson,
+    string? GeometryDigest, IReadOnlyList<LandEdge>? Edges, string? Crs, double[]? Anchor);
+
+/// <summary>
+/// Canonical land geometry digest, byte-for-byte identical to python-services app/internal/land_frame.py:
+/// open ring → counter-clockwise → start at the lexicographically smallest vertex (fixed 6-decimal text) →
+/// SHA-256 over "captain-frame-v1|crs|anchorX,anchorY|x,y;x,y;...".
+/// </summary>
+public static class LandFrameDigest
+{
+    public const string FrameVersion = "captain-frame-v1";
+
+    public static string Format(double value)
+    {
+        var text = Math.Round(value, 6, MidpointRounding.ToEven).ToString("F6", System.Globalization.CultureInfo.InvariantCulture);
+        return text == "-0.000000" ? "0.000000" : text;
+    }
+
+    public static string Compute(string crs, double anchorX, double anchorY, IReadOnlyList<(double X, double Y)> localRing)
+    {
+        var ring = localRing.Select(p => (X: Math.Round(p.X, 6), Y: Math.Round(p.Y, 6))).ToList();
+        if (ring.Count > 1 && ring[0] == ring[^1]) ring.RemoveAt(ring.Count - 1);
+        var area2 = 0.0;
+        for (var i = 0; i < ring.Count; i++)
+        {
+            var (x1, y1) = ring[i];
+            var (x2, y2) = ring[(i + 1) % ring.Count];
+            area2 += x1 * y2 - x2 * y1;
+        }
+        if (area2 < 0) ring.Reverse();
+        var start = Enumerable.Range(0, ring.Count)
+            .OrderBy(i => Format(ring[i].X), StringComparer.Ordinal).ThenBy(i => Format(ring[i].Y), StringComparer.Ordinal).First();
+        var ordered = ring.Skip(start).Concat(ring.Take(start));
+        var payload = $"{FrameVersion}|{crs}|{Format(anchorX)},{Format(anchorY)}|" + string.Join(';', ordered.Select(p => $"{Format(p.X)},{Format(p.Y)}"));
+        return Convert.ToHexStringLower(System.Security.Cryptography.SHA256.HashData(System.Text.Encoding.ASCII.GetBytes(payload)));
+    }
 }

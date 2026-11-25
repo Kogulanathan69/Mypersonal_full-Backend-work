@@ -88,13 +88,15 @@ internal sealed class MySqlLandRevisionStore(BuildMindDbContext context, Transac
                 Id = revision.Id, ProjectId = revision.ProjectId, RevisionNumber = revision.RevisionNumber,
                 LandJson = PlanningJson.Write(revision.Land), AreaM2 = revision.AreaM2, EdgeCount = revision.EdgeCount,
                 SurveyId = revision.SurveyId, CreatedBy = revision.CreatedBy, CreatedAtUtc = revision.CreatedAtUtc,
+                FrameJson = revision.FrameJson, GeometryDigest = revision.GeometryDigest,
             });
             await context.SaveChangesAsync(inner).ConfigureAwait(false);
             return ProtectedWriteStatus.Written;
         }, token);
 
     private static LandRevision ToModel(LandRevisionRecord row) => new(row.Id, row.ProjectId, row.RevisionNumber,
-        PlanningJson.Read<MetricLandDto>(row.LandJson), row.AreaM2, row.EdgeCount, row.SurveyId, row.CreatedBy, row.CreatedAtUtc);
+        PlanningJson.Read<MetricLandDto>(row.LandJson), row.AreaM2, row.EdgeCount, row.SurveyId, row.CreatedBy, row.CreatedAtUtc,
+        row.FrameJson, row.GeometryDigest);
 }
 
 internal sealed class MySqlGenerationJobStore(BuildMindDbContext context, TransactionRunner transactions) : IGenerationJobStore

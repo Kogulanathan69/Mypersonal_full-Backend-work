@@ -1,3 +1,4 @@
+using BuildMind.Application.Features.PlanEditor.Contracts;
 using System.Text.Json;
 using BuildMind.Application.Abstractions.Errors;
 using BuildMind.Application.Features.Generation.Contracts;
@@ -25,6 +26,40 @@ internal sealed class PlanningComputeClient(PythonServiceClient python) : IPlann
                  && (!r.Valid || r.AreaM2 is > 0 && double.IsFinite(r.AreaM2.Value) && r.EdgeCount is >= 3),
             token).ConfigureAwait(false);
         return new LandCheckResult(wire.Valid, wire.Code, wire.AreaM2, wire.EdgeCount);
+    }
+
+    public async Task<LandFrameResult> BuildLandFrameAsync(LandFrameInput input, CancellationToken token)
+    {
+        var raw = await python.PostJsonVerifiedAsync<object, JsonElement>("internal/v1/land/frame", new
+        {
+            schemaVersion = "captain-land-frame/1", sourceCrs = input.SourceCrs, sourceUnit = input.SourceUnit, calculationCrs = input.CalculationCrs,
+            exterior = input.Exterior.Select(p => new[] { p.X, p.Y }).ToArray(),
+            previousEdges = (input.PreviousEdges ?? []).Select(e => new { edgeId = e.EdgeId.ToString("D"), start = e.Start, end = e.End }).ToArray(),
+        }, (_, _) => true, token).ConfigureAwait(false);
+        try
+        {
+            if (!raw.GetProperty("valid").GetBoolean())
+                return new LandFrameResult(false, raw.GetProperty("code").GetString() ?? "LAND_FRAME_INVALID", null, null, null, null, null, null);
+            var frame = raw.GetProperty("frame");
+            var crs = frame.GetProperty("crs").GetString()!;
+            var anchor = frame.GetProperty("anchor").EnumerateArray().Select(a => a.GetDouble()).ToArray();
+            var local = raw.GetProperty("localExterior").EnumerateArray()
+                .Select(p => new CoordinatePointDto { X = p.GetProperty("x").GetDouble(), Y = p.GetProperty("y").GetDouble() }).ToArray();
+            var digest = raw.GetProperty("geometryDigest").GetString()!;
+            // Cross-runtime parity is enforced: the API recomputes the canonical digest and refuses any mismatch.
+            if (anchor.Length != 2 || local.Length < 3 || LandFrameDigest.Compute(crs, anchor[0], anchor[1], local.Select(p => (p.X, p.Y)).ToArray()) != digest)
+                throw new DependencyFailureException(PythonServiceClient.DependencyName, DependencyFailureKind.MalformedResponse);
+            var edges = raw.GetProperty("edges").EnumerateArray().Select(e => new LandEdge(
+                Guid.Parse(e.GetProperty("edgeId").GetString()!), e.GetProperty("start").EnumerateArray().Select(v => v.GetDouble()).ToArray(),
+                e.GetProperty("end").EnumerateArray().Select(v => v.GetDouble()).ToArray(), e.GetProperty("lengthM").GetDouble(),
+                e.GetProperty("gridBearingDeg").GetDouble(), e.GetProperty("role").GetString()!,
+                e.GetProperty("parentEdgeId").ValueKind == JsonValueKind.Null ? null : Guid.Parse(e.GetProperty("parentEdgeId").GetString()!))).ToArray();
+            return new LandFrameResult(true, "VALID", local, frame.GetRawText(), digest, edges, crs, anchor);
+        }
+        catch (Exception e) when (e is KeyNotFoundException or InvalidOperationException or FormatException)
+        {
+            throw new DependencyFailureException(PythonServiceClient.DependencyName, DependencyFailureKind.MalformedResponse);
+        }
     }
 
     public async Task<GenerationResultDto> RunGenerationAsync(GenerationInputDto input, bool syntheticReviewedSetbacks, CancellationToken token)

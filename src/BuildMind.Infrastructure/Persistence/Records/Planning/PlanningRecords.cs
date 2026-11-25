@@ -12,6 +12,9 @@ internal sealed class LandRevisionRecord
     public Guid? SurveyId { get; init; }
     public Guid CreatedBy { get; init; }
     public DateTimeOffset CreatedAtUtc { get; init; }
+    /// <summary>Captain coordinate frame document (frame, edges, source coordinates, digest); null for older revisions.</summary>
+    public string? FrameJson { get; init; }
+    public string? GeometryDigest { get; init; }
 }
 
 internal sealed class GenerationJobRecord

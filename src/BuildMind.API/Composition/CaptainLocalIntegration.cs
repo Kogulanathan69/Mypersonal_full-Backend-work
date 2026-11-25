@@ -1,3 +1,4 @@
+using Microsoft.Extensions.DependencyInjection.Extensions;
 using BuildMind.API.Endpoints.PlanEditor;
 using BuildMind.API.Endpoints.Requirements;
 using BuildMind.API.Endpoints.Planning;
@@ -119,6 +120,21 @@ public static class CaptainLocalIntegration
         if (InternalMtls.IsConfigured(builder.Configuration))
             services.AddHttpClient<BuildMind.Infrastructure.Integration.PythonServiceClient>()
                 .ConfigurePrimaryHttpMessageHandler(provider => InternalMtls.CreatePythonHandler(provider.GetRequiredService<IConfiguration>()));
+
+        // LLM provider transport (OpenAI-compatible; local llama.cpp in Development). No proxy, no redirects, no logging.
+        services.AddHttpClient(OpenAiCompatibleEditProposalPort.ClientName)
+            .ConfigureHttpClient(client => client.Timeout = Timeout.InfiniteTimeSpan)
+            .ConfigurePrimaryHttpMessageHandler(() => new SocketsHttpHandler
+            {
+                UseProxy = false, AllowAutoRedirect = false, UseCookies = false, ConnectTimeout = TimeSpan.FromSeconds(5),
+                AutomaticDecompression = System.Net.DecompressionMethods.None,
+            })
+            .RemoveAllLoggers();
+        if (builder.Configuration["CaptainIntegration:AiEdit:Provider"] == "openai-compatible")
+            services.Replace(ServiceDescriptor.Scoped<BuildMind.Application.Features.PlanEditor.Integration.IAiEditProposalPort>(provider =>
+                new OpenAiCompatibleEditProposalPort(provider.GetRequiredService<BuildMind.Application.Features.PlanEditor.Versioning.IPlanRevisionStore>(),
+                    provider.GetRequiredService<IHttpClientFactory>().CreateClient(OpenAiCompatibleEditProposalPort.ClientName),
+                    provider.GetRequiredService<IConfiguration>(), provider.GetRequiredService<ILogger<OpenAiCompatibleEditProposalPort>>())));
 
         // Admin and delegated staff (proposed Captain-local role model; privileges read fresh per request).
         services.AddScoped<StaffInvitationService>();

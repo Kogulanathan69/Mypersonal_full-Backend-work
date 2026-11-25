@@ -11,7 +11,7 @@ import urllib.request
 import uuid
 
 BASE = next((a for a in sys.argv[1:] if a.startswith("http")), "http://127.0.0.1:5180")
-PHASES = {int(p) for p in (sys.argv[sys.argv.index("--phases") + 1].split(",") if "--phases" in sys.argv else "2,3,4,5,6,7,8,9".split(","))}
+PHASES = {int(p) for p in (sys.argv[sys.argv.index("--phases") + 1].split(",") if "--phases" in sys.argv else "2,3,4,5,6,7,8,9,10".split(","))}
 results = []
 state = {}
 
@@ -809,8 +809,73 @@ def phase9():
     check("customer cannot manage catalogues (403)", status == 403, status)
 
 
+def phase10():
+    """Georeferenced land: explicit source CRS -> Sri Lanka Grid 1999 -> local frame, edges, digest, generation."""
+    a, b = state["alice"]["access"], state["bob"]["access"]
+    status, project, _ = call("POST", "/api/v1/projects", {"name": "Captain CRS project", "projectType": "Residential"}, token=a)
+    pid = project["id"]
+    status, req, _ = call("PUT", f"/api/v1/projects/{pid}/requirements", {
+        "expectedRevisionId": None, "catalogueVersion": "synthetic-fixture-v1", "floorCount": 1,
+        "groundFloorRooms": [{"roomType": "bedroom", "count": 2}, {"roomType": "livingRoom", "count": 1},
+                             {"roomType": "kitchen", "count": 1}, {"roomType": "bathroom", "count": 1}],
+        "additionalSpaces": [], "relationships": [], "designMethod": "AI_GENERATED"}, token=a)
+    lon, lat, dlon, dlat = 79.8612, 6.9271, 14 / 110509.0, 12 / 110574.0  # ~14 m x 12 m near Colombo (WGS84)
+    ring = [{"x": lon, "y": lat}, {"x": lon + dlon, "y": lat}, {"x": lon + dlon, "y": lat + dlat}, {"x": lon, "y": lat + dlat}]
+    geo = {"sourceCrs": "EPSG:4326", "sourceUnit": None, "calculationCrs": None, "sourceExterior": ring}
+
+    status, preview, _ = call("POST", f"/api/v1/projects/{pid}/land/transform-preview", geo, token=a)
+    check("transform preview: WGS84 -> auto-selected Sri Lanka Grid 1999, not persisted",
+          status == 200 and preview.get("persisted") is False and "5235" in (preview.get("crs") or "")
+          and preview["frame"]["calculationCrsSelection"] == "AUTO_SELECTED_SRI_LANKA_GRID", preview)
+    check("preview yields 4 physical edges and a 64-hex digest",
+          len(preview.get("edges", [])) == 4 and len(preview.get("geometryDigest") or "") == 64, preview)
+    status, _, _ = call("GET", f"/api/v1/projects/{pid}/land", token=a)
+    check("preview persisted nothing (GET land 204)", status == 204, status)
+    status, body, _ = call("POST", f"/api/v1/projects/{pid}/land/transform-preview", {**geo, "sourceCrs": "EPSG:999999"}, token=a)
+    check("unknown source CRS refused (422 UNSUPPORTED_OR_INVALID_CRS)", status == 422 and body.get("reasonCode") == "UNSUPPORTED_OR_INVALID_CRS", body)
+    status, body, _ = call("POST", f"/api/v1/projects/{pid}/land/transform-preview", {**geo, "sourceExterior": [{"x": 2.35, "y": 48.85},
+                           {"x": 2.3502, "y": 48.85}, {"x": 2.3502, "y": 48.8502}, {"x": 2.35, "y": 48.8502}]}, token=a)
+    check("geographic boundary outside Sri Lanka without a calculation CRS refused (422)",
+          status == 422 and body.get("reasonCode") == "CALCULATION_CRS_REQUIRED", body)
+    status, _, _ = call("POST", f"/api/v1/projects/{pid}/land/transform-preview", geo, token=b)
+    check("cross-user transform preview denied (404)", status == 404, status)
+    status, body, _ = call("PUT", f"/api/v1/projects/{pid}/land", {"exterior": rectangle(14, 12), "expectedCurrentLandRevisionId": None,
+                                                                  "georeference": geo}, token=a)
+    check("exterior and georeference together refused as ambiguous (422)", status == 422, body)
+
+    status, land, _ = call("PUT", f"/api/v1/projects/{pid}/land", {"expectedCurrentLandRevisionId": None, "georeference": geo}, token=a)
+    check("georeferenced boundary confirmed (201, ~168 m2 in the local frame, digest bound)",
+          status == 201 and abs(land.get("areaM2", 0) - 168.0) < 0.5 and len(land.get("geometryDigest") or "") == 64, land)
+    status, frame, _ = call("GET", f"/api/v1/projects/{pid}/land/frame", token=a)
+    doc = (frame or {}).get("frameDocument", {})
+    check("land frame stored: georeferenced, anchor, PROJ provenance, source coordinates, edges",
+          status == 200 and doc.get("frame", {}).get("georeferenced") is True and len(doc.get("frame", {}).get("anchor", [])) == 2
+          and doc.get("frame", {}).get("projVersion") and len(doc.get("sourceExterior", [])) == 4 and len(doc.get("edges", [])) == 4
+          and frame.get("geometryDigest") == land.get("geometryDigest"), frame)
+    status, _, _ = call("GET", f"/api/v1/projects/{pid}/land/frame", token=b)
+    check("cross-user land frame denied (404)", status == 404, status)
+
+    status, job, _ = call("POST", f"/api/v1/projects/{pid}/generation-jobs", {
+        "idempotencyKey": "crs-" + uuid.uuid4().hex[:12], "expectedLandRevisionId": land["landRevisionId"],
+        "expectedRequirementsRevisionId": req["revisionId"], "seed": 3}, token=a)
+    check("generation on the transformed geometry yields 3 alternatives with doors and windows",
+          status == 201 and len(job.get("candidates", [])) == 3
+          and all(any(o["type"] == "door" for o in c["geometry"]["floors"][0]["openings"]) for c in job["candidates"]), job)
+
+    # Split one boundary edge: lineage links both child edges to the parent edge of the previous revision.
+    mid = {"x": lon + dlon / 2, "y": lat}
+    split = {**geo, "sourceExterior": [ring[0], mid, ring[1], ring[2], ring[3]]}
+    status, land2, _ = call("PUT", f"/api/v1/projects/{pid}/land", {"expectedCurrentLandRevisionId": land["landRevisionId"],
+                                                                   "georeference": split}, token=a)
+    edges2 = call("GET", f"/api/v1/projects/{pid}/land/frame", token=a)[1]["frameDocument"]["edges"]
+    old_ids = {e["edgeId"] for e in doc.get("edges", [])}
+    children = [e for e in edges2 if e.get("parentEdgeId") in old_ids]
+    check("split edge lineage: two child edges reference the original edge; other edges keep their ids",
+          status == 201 and len(edges2) == 5 and len(children) >= 2 and len({e["edgeId"] for e in edges2} & old_ids) == 3, edges2)
+
+
 # Phase 8 runs before phase 7, which stops python-services and exercises rate limiting.
-EXTRA_PHASES = [(4, phase4), (5, phase5), (6, phase6), (8, phase8), (9, phase9), (7, phase7)]
+EXTRA_PHASES = [(4, phase4), (5, phase5), (6, phase6), (8, phase8), (9, phase9), (10, phase10), (7, phase7)]
 
 
 def main():

@@ -67,6 +67,29 @@ public sealed class V3RouteCompletionEndpointModule : IApiEndpointModule
             if (status != PlanningStatus.Success) return P.Map(new PlanningResult<object>(status), o => o);
             return Results.Ok(await lifecycle.GetAsync(pid, t));
         }).WithName("GetProjectLifecycle");
+        project.MapGet("/land/frame", async (string projectId, HttpContext c, PlanningAccess access, ILandRevisionStore lands, CancellationToken t) =>
+        {
+            NoStore(c);
+            if (!P.TryId(projectId, out var pid)) return P.Invalid("projectId");
+            var (status, _, _) = await access.AuthorizeAsync(pid, t);
+            if (status != PlanningStatus.Success) return P.Map(new PlanningResult<object>(status), o => o);
+            var land = await lands.GetCurrentAsync(pid, t);
+            if (land?.FrameJson is not { } frame) return Results.NoContent();
+            return Results.Ok(new { landRevisionId = land.Id, land.RevisionNumber, land.GeometryDigest, frameDocument = JsonDocument.Parse(frame).RootElement,
+                notice = "Coordinate frame and edges are computed with PROJ from your explicitly stated source CRS; they are not a cadastral survey." });
+        }).WithName("GetLandFrame");
+        project.MapPost("/land/transform-preview", async (string projectId, HttpContext c, LandService lands, CancellationToken t) =>
+        {
+            NoStore(c);
+            if (!P.TryId(projectId, out var pid)) return P.Invalid("projectId");
+            var body = await P.ReadAsync<GeoreferenceHttpInput>(c, t);
+            if (body.Failure is not null) return body.Failure;
+            return P.Map(await lands.PreviewFrameAsync(pid, PlanningEndpointModule.ToGeoreference(body.Value), t), f => new
+            {
+                f.Crs, f.Anchor, localExterior = f.LocalExterior, f.GeometryDigest, f.Edges,
+                frame = JsonDocument.Parse(f.FrameJson!).RootElement, persisted = false,
+            });
+        }).WithName("PreviewLandTransformation");
         project.MapPost("/land/validate", ValidateLandAsync).WithName("ValidateProjectLand");
         project.MapPost("/land/confirm", P.PutLandAsync).WithName("ConfirmProjectLand");
         project.MapGet("/generation-jobs/{jobId}/alternatives", AlternativesAsync).WithName("GetGenerationAlternatives");
@@ -189,8 +212,10 @@ public sealed class V3RouteCompletionEndpointModule : IApiEndpointModule
     }
 
     private static async Task<IResult> AiProposalAsync(string projectId, string planId, HttpContext context, ICurrentUser user,
-        AiEditOrchestrationService orchestration, CancellationToken token)
+        AiEditOrchestrationService orchestration, IConfiguration configuration, CancellationToken token)
     {
+        var provider = configuration["CaptainIntegration:AiEdit:Provider"];
+        var source = provider switch { "openai-compatible" => "LLM:" + (configuration["CaptainIntegration:AiEdit:Model"] ?? "unknown"), "rule-based-local" => "RULE_BASED_LOCAL", _ => "NONE" };
         NoStore(context);
         if (!P.TryId(projectId, out var project) || !P.TryId(planId, out var plan)) return P.Invalid("id");
         if (user.UserId is not { } actor) return Problem(401, "UNAUTHENTICATED");
@@ -204,7 +229,7 @@ public sealed class V3RouteCompletionEndpointModule : IApiEndpointModule
             context.TraceIdentifier), actor, token);
         return result.Status switch
         {
-            AiEditOrchestrationStatus.ProposalUnavailable => Problem(503, "AI_PROVIDER_NOT_CONFIGURED"),
+            AiEditOrchestrationStatus.ProposalUnavailable => Problem(503, source == "NONE" ? "AI_PROVIDER_NOT_CONFIGURED" : "AI_PROVIDER_UNAVAILABLE"),
             AiEditOrchestrationStatus.Unauthorized or AiEditOrchestrationStatus.RevisionNotFound => Problem(404, "NOT_FOUND"),
             AiEditOrchestrationStatus.StaleBaseRevision or AiEditOrchestrationStatus.StaleInputs => Problem(409, "STALE_BASE_REVISION"),
             AiEditOrchestrationStatus.InvalidRequest => Problem(400, "VALIDATION_FAILED"),
@@ -214,8 +239,10 @@ public sealed class V3RouteCompletionEndpointModule : IApiEndpointModule
             // POST …/candidates/{candidateId}/apply. The source is the local rule-based parser, not an AI model.
             AiEditOrchestrationStatus.CandidateCreated => Results.Json(new
             {
-                candidate = result.Candidate, proposalSource = "RULE_BASED_LOCAL", applied = false,
-                notice = "Proposal from the local rule-based instruction parser (not an AI model). Review, then apply or reject it.",
+                candidate = result.Candidate, proposalSource = source, applied = false,
+                notice = source.StartsWith("LLM:", StringComparison.Ordinal)
+                    ? "Proposal from a language model, checked by the server. Review, then apply or reject it."
+                    : "Proposal from the local rule-based instruction parser (not an AI model). Review, then apply or reject it.",
             }, statusCode: 201),
             AiEditOrchestrationStatus.ProposalRejected => Problem(422, result.Diagnostic?.Code ?? "INSTRUCTION_NOT_SUPPORTED"),
             _ => Problem(422, result.Diagnostic?.Code ?? PlanEditorErrorCodes.InvalidEditCommand),
