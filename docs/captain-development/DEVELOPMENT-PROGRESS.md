@@ -417,3 +417,57 @@ Runtime state at handover:
 - llama-server is stopped.
 
 The Captain DB is intact (37 tables, never reset).
+
+## Final full-backend order (2026-11-25): continuity checkpoint
+
+| Item | State |
+|---|---|
+| Start | `8317061` verified |
+| `08221ac` | Real RAG (STEP 8B lifted) |
+
+**`08221ac` evidence:**
+
+| Check | Result |
+|---|---|
+| stage_approved_corpus.py | → `~/bm-captain/rag-corpus` |
+| rag_acceptance | 33/33 |
+| Citations | 18/18 independently verified |
+| RAG mTLS | 12/12 |
+| Phase 5 | 24/24 |
+| Readiness | all Healthy |
+
+**Connection exhaustion: root cause and fix.**
+- Cause: the disposable test DB pools were never cleared.
+- Fix: `ClearPool` in `DisposableMySqlDatabase.DisposeAsync`.
+- Measured with the live stack running: persistence 115/115; Max_used_connections 14 (was 152); 0 max-connection errors.
+
+**Uncommitted at this checkpoint (built clean):**
+- CaptainReadModels + CaptainCompletionEndpointModule (14 operations):
+  - surveys list;
+  - land revisions list and detail;
+  - requirement revisions list and detail;
+  - generation jobs list;
+  - candidates list and detail;
+  - confirmation GET;
+  - plan revert;
+  - sessions list and revoke;
+  - admin project detail, worker status, dependency diagnostics.
+- WorkerStatusRegistry heartbeats in the outbox and survey workers.
+- Journey phase 11.
+- llm_benchmark.py (not yet run).
+
+**Incident.** WSL wedged (WSAETIMEDOUT) under memory pressure.
+
+- **Recovery procedure:**
+  1. `wsl --terminate Ubuntu-24.04`;
+  2. as root: `setsid nohup dockerd > /var/log/dockerd-captain.log 2>&1 &`;
+  3. `chgrp buildmind /var/run/docker.sock`;
+  4. `docker start bm-captain-mysql`.
+- Leave `bm-m4-atomic-mysql` (M4) alone.
+
+**Next steps:**
+1. full journey with `BM_CAPTURE` → `openapi_enrich.py` → contracts + acceptance matrix;
+2. LLM benchmark;
+3. Docker email fix;
+4. containers with RAG;
+5. final regression and documents.

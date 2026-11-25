@@ -12,7 +12,7 @@ import urllib.request
 import uuid
 
 BASE = next((a for a in sys.argv[1:] if a.startswith("http")), "http://127.0.0.1:5180")
-PHASES = {int(p) for p in (sys.argv[sys.argv.index("--phases") + 1].split(",") if "--phases" in sys.argv else "2,3,4,5,6,7,8,9,10".split(","))}
+PHASES = {int(p) for p in (sys.argv[sys.argv.index("--phases") + 1].split(",") if "--phases" in sys.argv else "2,3,4,5,6,7,8,9,10,11".split(","))}
 results = []
 state = {}
 
@@ -813,7 +813,7 @@ def phase9():
     check("architect was notified of the new request", any(n["kind"] == "ARCHITECT_REQUEST_RECEIVED" for n in anote.get("items", [])), anote)
     delivered = False
     for _ in range(30):
-        with ur.urlopen("http://127.0.0.1:8025/api/v1/search?query=" + ur.quote("to:" + state["alice"]["email"]), timeout=10) as r:
+        with ur.urlopen(__import__("os").environ.get("MAILPIT_API", "http://127.0.0.1:8025/api/v1") + "/search?query=" + ur.quote("to:" + state["alice"]["email"]), timeout=10) as r:
             delivered = any("architect" in m.get("Subject", "") for m in json.loads(r.read()).get("messages", []))
         if delivered:
             break
@@ -916,8 +916,108 @@ def phase10():
           status == 201 and len(edges2) == 5 and len(children) >= 2 and len({e["edgeId"] for e in edges2} & old_ids) == 3, edges2)
 
 
+
+def phase11():
+    """Completion routes: history/listing, revert (undo/redo), sessions, admin oversight, workers, dependencies."""
+    import os
+    import time
+    a, b, pid, plan = state["alice"]["access"], state["bob"]["access"], state.get("project"), state.get("plan")
+    if not check("phase 11 prerequisite: project with a confirmed plan", pid and plan and state.get("confirmation")):
+        return
+    base = f"/api/v1/projects/{pid}"
+    for route in ("/surveys", "/land/revisions", "/requirements/revisions", "/generation-jobs",
+                  f"/plans/{plan}/candidates", f"/plans/{plan}/confirmation"):
+        status, body, _ = call("GET", base + route, token=a)
+        check(f"GET {route.split('/')[-1]} by owner (200)", status == 200 and isinstance(body, dict), body)
+        status, _, _ = call("GET", base + route, token=b)
+        check(f"GET {route.split('/')[-1]} cross-user denied (404)", status == 404, status)
+        status, _, _ = call("GET", base + route)
+        check(f"GET {route.split('/')[-1]} unauthenticated (401)", status == 401, status)
+    lands = call("GET", base + "/land/revisions", token=a)[1]["items"]
+    check("land revisions newest first, exactly one current",
+          lands and sum(x["isCurrent"] for x in lands) == 1 and lands[0]["isCurrent"], lands)
+    status, detail, _ = call("GET", base + f"/land/revisions/{lands[-1]['landRevisionId']}", token=a)
+    check("land revision detail returns the stored boundary",
+          status == 200 and detail["land"] and detail["revision"]["revisionNumber"] == lands[-1]["revisionNumber"], detail)
+    status, _, _ = call("GET", base + f"/land/revisions/{uuid.uuid4()}", token=a)
+    check("unknown land revision -> 404", status == 404, status)
+    status, _, _ = call("GET", base + "/land/revisions/not-a-guid", token=a)
+    check("malformed land revision id -> 400", status == 400, status)
+    reqs = call("GET", base + "/requirements/revisions", token=a)[1]["items"]
+    status, rd, _ = call("GET", base + f"/requirements/revisions/{reqs[0]['revisionId']}", token=a)
+    check("requirement revision detail returns stored content",
+          status == 200 and rd["revision"]["isCurrent"] and isinstance(rd["content"], dict), rd)
+    jobs = call("GET", base + "/generation-jobs", token=a)[1]["items"]
+    check("generation jobs listed with status and evidence mode", jobs and all(j["status"] and j["evidenceMode"] for j in jobs), jobs)
+    cands = call("GET", base + f"/plans/{plan}/candidates", token=a)[1]["items"]
+    check("edit candidates listed with lifecycle state", cands and all(c["status"] for c in cands), cands)
+    status, cd, _ = call("GET", base + f"/plans/{plan}/candidates/{cands[0]['candidateId']}", token=a)
+    check("edit candidate detail includes its geometry", status == 200 and cd["geometry"].get("floors"), cd)
+    conf = call("GET", base + f"/plans/{plan}/confirmation", token=a)[1]
+    check("confirmation readable and equals the confirmed record", conf.get("confirmationId") == state["confirmation"], conf)
+
+    versions = call("GET", base + f"/plans/{plan}/versions", token=a)[1]["revisions"]
+    first = min(versions, key=lambda r: r["versionNumber"])
+    head = call("GET", base + f"/plans/{plan}", token=a)[1]
+    revert = base + f"/plans/{plan}/revert"
+    status, _, _ = call("POST", revert, {"expectedBaseRevisionId": head["revisionId"], "targetRevisionId": first["revisionId"]}, token=b)
+    check("cross-user revert denied (404)", status == 404, status)
+    status, reverted, _ = call("POST", revert, {"expectedBaseRevisionId": head["revisionId"], "targetRevisionId": first["revisionId"]}, token=a)
+    first_full = call("GET", base + f"/plans/{plan}/versions/{first['revisionId']}", token=a)[1]
+    check("revert (undo) appends a NEW head revision with the target's geometry",
+          status == 201 and reverted.get("versionNumber") == head["versionNumber"] + 1
+          and reverted.get("geometryHash") == first_full.get("geometryHash"), (reverted, first_full.get("geometryHash")))
+    status, body, _ = call("POST", revert, {"expectedBaseRevisionId": head["revisionId"], "targetRevisionId": first["revisionId"]}, token=a)
+    check("stale revert (old expected head) refused (409)", status == 409, body)
+    status, body, _ = call("POST", revert, {"expectedBaseRevisionId": reverted.get("revisionId")}, token=a)
+    check("revert without a target -> 400", status == 400, body)
+    status, redo, _ = call("POST", revert, {"expectedBaseRevisionId": reverted.get("revisionId"), "targetRevisionId": head["revisionId"]}, token=a)
+    check("redo restores the later geometry as another new revision",
+          status == 201 and redo.get("geometryHash") == head["geometryHash"], redo)
+
+    time.sleep(61)  # fresh auth-strict window
+    user = new_user("sessions")
+    status, second, _ = call("POST", "/api/v1/auth/login", {"email": user["email"], "password": user["password"]})
+    sessions = call("GET", "/api/v1/users/me/sessions", token=user["access"])[1]["items"]
+    check("two active sessions listed (no token material)",
+          len([x for x in sessions if x["active"]]) >= 2 and not any("token" in k.lower() for x in sessions for k in x), sessions)
+    status, _, _ = call("GET", "/api/v1/users/me/sessions")
+    check("sessions unauthenticated (401)", status == 401, status)
+    newest = sessions[0]["sessionId"]
+    status, _, _ = call("DELETE", f"/api/v1/users/me/sessions/{newest}", token=b)
+    check("another user cannot revoke this session (404)", status == 404, status)
+    status, _, _ = call("DELETE", f"/api/v1/users/me/sessions/{newest}", token=user["access"])
+    check("own session revoked (204)", status == 204, status)
+    refreshed = [call("POST", "/api/v1/auth/refresh", {"refreshToken": t})[0] for t in (user["refresh"], second["refreshToken"])]
+    check("revoked session can no longer refresh; the other session still can", sorted(refreshed) == [200, 401], refreshed)
+    status, _, _ = call("DELETE", f"/api/v1/users/me/sessions/{uuid.uuid4()}", token=user["access"])
+    check("unknown session -> 404", status == 404, status)
+
+    secrets_dir = os.path.expanduser("~/bm-captain/secrets")
+    if not check("admin credentials available", os.path.exists(secrets_dir + "/captain-admin.email")):
+        return
+    status, body, _ = call("POST", "/api/v1/auth/login", {"email": open(secrets_dir + "/captain-admin.email").read().strip(),
+                                                         "password": open(secrets_dir + "/captain-admin.password").read().strip()})
+    admin = body["accessToken"]
+    status, detail, _ = call("GET", f"/api/v1/admin/projects/{pid}", token=admin)
+    check("admin project oversight detail with workflow counts",
+          status == 200 and detail["plans"] >= 1 and detail["landRevisions"] >= 1, detail)
+    status, _, _ = call("GET", f"/api/v1/admin/projects/{pid}", token=a)
+    check("customer cannot use admin oversight (403)", status == 403, status)
+    status, workers, _ = call("GET", "/api/v1/admin/system/workers", token=admin)
+    names = {w["worker"]: w for w in workers.get("items", [])} if isinstance(workers, dict) else {}
+    check("worker status reports a healthy outbox dispatcher",
+          status == 200 and names.get("outbox-dispatcher", {}).get("healthy") is True, workers)
+    status, deps, _ = call("GET", "/api/v1/admin/system/dependencies", token=admin)
+    checks = {c["name"]: c["status"] for c in deps.get("checks", [])} if isinstance(deps, dict) else {}
+    check("dependency diagnostics list mysql/python/rag with status",
+          status == 200 and {"mysql", "python", "rag"} <= set(checks), deps)
+    status, _, _ = call("GET", "/api/v1/admin/system/dependencies", token=a)
+    check("customer cannot read dependency diagnostics (403)", status == 403, status)
+
+
 # Phase 8 runs before phase 7, which stops python-services and exercises rate limiting.
-EXTRA_PHASES = [(4, phase4), (5, phase5), (6, phase6), (8, phase8), (9, phase9), (10, phase10), (7, phase7)]
+EXTRA_PHASES = [(4, phase4), (5, phase5), (6, phase6), (8, phase8), (9, phase9), (10, phase10), (11, phase11), (7, phase7)]
 
 
 def main():

@@ -9,7 +9,7 @@ namespace BuildMind.API.Composition;
 /// is recovered by lease expiry (bounded attempts). No database transaction is held while Python/OCR runs.
 /// </summary>
 public sealed class SurveyExtractionHostedService(IServiceScopeFactory scopes, IConfiguration configuration,
-    ILogger<SurveyExtractionHostedService> logger) : BackgroundService
+    ILogger<SurveyExtractionHostedService> logger, WorkerStatusRegistry status) : BackgroundService
 {
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {
@@ -17,6 +17,7 @@ public sealed class SurveyExtractionHostedService(IServiceScopeFactory scopes, I
         using var gate = new SemaphoreSlim(options.Concurrency);
         var running = new List<Task>();
         var nextReconciliation = DateTimeOffset.MinValue;
+        status.Registered("survey-extraction");
         while (!stoppingToken.IsCancellationRequested)
         {
             try
@@ -56,6 +57,7 @@ public sealed class SurveyExtractionHostedService(IServiceScopeFactory scopes, I
                     }, stoppingToken));
                 }
                 running.RemoveAll(task => task.IsCompleted);
+                status.Succeeded("survey-extraction");
             }
             catch (OperationCanceledException) when (stoppingToken.IsCancellationRequested)
             {
@@ -64,6 +66,7 @@ public sealed class SurveyExtractionHostedService(IServiceScopeFactory scopes, I
             catch (Exception exception)
             {
                 logger.LogError("Survey extraction poll failed ({Type})", exception.GetType().Name);
+                status.Failed("survey-extraction", exception);
             }
 
             try { await Task.Delay(options.PollInterval, stoppingToken); }

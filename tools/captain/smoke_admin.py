@@ -15,7 +15,7 @@ import uuid
 import smoke_journey as j
 from smoke_journey import call, check, code_of
 
-MAILPIT = "http://127.0.0.1:8025/api/v1"
+MAILPIT = os.environ.get("MAILPIT_API", "http://127.0.0.1:8025/api/v1")
 SECRETS = os.path.expanduser("~/bm-captain/secrets")
 
 

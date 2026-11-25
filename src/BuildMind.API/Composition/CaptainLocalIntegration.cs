@@ -115,6 +115,7 @@ public static class CaptainLocalIntegration
         services.AddScoped<SurveyReviewService>();
         services.AddScoped<AiEditOrchestrationService>();
         services.AddSingleton<IApiEndpointModule, V3RouteCompletionEndpointModule>();
+        services.AddSingleton<IApiEndpointModule, CaptainCompletionEndpointModule>();
 
         // Internal mTLS to python-services (Python client only; the protected RAG client is unchanged, STEP 8B).
         if (InternalMtls.IsConfigured(builder.Configuration))
@@ -152,6 +153,7 @@ public static class CaptainLocalIntegration
         services.AddSingleton<IApiEndpointModule, BuildMind.API.Endpoints.Administration.AdministrationEndpointModule>();
         services.AddHostedService<AdminBootstrapHostedService>();
         services.AddSingleton<IApiEndpointModule, BuildMind.API.Endpoints.Administration.PortalEndpointModule>();
+        services.TryAddSingleton(provider => new WorkerStatusRegistry(provider.GetService<TimeProvider>() ?? TimeProvider.System));
         services.AddHostedService<OutboxHostedService>();
         // SMTP delivery (loopback-only unless explicitly allowed) replaces the non-delivering recovery sender.
         if (!string.IsNullOrWhiteSpace(builder.Configuration["CaptainIntegration:Email:SmtpHost"]))

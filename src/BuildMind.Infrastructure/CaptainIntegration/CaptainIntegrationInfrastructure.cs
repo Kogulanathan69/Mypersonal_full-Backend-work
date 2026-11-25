@@ -111,6 +111,8 @@ public static class CaptainIntegrationInfrastructure
                 _ => new UnconfiguredAiEditProposalPort(),
             });
         services.TryAddScoped<AiProposalRejectionContext>();
+        services.TryAddScoped(p => new CaptainReadModels(p.GetRequiredService<BuildMind.Infrastructure.Persistence.BuildMindDbContext>(),
+            p.GetService<TimeProvider>() ?? TimeProvider.System));
 
         // Administration: fresh principal reads, store with audit chain, proposal appliers, email.
         services.TryAddScoped<IPrincipalDirectory, MySqlPrincipalDirectory>();

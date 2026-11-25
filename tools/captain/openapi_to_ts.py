@@ -15,8 +15,13 @@ PRIMITIVES = {"string": "string", "integer": "number", "number": "number", "bool
 def ts_type(schema, schemas):
     if not schema:
         return "unknown"
+    if schema.get("x-binary"):
+        return "Blob"
     if "$ref" in schema:
         return schema["$ref"].rsplit("/", 1)[-1]
+    if "oneOf" in schema or "anyOf" in schema:
+        base = " | ".join(ts_type(s, schemas) for s in schema.get("oneOf") or schema.get("anyOf"))
+        return f"({base} | null)" if schema.get("nullable") else f"({base})"
     if "enum" in schema:
         base = " | ".join(json.dumps(v) for v in schema["enum"])
     elif schema.get("type") == "array":
@@ -37,9 +42,12 @@ def ts_type(schema, schemas):
 
 def json_body(container):
     content = (container or {}).get("content", {})
-    for media in ("application/json", "application/problem+json"):
+    for media in ("application/json", "text/json", "application/problem+json"):
         if media in content:
             return content[media].get("schema")
+    for media, entry in content.items():  # binary downloads (e.g. application/pdf)
+        if (entry.get("schema") or {}).get("format") == "binary":
+            return {"x-binary": True}
     return None
 
 
@@ -50,9 +58,10 @@ def main(src, out):
              "// Do not edit. Bodies not declared in OpenAPI are `unknown`; see FINAL-API-ENDPOINT-INVENTORY.md.", ""]
     for name, schema in sorted(schemas.items()):
         lines.append(f"export type {name} = {ts_type(schema, schemas)};")
-    lines += ["", "export interface ProblemDetails { type?: string; title?: string; status?: number; detail?: string;"
-              " instance?: string; code?: string; traceId?: string; errors?: Record<string, string[]> }", "",
-              "export interface ApiOperations {"]
+    if "ProblemDetails" not in schemas:
+        lines += ["", "export interface ProblemDetails { type?: string; title?: string; status?: number; detail?: string;"
+                  " instance?: string; code?: string; traceId?: string; errors?: Record<string, string[]> }"]
+    lines += ["", "export interface ApiOperations {"]
     total = typed_req = typed_res = 0
     for path, item in sorted(doc.get("paths", {}).items()):
         shared = item.get("parameters", [])
@@ -64,7 +73,9 @@ def main(src, out):
             path_params = [p for p in params if p.get("in") == "path"]
             query = [p for p in params if p.get("in") == "query"]
             req = json_body(op.get("requestBody"))
-            ok = next((json_body(r) for code, r in sorted(op.get("responses", {}).items()) if code.startswith("2")), None)
+            ok = next((json_body(r) for code, r in sorted(op.get("responses", {}).items())
+                       if code.startswith("2") and json_body(r) is not None), None)
+            no_content = ok is None and any(code == "204" for code in op.get("responses", {}))
             typed_req += req is not None
             typed_res += ok is not None
             pp = "{ " + "; ".join(f"{json.dumps(p['name'])}: string" for p in path_params) + " }" if path_params else "{}"
@@ -72,7 +83,7 @@ def main(src, out):
                                   for p in query) + " }" if query else "{}"
             body = ts_type(req, schemas) if req is not None else ("unknown" if op.get("requestBody") else "never")
             lines.append(f"  {json.dumps(method.upper() + ' ' + path)}: {{ path: {pp}; query: {qp}; body: {body}; "
-                         f"response: {ts_type(ok, schemas) if ok is not None else 'unknown'} }};")
+                         f"response: {ts_type(ok, schemas) if ok is not None else ('void' if no_content else 'unknown')} }};")
     lines += ["}", "", "export type OperationKey = keyof ApiOperations;", ""]
     open(out, "w", encoding="utf-8", newline="\n").write("\n".join(lines))
     print(f"operations={total} schemas={len(schemas)} declared_request_bodies={typed_req} declared_success_bodies={typed_res}")
