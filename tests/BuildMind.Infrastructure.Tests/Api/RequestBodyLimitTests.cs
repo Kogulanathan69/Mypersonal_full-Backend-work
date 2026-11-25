@@ -186,6 +186,14 @@ public sealed class RequestBodyLimitTests
         {
             request.Headers.TransferEncodingChunked = true;
         }
+        else
+        {
+            // Deterministic early rejection: Kestrel checks Content-Length against the limit before it asks for the body
+            // (100 Continue), so the 413 comes from the real limit check while no body is in flight. Without this the
+            // server closes the connection after its 413 while the client is still uploading, and the client may observe
+            // a broken pipe/reset before reading the response (the intermittent failure, P-13).
+            request.Headers.ExpectContinue = true;
+        }
 
         return await client.SendAsync(request);
     }
