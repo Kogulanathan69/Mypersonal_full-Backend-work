@@ -95,3 +95,56 @@ def test_removing_the_internal_door_is_reported_as_unreachable():
 def test_legacy_plan_without_doors_is_flagged_not_evaluated():
     f = floor(("liv", "livingRoom", 0, 0, 5, 4))
     assert ("PHYSICAL_ACCESS_NOT_EVALUATED", "WARNING") in validate_openings(f)
+
+
+def test_shrinking_a_room_behind_its_door_is_a_warning_not_a_blocking_error():
+    # Door between living room and kitchen; then the kitchen is narrowed, leaving a 0.3 m sliver behind the door.
+    f = floor(("liv", "livingRoom", 0, 0, 5, 4), ("kit", "kitchen", 5, 0, 8, 4))
+    generate_openings(f, uuid4())
+    kit = next(r for r in f["rooms"] if r["id"] == "kit")
+    for p in kit["polygon"]:
+        if p["x"] == 5:
+            p["x"] = 5.3
+    for w in f["walls"]:
+        if w["id"].startswith("kit"):
+            for end in ("start", "end"):
+                if w[end]["x"] == 5:
+                    w[end]["x"] = 5.3
+    found = validate_openings(f)
+    assert not [c for c, s in found if s == "CRITICAL"], found
+    assert ("DOOR_OPENS_INTO_UNUSABLE_SPACE", "WARNING") in found or ("ROOM_NOT_REACHABLE", "WARNING") in found
+
+
+
+def _window(wall_id, offset=1.0, width=1.0):
+    return {"id": str(uuid4()), "type": "window", "wallId": wall_id, "offset": offset, "width": width}
+
+
+def test_window_facing_a_sub_passage_gap_is_a_warning():
+    # Living room shrunk to x=7.6 while the bedroom still reaches x=8: its east window faces a 0.4 m enclosed gap.
+    f = floor(("liv", "livingRoom", 0, 0, 7.6, 4), ("bed", "bedroom", 0, 4, 8, 8))
+    f["openings"] = [_window("liv-w1")]
+    found = validate_openings(f)
+    assert ("WINDOW_FACES_INTERIOR_SPACE", "WARNING") in found
+    assert not [c for c, sev in found if sev == "CRITICAL"], found
+
+
+def test_window_into_another_room_is_critical():
+    f = floor(("liv", "livingRoom", 0, 0, 5, 4), ("kit", "kitchen", 5, 0, 8, 4))
+    f["openings"] = [_window("liv-w1")]   # liv east wall is shared with the kitchen
+    assert ("WINDOW_NOT_ON_EXTERIOR", "CRITICAL") in validate_openings(f)
+
+
+def test_window_on_the_exterior_is_valid():
+    f = floor(("liv", "livingRoom", 0, 0, 5, 4))
+    f["openings"] = [_window("liv-w1")]
+    assert not [c for c, sev in validate_openings(f) if c.startswith("WINDOW")]
+
+
+def test_window_facing_interior_circulation_is_a_warning():
+    # Living room shrunk to x=6 while the bedroom reaches x=8: its east window faces a 2 m circulation hall.
+    f = floor(("liv", "livingRoom", 0, 0, 6, 4), ("bed", "bedroom", 0, 4, 8, 8))
+    f["openings"] = [_window("liv-w1")]
+    found = validate_openings(f)
+    assert ("WINDOW_FACES_INTERIOR_SPACE", "WARNING") in found
+    assert not [c for c, sev in found if sev == "CRITICAL"], found

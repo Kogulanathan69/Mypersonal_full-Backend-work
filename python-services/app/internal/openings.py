@@ -260,12 +260,24 @@ def validate_openings(floor: dict) -> list[tuple[str, str]]:
         spans.setdefault(wall.id, []).append((start, end))
         left, right = _sides(spaces, wall, (start + end) / 2)
         if opening["type"] == "window":
-            if not (OUTSIDE in (left, right) and ({left, right} - {OUTSIDE}) <= room_ids and {left, right} != {OUTSIDE}):
-                findings.append(("WINDOW_NOT_ON_EXTERIOR", "CRITICAL"))
+            sides = {left, right}
+            if OUTSIDE in sides and (sides - {OUTSIDE}) <= room_ids and sides != {OUTSIDE}:
+                pass
+            elif (len(sides & room_ids) == 1
+                  and all(s is None or s.startswith("HALL:") for s in sides - room_ids) and sides - room_ids):
+                # One room on one side, interior circulation or a sub-passage gap on the other (e.g. after a room
+                # was shrunk by an edit): design issue the customer must acknowledge, not invalid geometry.
+                findings.append(("WINDOW_FACES_INTERIOR_SPACE", "WARNING"))
+            else:
+                findings.append(("WINDOW_NOT_ON_EXTERIOR", "CRITICAL"))  # between two rooms, or no room: invalid
             continue
         doors += 1
-        if left is None or right is None or left == right:
-            findings.append(("DOOR_CONNECTS_NO_SPACES", "CRITICAL"))
+        if left is not None and left == right:
+            findings.append(("DOOR_CONNECTS_NO_SPACES", "CRITICAL"))  # same space on both sides: structurally invalid
+            continue
+        if left is None or right is None:
+            # Opens into space narrower than a passage (e.g. after a resize): usable geometry problem, not invalid.
+            findings.append(("DOOR_OPENS_INTO_UNUSABLE_SPACE", "WARNING"))
             continue
         graph.setdefault(left, set()).add(right)
         graph.setdefault(right, set()).add(left)

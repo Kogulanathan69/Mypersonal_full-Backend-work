@@ -42,6 +42,8 @@ _MESSAGES = {
     "OPENINGS_OVERLAP": "Two openings overlap on the same wall.",
     "WINDOW_NOT_ON_EXTERIOR": "A window does not open from a room to the outside.",
     "DOOR_CONNECTS_NO_SPACES": "A door does not connect two different spaces.",
+    "DOOR_OPENS_INTO_UNUSABLE_SPACE": "A door opens into space narrower than a passage.",
+    "WINDOW_FACES_INTERIOR_SPACE": "A window faces interior space instead of the outside.",
     "OPENING_CORNER_CLEARANCE": "An opening is closer to a wall corner than the design preference.",
     "PHYSICAL_ACCESS_NOT_EVALUATED": "The plan has no doors; physical access was not evaluated.",
     "NO_ENTRANCE": "No door opens to the outside.",
@@ -70,6 +72,7 @@ class DependencyUnavailable(RuntimeError):
 
 # Non-blocking findings: they require explicit acknowledgement downstream (apply/confirm), never silent acceptance.
 WARNING_CODES = frozenset({"ROOM_COUNTS_MISMATCH", "OPENING_CORNER_CLEARANCE", "PHYSICAL_ACCESS_NOT_EVALUATED", "NO_ENTRANCE",
+                           "DOOR_OPENS_INTO_UNUSABLE_SPACE", "WINDOW_FACES_INTERIOR_SPACE",
                            "ROOM_NOT_REACHABLE"})
 
 
