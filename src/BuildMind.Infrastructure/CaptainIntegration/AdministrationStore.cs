@@ -233,7 +233,7 @@ internal sealed partial class MySqlAdministrationStore(
             return Task.FromResult(Fail<AccountSummary>(AdminStatus.ValidationFailed, "REASON_REQUIRED"));
         return WriteAsync(async inner =>
         {
-            if ((await SessionSql.LockUserAsync(context, target, inner).ConfigureAwait(false)).Count == 0)
+            if (!await LockActorAndTargetAsync(actor, target, inner).ConfigureAwait(false))
                 return Fail<AccountSummary>(AdminStatus.NotFound, "NOT_FOUND");
             if (!active && !await OtherActiveAdminExistsAsync(target, inner).ConfigureAwait(false)
                 && await IsActiveAdminAsync(target, inner).ConfigureAwait(false))
@@ -260,7 +260,7 @@ internal sealed partial class MySqlAdministrationStore(
         if (actor == target) return Task.FromResult(Fail<bool>(AdminStatus.Conflict, "CANNOT_CHANGE_OWN_ROLES"));
         return WriteAsync(async inner =>
         {
-            if ((await SessionSql.LockUserAsync(context, target, inner).ConfigureAwait(false)).Count == 0)
+            if (!await LockActorAndTargetAsync(actor, target, inner).ConfigureAwait(false))
                 return Fail<bool>(AdminStatus.NotFound, "NOT_FOUND");
             var user = await context.Set<UserRecord>().AsNoTracking().SingleAsync(u => u.Id == target, inner).ConfigureAwait(false);
             if (granted && !user.IsActive) return Fail<bool>(AdminStatus.Conflict, "ACCOUNT_SUSPENDED");
@@ -288,6 +288,22 @@ internal sealed partial class MySqlAdministrationStore(
                 new { role }, now, inner).ConfigureAwait(false);
             return AdminResult<bool>.Ok(true);
         }, token);
+    }
+
+    /// <summary>
+    /// Locks the actor and target users rows in ascending id order (users-first, consistent order). Writing
+    /// granted_by/revoked_by = actor takes an FK shared lock on the actor row, so locking only the target allowed a
+    /// deadlock cycle in concurrent mutual revocation (observed in A03). Returns false when the target does not exist.
+    /// </summary>
+    private async Task<bool> LockActorAndTargetAsync(Guid actor, Guid target, CancellationToken token)
+    {
+        var found = false;
+        foreach (var id in new[] { actor, target }.Distinct().OrderBy(g => g.ToString("N"), StringComparer.Ordinal))
+        {
+            var locked = (await SessionSql.LockUserAsync(context, id, token).ConfigureAwait(false)).Count == 1;
+            if (id == target) found = locked;
+        }
+        return found;
     }
 
     private async Task RevokeSessionsAsync(Guid userId, DateTimeOffset now, string reason, CancellationToken token)

@@ -27,6 +27,8 @@ export CaptainIntegration__ArchitectRecipientsFile="$PWD/docs/captain-developmen
 export CaptainIntegration__SharingPolicyVersion="captain-sharing-policy-dev-1"
 export CaptainIntegration__SurveyWorker__PollSeconds=2
 export CaptainIntegration__SurveyWorker__LeaseSeconds=120
+# Natural-language edits: local RULE-BASED parser (not an AI model); no external provider is configured.
+export CaptainIntegration__AiEdit__Provider=rule-based-local
 # Local email capture (Mailpit, loopback only) for recovery and staff invitations; no real recipients.
 export Authentication__PasswordRecovery__Enabled=true
 export CaptainIntegration__Email__SmtpHost=127.0.0.1

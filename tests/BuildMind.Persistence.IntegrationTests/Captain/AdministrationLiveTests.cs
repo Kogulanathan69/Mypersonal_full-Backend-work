@@ -85,14 +85,24 @@ public sealed class AdministrationLiveTests
         await using var db = await SchemaAsync();
         var a = await AdminAsync(db);
         var (b, _) = await SeedAsync(db);
-        await using (var c = Context(db))
-            await Store(c).SetRoleAsync(a, b, PrincipalRoles.Admin, true, default);
-        var results = await Task.WhenAll(
-            Task.Run(async () => { await using var c = Context(db); return await Store(c).SetRoleAsync(a, b, PrincipalRoles.Admin, false, default); }),
-            Task.Run(async () => { await using var c = Context(db); return await Store(c).SetRoleAsync(b, a, PrincipalRoles.Admin, false, default); }));
-        Assert.Single(results, r => r.Status == AdminStatus.Success);
-        await using var check = Context(db);
-        Assert.Equal(1, await check.Set<PrincipalRoleRecord>().CountAsync(r => r.Role == PrincipalRoles.Admin && r.IsActive));
+        // Repeated rounds: the race is timing dependent (a single passing round once hid a deadlock cycle).
+        for (var round = 0; round < 8; round++)
+        {
+            await using (var c = Context(db))
+            {
+                var survivor = (await c.Set<PrincipalRoleRecord>().AsNoTracking().SingleAsync(r => r.Role == PrincipalRoles.Admin && r.IsActive)).UserId;
+                var other = survivor == a ? b : a;
+                Assert.Equal(AdminStatus.Success, (await Store(c).SetRoleAsync(survivor, other, PrincipalRoles.Admin, true, default)).Status);
+            }
+            var results = await Task.WhenAll(
+                Task.Run(async () => { await using var c = Context(db); return await Store(c).SetRoleAsync(a, b, PrincipalRoles.Admin, false, default); }),
+                Task.Run(async () => { await using var c = Context(db); return await Store(c).SetRoleAsync(b, a, PrincipalRoles.Admin, false, default); }));
+            Assert.Single(results, r => r.Status == AdminStatus.Success);
+            Assert.Single(results, r => r.Code is "LAST_ADMIN" or "CANNOT_CHANGE_OWN_ROLES" || r.Status == AdminStatus.Forbidden
+                || (r.Status == AdminStatus.Conflict));
+            await using var check = Context(db);
+            Assert.Equal(1, await check.Set<PrincipalRoleRecord>().CountAsync(r => r.Role == PrincipalRoles.Admin && r.IsActive));
+        }
     }
 
     [Fact]

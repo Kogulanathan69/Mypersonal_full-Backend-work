@@ -101,7 +101,11 @@ public static class CaptainIntegrationInfrastructure
         services.TryAddScoped<ISurveyExtractionReader, MySqlSurveyExtractionReader>();
         services.TryAddScoped<IPlanVersionAppendStore, MySqlPlanVersionAppendStore>();
         services.TryAddScoped<IReportCatalog, MySqlReportCatalog>();
-        services.TryAddSingleton<IAiEditProposalPort, UnconfiguredAiEditProposalPort>();
+        // AI edit proposals: unconfigured (503) unless the operator selects the local RULE-BASED parser (not an LLM).
+        services.TryAddScoped<IAiEditProposalPort>(p =>
+            string.Equals(p.GetRequiredService<IConfiguration>()["CaptainIntegration:AiEdit:Provider"], "rule-based-local", StringComparison.Ordinal)
+                ? new RuleBasedAiEditProposalPort(p.GetRequiredService<IPlanRevisionStore>())
+                : new UnconfiguredAiEditProposalPort());
 
         // Administration: fresh principal reads, store with audit chain, proposal appliers, email.
         services.TryAddScoped<IPrincipalDirectory, MySqlPrincipalDirectory>();

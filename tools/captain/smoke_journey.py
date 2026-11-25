@@ -654,10 +654,24 @@ def phase8():
                         {"expectedBaseRevisionId": saved.get("revisionId"), "geometry": geometry}, token=b)
     check("cross-user versions denied (404)", status == 404, status)
 
-    status, body, _ = call("POST", f"/api/v1/projects/{pid}/plans/{plan}/ai-edit/proposals",
-                           {"expectedBaseRevisionId": saved.get("revisionId"), "instruction": "Make the kitchen larger"}, token=a)
-    check("AI edit proposal answers truthfully: no provider configured (503)",
-          status == 503 and code_of(body) == "AI_PROVIDER_NOT_CONFIGURED", body)
+    ai_path = f"/api/v1/projects/{pid}/plans/{plan}/ai-edit/proposals"
+    status, body, _ = call("POST", ai_path, {"expectedBaseRevisionId": saved.get("revisionId"), "instruction": "Paint the walls blue"}, token=a)
+    check("unsupported natural-language instruction refused (422; M3 reports AI_PROPOSAL_INVALID)",
+          status == 422 and code_of(body) == "AI_PROPOSAL_INVALID", body)
+    status, body, _ = call("POST", ai_path, {"expectedBaseRevisionId": saved.get("revisionId"), "instruction": "Make the bedroom larger"}, token=a)
+    check("ambiguous room reference refused (422 AI_PROPOSAL_INVALID)", status == 422 and code_of(body) == "AI_PROPOSAL_INVALID", body)
+    status, _, _ = call("POST", ai_path, {"expectedBaseRevisionId": saved.get("revisionId"), "instruction": "Make the kitchen larger by 5%"}, token=b)
+    check("cross-user AI proposal denied (404)", status == 404, status)
+    status, proposal, _ = call("POST", ai_path, {"expectedBaseRevisionId": saved.get("revisionId"),
+                                                 "instruction": "Make the kitchen larger by 5%"}, token=a)
+    check("rule-based proposal becomes a validated, unapplied candidate (201, labelled RULE_BASED_LOCAL)",
+          status == 201 and proposal.get("proposalSource") == "RULE_BASED_LOCAL" and proposal.get("applied") is False
+          and proposal.get("candidate", {}).get("candidateId"), proposal)
+    history = call("GET", f"/api/v1/projects/{pid}/plans/{plan}/versions", token=a)[1]
+    check("a proposal never mutates the plan by itself", [r["versionNumber"] for r in history["revisions"]][0] == 2, history)
+    cand = (proposal or {}).get("candidate", {}).get("candidateId")
+    status, applied, _ = call("POST", f"/api/v1/projects/{pid}/plans/{plan}/candidates/{cand}/apply", {"acknowledgedWarnings": True}, token=a)
+    check("customer explicitly applies the proposal (revision 3)", status == 200 and applied.get("revision", {}).get("versionNumber") == 3, applied)
 
     status, head2, _ = call("GET", f"/api/v1/projects/{pid}/plans/{plan}", token=a)
     status, confirmed, _ = call("POST", f"/api/v1/projects/{pid}/plans/{plan}/confirm",

@@ -250,19 +250,27 @@ internal sealed class MySqlArchitectPortalStore(
         await context.Set<ArchitectProfileRecord>().AsNoTracking().SingleOrDefaultAsync(a => a.UserId == userId, token).ConfigureAwait(false)
             is { } a ? View(a) : null;
 
-    private IQueryable<ArchitectRequestView> Requests(Guid recipientId) =>
-        from r in context.Set<ArchitectRequestRecord>().AsNoTracking()
-        join resp in context.Set<ArchitectResponseRecord>().AsNoTracking() on r.RequestId equals resp.RequestId into responses
-        from resp in responses.DefaultIfEmpty()
-        where r.RecipientId == recipientId && r.Status == nameof(ArchitectRequestStatus.Pending)
-        select new ArchitectRequestView(r.RequestId, r.ProjectId, r.Status, r.ReportId, r.RequestedAtUtc, resp.Decision, resp.Note,
-            (DateTimeOffset?)resp.RespondedAtUtc);
+    /// <summary>Requests addressed to this recipient that are not withdrawn. Filters are applied before projection (EF).</summary>
+    private async Task<List<ArchitectRequestView>> RequestsAsync(Guid recipientId, Guid? requestId, CancellationToken token)
+    {
+        var requests = context.Set<ArchitectRequestRecord>().AsNoTracking()
+            .Where(r => r.RecipientId == recipientId && r.Status == nameof(ArchitectRequestStatus.Pending));
+        if (requestId is { } id) requests = requests.Where(r => r.RequestId == id);
+        var rows = await requests.OrderByDescending(r => r.RequestedAtUtc).Take(200)
+            .Select(r => new { r.RequestId, r.ProjectId, r.Status, r.ReportId, r.RequestedAtUtc }).ToListAsync(token).ConfigureAwait(false);
+        var ids = rows.Select(r => r.RequestId).ToArray();
+        var responses = await context.Set<ArchitectResponseRecord>().AsNoTracking().Where(x => ids.Contains(x.RequestId))
+            .ToDictionaryAsync(x => x.RequestId, token).ConfigureAwait(false);
+        return rows.Select(r => new ArchitectRequestView(r.RequestId, r.ProjectId, r.Status, r.ReportId, r.RequestedAtUtc,
+            responses.GetValueOrDefault(r.RequestId)?.Decision, responses.GetValueOrDefault(r.RequestId)?.Note,
+            responses.GetValueOrDefault(r.RequestId)?.RespondedAtUtc)).ToList();
+    }
 
     public async Task<IReadOnlyList<ArchitectRequestView>> RequestsForAsync(Guid recipientId, CancellationToken token) =>
-        await Requests(recipientId).OrderByDescending(r => r.RequestedAtUtc).Take(200).ToListAsync(token).ConfigureAwait(false);
+        await RequestsAsync(recipientId, null, token).ConfigureAwait(false);
 
     public async Task<ArchitectRequestView?> RequestForAsync(Guid recipientId, Guid requestId, CancellationToken token) =>
-        await Requests(recipientId).Where(r => r.RequestId == requestId).SingleOrDefaultAsync(token).ConfigureAwait(false);
+        (await RequestsAsync(recipientId, requestId, token).ConfigureAwait(false)).SingleOrDefault();
 
     public async Task<byte[]?> ReportForAsync(Guid architectUserId, Guid recipientId, Guid requestId, CancellationToken token)
     {

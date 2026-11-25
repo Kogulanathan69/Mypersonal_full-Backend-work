@@ -210,9 +210,15 @@ public sealed class V3RouteCompletionEndpointModule : IApiEndpointModule
             AiEditOrchestrationStatus.InvalidRequest => Problem(400, "VALIDATION_FAILED"),
             AiEditOrchestrationStatus.DependencyTimeout => Problem(504, "DEPENDENCY_TIMEOUT"),
             AiEditOrchestrationStatus.DependencyUnavailable or AiEditOrchestrationStatus.ValidationUnavailable => Problem(503, "DEPENDENCY_UNAVAILABLE"),
-            // A created candidate requires a configured AI provider; none exists in this build, so this is an invariant breach.
-            AiEditOrchestrationStatus.CandidateCreated => Problem(500, "INTERNAL_ERROR"),
-            _ => Problem(422, PlanEditorErrorCodes.InvalidEditCommand),
+            // The proposal became a server-validated candidate; nothing is applied until the customer applies it via
+            // POST …/candidates/{candidateId}/apply. The source is the local rule-based parser, not an AI model.
+            AiEditOrchestrationStatus.CandidateCreated => Results.Json(new
+            {
+                candidate = result.Candidate, proposalSource = "RULE_BASED_LOCAL", applied = false,
+                notice = "Proposal from the local rule-based instruction parser (not an AI model). Review, then apply or reject it.",
+            }, statusCode: 201),
+            AiEditOrchestrationStatus.ProposalRejected => Problem(422, result.Diagnostic?.Code ?? "INSTRUCTION_NOT_SUPPORTED"),
+            _ => Problem(422, result.Diagnostic?.Code ?? PlanEditorErrorCodes.InvalidEditCommand),
         };
     }
 
