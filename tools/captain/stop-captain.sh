@@ -6,7 +6,7 @@
 set -u
 ME=$(id -u)
 ROOT="$HOME/bm-captain"
-patterns=("$ROOT/src/src/BuildMind.API/bin/" "src/BuildMind.API/bin/Release/net10.0/BuildMind.API.dll" "$ROOT/venv-python-services/bin/python"
+patterns=("$ROOT/src/src/BuildMind.API/bin/" "$ROOT/venv-python-services/bin/python"
           "$ROOT/venv-rag-service/bin/python" "$ROOT/tools/llama-b12237/")
 for pid in $(pgrep -u "$ME" -f "BuildMind.API.dll|venv-python-services|venv-rag-service|llama-b12237" || true); do
   [ "$pid" = "$$" ] && continue

@@ -31,7 +31,9 @@ services:
     secrets: [mysql_root_password]
     volumes:
       - verify-mysql-data:/var/lib/mysql
-      - ${BM_VERIFY_DIR}/mysql-certs:/etc/mysql/tls:ro
+      - ${BM_VERIFY_DIR}/mysql-certs/server-key.pem:/etc/mysql/tls/server-key.pem:ro
+      - ${BM_VERIFY_DIR}/mysql-certs/server-cert.pem:/etc/mysql/tls/server-cert.pem:ro
+      - ${BM_VERIFY_DIR}/mysql-certs/ca.pem:/etc/mysql/tls/ca.pem:ro
       - ${BM_VERIFY_DIR}/initdb:/docker-entrypoint-initdb.d:ro
     healthcheck:
       test: ["CMD-SHELL", "mysqladmin ping -h 127.0.0.1 -uroot -p\"$$(cat /run/secrets/mysql_root_password)\" --silent"]
@@ -50,7 +52,12 @@ services:
       BUILDMIND_PY_AUTH: required
       BUILDMIND_PY_INTERNAL_TOKENS_FILE: /run/bm/secrets/python-internal.token
     volumes:
-      - ${BM_VERIFY_DIR}/pki:/run/bm/pki:ro
+      - ${BM_VERIFY_DIR}/pki/server-ca.crt:/run/bm/pki/server-ca.crt:ro
+      - ${BM_VERIFY_DIR}/pki/api-client.crt:/run/bm/pki/api-client.crt:ro
+      - ${BM_VERIFY_DIR}/pki/api-client.key:/run/bm/pki/api-client.key:ro
+      - ${BM_VERIFY_DIR}/pki/python-server.key:/run/bm/pki/python-server.key:ro
+      - ${BM_VERIFY_DIR}/pki/python-server.crt:/run/bm/pki/python-server.crt:ro
+      - ${BM_VERIFY_DIR}/pki/client-ca.crt:/run/bm/pki/client-ca.crt:ro
       - ${BM_VERIFY_DIR}/secrets/python-internal.token:/run/bm/secrets/python-internal.token:ro
     command: ["python", "-m", "uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8091", "--no-server-header", "--no-access-log",
               "--ssl-keyfile", "/run/bm/pki/python-server.key", "--ssl-certfile", "/run/bm/pki/python-server.crt",
@@ -71,8 +78,12 @@ services:
     tmpfs: ["/tmp:size=128m"]
     env_file: ["${BM_VERIFY_DIR}/secrets/api.env"]
     volumes:
-      - ${BM_VERIFY_DIR}/mysql-certs:/run/bm/mysql:ro
-      - ${BM_VERIFY_DIR}/pki:/run/bm/pki:ro
+      - ${BM_VERIFY_DIR}/mysql-certs/client-key.pem:/run/bm/mysql/client-key.pem:ro
+      - ${BM_VERIFY_DIR}/mysql-certs/client-cert.pem:/run/bm/mysql/client-cert.pem:ro
+      - ${BM_VERIFY_DIR}/mysql-certs/ca.pem:/run/bm/mysql/ca.pem:ro
+      - ${BM_VERIFY_DIR}/pki/server-ca.crt:/run/bm/pki/server-ca.crt:ro
+      - ${BM_VERIFY_DIR}/pki/api-client.crt:/run/bm/pki/api-client.crt:ro
+      - ${BM_VERIFY_DIR}/pki/api-client.key:/run/bm/pki/api-client.key:ro
       - ${BM_VERIFY_DIR}/mail/ca-bundle.pem:/run/bm/ca-bundle.pem:ro
       - ${BM_SAMPLES:?}:/app/samples:ro
       - verify-artifacts:/var/lib/buildmind
@@ -95,7 +106,12 @@ services:
     env_file: ["${BM_VERIFY_DIR}/secrets/rag.env"]
     volumes:
       - ${BM_RAG_CORPUS:?staged corpus required}:/corpus:ro
-      - ${BM_VERIFY_DIR}/pki:/run/bm/pki:ro
+      - ${BM_VERIFY_DIR}/pki/server-ca.crt:/run/bm/pki/server-ca.crt:ro
+      - ${BM_VERIFY_DIR}/pki/api-client.crt:/run/bm/pki/api-client.crt:ro
+      - ${BM_VERIFY_DIR}/pki/api-client.key:/run/bm/pki/api-client.key:ro
+      - ${BM_VERIFY_DIR}/pki/rag-server.key:/run/bm/pki/rag-server.key:ro
+      - ${BM_VERIFY_DIR}/pki/rag-server.crt:/run/bm/pki/rag-server.crt:ro
+      - ${BM_VERIFY_DIR}/pki/client-ca.crt:/run/bm/pki/client-ca.crt:ro
     command: ["python", "-B", "-m", "uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8092", "--no-server-header", "--no-access-log",
               "--ssl-keyfile", "/run/bm/pki/rag-server.key", "--ssl-certfile", "/run/bm/pki/rag-server.crt",
               "--ssl-ca-certs", "/run/bm/pki/client-ca.crt", "--ssl-cert-reqs", "2"]

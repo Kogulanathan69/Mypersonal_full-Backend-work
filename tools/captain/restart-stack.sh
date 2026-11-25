@@ -2,9 +2,7 @@
 # Rebuilds and restarts the Captain local stack: sync -> build -> migrate -> python-services (8091) -> API (5180)
 # [-> rag-service (8092) when RAG=1]. Logs: ~/bm-captain/logs. Loopback only; secrets from ~/bm-captain/secrets.
 set -euo pipefail
-pkill -f 'BuildMind.API.dll' || true
-pkill -f 'uvicorn app.main:app' || true
-sleep 1
+bash ~/bm-captain/src/tools/captain/stop-captain.sh
 ~/bm-captain/sync.sh
 cd ~/bm-captain/src
 dotnet build BuildMind.sln -c Release 2>&1 | grep -E " error |Warning\(s\)|Error\(s\)" | sort -u
@@ -22,12 +20,13 @@ PY_PORT=8091 nohup bash tools/captain/run-api.sh 5180 > ~/bm-captain/logs/api.lo
 if [ "${RAG:-0}" = 1 ]; then
   # Second API instance whose generation policy uses the M7 constraint service (evidence mode rag-constraints).
   CaptainIntegration__GenerationPolicyFile="$PWD/docs/captain-development/samples/generation-policy.rag.json" \
-    CaptainIntegration__Architect__ConsentLifetimeMinutes=1 PY_PORT=8091 nohup bash tools/captain/run-api.sh 5181 > ~/bm-captain/logs/api-rag.log 2>&1 &
+    CaptainIntegration__SurveyWorker__Enabled=false CaptainIntegration__Architect__ConsentLifetimeMinutes=1 PY_PORT=8091 nohup bash tools/captain/run-api.sh 5181 > ~/bm-captain/logs/api-rag.log 2>&1 &
 fi
-for _ in $(seq 1 60); do
-  curl -fsS http://127.0.0.1:5180/health >/dev/null 2>&1 && curl -fsS --cacert ~/bm-captain/secrets/pki/server-ca.crt --cert ~/bm-captain/secrets/pki/api-client.crt --key ~/bm-captain/secrets/pki/api-client.key https://127.0.0.1:8091/health >/dev/null 2>&1 && break
-  sleep 1
+ports=(5180)
+if [ "${RAG:-0}" = 1 ]; then ports+=(5181); fi
+for port in "${ports[@]}"; do
+  curl --retry 60 --retry-delay 2 --retry-connrefused --max-time 10 -fsS "http://127.0.0.1:$port/health" >/dev/null
 done
-curl -fsS http://127.0.0.1:5180/health && echo && curl -fsS --cacert ~/bm-captain/secrets/pki/server-ca.crt --cert ~/bm-captain/secrets/pki/api-client.crt --key ~/bm-captain/secrets/pki/api-client.key https://127.0.0.1:8091/health && echo
+curl --retry 30 --retry-delay 2 --retry-connrefused -fsS --cacert ~/bm-captain/secrets/pki/server-ca.crt --cert ~/bm-captain/secrets/pki/api-client.crt --key ~/bm-captain/secrets/pki/api-client.key https://127.0.0.1:8091/health >/dev/null
 # Keep the services attached to this session (a detached wsl.exe session would terminate them on exit).
 [ "${DETACH:-0}" = 1 ] || wait

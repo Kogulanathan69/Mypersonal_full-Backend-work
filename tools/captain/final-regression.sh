@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # Final regression runner (resource-aware, resumable, fail-safe verdict).
 #
-# Usage (from Windows, after committing):  sha=$(git rev-parse HEAD); clean=$([ -z "$(git status --porcelain --untracked-files=no)" ] && echo clean || echo dirty)
+# Usage (from Windows, after committing):  sha=$(git rev-parse HEAD); clean=$([ -z "$(git status --porcelain)" ] && echo clean || echo dirty)
 #          wsl.exe -d Ubuntu-24.04 -- bash ~/bm-captain/src/tools/captain/final-regression.sh "$sha" "$clean" [RUN_DIR_TO_RESUME]
 #
 # - Records the exact Git commit SHA and the working-tree state passed by the caller (the worktree pointer is never used).
@@ -13,12 +13,23 @@
 #     G4 python+API(LLM mode)+llama: LLM benchmark + smoke_llm        G5 Docker stack (no LLM): container journeys + RAG
 # - Only Captain-owned workloads are stopped (stop-captain.sh); the Captain database is never reset or dropped.
 # - VERDICT is PASS only if every expected stage ran to completion with exit 0. An interrupted run is INTERRUPTED.
-# - Resume: pass an existing run directory; stages already marked PASS are skipped (their evidence is kept).
+# - Resume: pass an existing run directory; verify the prior identity and repeat the service groups in a new evidence directory.
 set -u
 SHA="${1:?commit sha required}"; TREE="${2:?clean|dirty required}"; RESUME="${3:-}"
 case "$SHA" in *[!0-9a-f]*|"") echo "invalid sha"; exit 2;; esac
 SRC=~/bm-captain/src; CAP=$SRC/tools/captain
-R="${RESUME:-$HOME/bm-captain/results/final-regression/$(date -u +%Y%m%dT%H%M%SZ)-${SHA:0:12}}"
+umask 077
+cd "$SRC" || exit 1
+~/bm-captain/sync.sh || exit 1
+base="$HOME/bm-captain/results/final-regression"
+mkdir -p "$base" || exit 1
+R=$(mktemp -d "$base/$(date -u +%Y%m%dT%H%M%SZ)-${SHA:0:12}-XXXXXX") || exit 1
+python3 "$CAP/source_identity.py" "$SHA" "$TREE" > "$R/source.json" || exit 1
+if [ -n "$RESUME" ]; then
+  cmp -s "$RESUME/source.json" "$R/source.json" || { echo "resume source identity unavailable or changed"; exit 1; }
+  # Recreate all service groups in a fresh attempt. A PASS file cannot establish live readiness.
+  printf '%s\n' "$RESUME" > "$R/prior-attempt"
+fi
 mkdir -p "$R/stages"
 [ -f "$R/RUN.json" ] || printf '{"commit":"%s","workingTree":"%s","startedUtc":"%s","host":"%s"}\n' "$SHA" "$TREE" "$(date -u -Is)" "$(hostname)" > "$R/RUN.json"
 echo "INTERRUPTED" > "$R/VERDICT"
@@ -27,7 +38,7 @@ STAGES=(build unit python rag rag-real stack persistence mtls-python mtls-rag ra
 
 stage() { # name command...
   local name=$1; shift
-  if [ -f "$R/stages/$name.PASS" ]; then echo "skip $name (PASS in this run dir)"; return 0; fi
+
   echo "== $name $(date -u +%H:%M:%S)"
   ( "$@" ) > "$R/$name.log" 2>&1; local rc=$?
   echo "$name exit=$rc" >> "$R/EXIT-CODES.txt"
@@ -37,7 +48,7 @@ stage() { # name command...
 }
 stop_all() { bash $CAP/stop-captain.sh --containers >/dev/null 2>&1; }
 cd $SRC
-~/bm-captain/sync.sh >/dev/null
+
 
 # G1 / G2: no services
 stop_all
@@ -49,8 +60,8 @@ C=~/bm-captain/rag-corpus
 stage rag-real bash -c "cd rag-service && BUILDMIND_RAG_CORPUS_ROOT=$C BUILDMIND_RAG_MANIFEST=$C/approved_corpus_manifest.json BUILDMIND_RAG_INDEX=$C/multi_document_index.json ~/bm-captain/venv-rag-service/bin/python -B -m pytest -q -p no:cacheprovider tests_local"
 
 # G3: MySQL + python + RAG + API (two instances)
-stage stack bash -c "RAG=1 DETACH=1 bash $CAP/restart-stack.sh && for i in \$(seq 1 60); do curl -fsS http://127.0.0.1:5180/health/ready 2>/dev/null | grep -q '\"rag\",\"status\":\"Healthy\"' && exit 0; sleep 5; done; exit 1"
-stage persistence bash -c "bash $CAP/persistence-tests.sh | tee /dev/stderr | grep -q 'exit=0'"
+stage stack bash -c "RAG=1 DETACH=1 bash $CAP/restart-stack.sh || exit 1; for i in \$(seq 1 60); do curl -fsS http://127.0.0.1:5180/health/ready 2>/dev/null | grep -q '\"rag\",\"status\":\"Healthy\"' && exit 0; sleep 5; done; exit 1" || exit 1
+stage persistence bash "$CAP/persistence-tests.sh"
 cd $CAP
 stage mtls-python python3 mtls_tests.py
 stage mtls-rag env MTLS_TARGET=rag python3 mtls_tests.py
@@ -72,18 +83,17 @@ stage llm-benchmark bash -c "nohup bash $CAP/run-python.sh 8091 > ~/bm-captain/l
   [ -s ~/bm-captain/secrets/captain-admin.email ] && export ADMIN_BOOTSTRAP_EMAIL=\$(cat ~/bm-captain/secrets/captain-admin.email)
   LLM_PORT=8093 PY_PORT=8091 nohup bash $CAP/run-api.sh 5180 > ~/bm-captain/logs/api.log 2>&1 &
   for i in \$(seq 1 60); do curl -fsS http://127.0.0.1:5180/health >/dev/null 2>&1 && break; sleep 3; done
-  sleep 61; cd $CAP && timeout 5400 python3 llm_benchmark.py --out '$R/llm-benchmark.json'"
+  curl -fsS http://127.0.0.1:5180/health >/dev/null || exit 1; sleep 61; cd $CAP && timeout 5400 python3 llm_benchmark.py --out '$R/llm-benchmark.json'"
 sleep 61
 stage smoke-llm bash -c "cd $CAP && timeout 1800 python3 smoke_llm.py"
 stop_all
 
 # G5: Docker stack (no LLM)
 cd $SRC
-stage docker-journey bash -c "bash $CAP/compose-verify.sh build >/dev/null && bash $CAP/compose-verify.sh prepare >/dev/null && bash $CAP/compose-verify.sh up >/dev/null 2>&1;
-  for i in \$(seq 1 90); do curl -fsS http://127.0.0.1:8080/health/ready 2>/dev/null | grep -q '\"rag\",\"status\":\"Healthy\"' && break; sleep 5; done
-  sleep 61; cd $CAP && MAILPIT_API=http://127.0.0.1:8026/api/v1 timeout 4000 python3 smoke_journey.py http://127.0.0.1:8080 --phases 2,3,4,6,8,9,10,11,12"
-stage docker-rag bash -c "cd $CAP && ~/bm-captain/venv-python-services/bin/python rag_acceptance.py http://127.0.0.1:8080"
-bash $CAP/compose-verify.sh down >/dev/null 2>&1; stop_all
+if stage docker-journey bash -ec 'bash "$1/compose-verify.sh" build && bash "$1/compose-verify.sh" prepare && bash "$1/docker-journey.sh" "$2/docker"' _ "$CAP" "$R"; then
+  stage docker-rag bash -c "cd $CAP && ~/bm-captain/venv-python-services/bin/python rag_acceptance.py http://127.0.0.1:8080"
+fi
+docker stop bm-captain-verify-expiry >/dev/null 2>&1; bash $CAP/compose-verify.sh down >/dev/null 2>&1; stop_all
 
 # Counts and verdict
 python3 - "$R" <<'PY'
@@ -104,3 +114,4 @@ PY
 ok=PASS
 for s in "${STAGES[@]}"; do [ -f "$R/stages/$s.PASS" ] || { ok=FAIL; echo "stage not passed: $s"; }; done
 echo "$ok" > "$R/VERDICT"; echo "VERDICT $ok  ($R)"
+[ "$ok" = PASS ]

@@ -5,6 +5,7 @@ Usage: python3 smoke_journey.py [base_url] [--phases 2,3,4,5,6]
 """
 import contract_capture
 import json
+import os
 import secrets
 import sys
 import urllib.error
@@ -12,6 +13,7 @@ import urllib.request
 import uuid
 
 BASE = next((a for a in sys.argv[1:] if a.startswith("http")), "http://127.0.0.1:5180")
+SECONDARY_BASE = os.environ.get("CAPTAIN_SECONDARY_API_URL", "http://127.0.0.1:5181").rstrip("/")
 PHASES = {int(p) for p in (sys.argv[sys.argv.index("--phases") + 1].split(",") if "--phases" in sys.argv else "2,3,4,5,6,7,8,9,10,11,12,13".split(","))}
 results = []
 state = {}
@@ -49,7 +51,7 @@ def _send(request):
 
 def check(name, condition, detail=""):
     results.append((name, bool(condition)))
-    print(("PASS " if condition else "FAIL ") + name + (f"  [{str(detail)[:400]}]" if detail and not condition else ""))
+    print(("PASS " if condition else "FAIL ") + name + (f"  [HTTP {detail}]" if not condition and type(detail) is int and 100 <= detail <= 599 else ""))
     return bool(condition)
 
 
@@ -322,7 +324,7 @@ def phase5():
               status == 200 and body.get("status") == "INSUFFICIENT_JURISDICTION_EVIDENCE" and not body.get("passages"), body)
 
     # Second API instance: generation policy evidence mode "rag-constraints".
-    saved_base, BASE = BASE, "http://127.0.0.1:5181"
+    saved_base, BASE = BASE, SECONDARY_BASE
     try:
         user = new_user("ragmode")
         t = user["access"]
@@ -1110,16 +1112,18 @@ def phase12():
     req2 = call("POST", f"/api/v1/projects/{pid}/architect-requests", share, token=a)[1]["requestId"]
     saved = BASE
     try:
-        BASE = "http://127.0.0.1:5181"
+        BASE = SECONDARY_BASE
         atok81 = call("POST", "/api/v1/auth/login", {"email": arch["email"], "password": arch["password"]})[1]["accessToken"]
         check("fresh consent visible to the architect (5181)", call("GET", f"/api/v1/architect/requests/{req2}", token=atok81)[0] == 200)
         time.sleep(70)
-        ids81 = [r.get("requestId") for r in call("GET", "/api/v1/architect/requests", token=atok81)[1].get("requests", [])]
+        list_status, listing, _ = call("GET", "/api/v1/architect/requests", token=atok81)
+        ids81 = [r["requestId"] for r in listing["requests"]] if list_status == 200 else None
         check("expired consent: request, report, response and feedback all 404; absent from the list (no disclosure)",
               call("GET", f"/api/v1/architect/requests/{req2}", token=atok81)[0] == 404
               and call("GET", f"/api/v1/architect/requests/{req2}/report", token=atok81)[0] == 404
               and call("POST", f"/api/v1/architect/requests/{req2}/respond", {"decision": "ACCEPTED"}, token=atok81)[0] == 404
-              and req2 not in ids81, ids81)
+              and call("POST", f"/api/v1/architect/requests/{req2}/feedback", {"kind": "FEEDBACK", "body": "Expiry check"}, token=atok81)[0] == 404
+              and ids81 is not None and req2 not in ids81, ids81)
     finally:
         BASE = saved
     check("the same consent is still within its 30-day lifetime on the default instance (time-based rule)",

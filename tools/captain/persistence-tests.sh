@@ -19,7 +19,10 @@ mkdir -p ~/bm-captain/results/mysql
 timeout 1500 dotnet test "$SPIKE" -c Release --no-build ${filter:+--filter "$filter"} \
   --logger "trx;LogFileName=mysql-$(date +%H%M%S).trx" --results-directory ~/bm-captain/results/mysql 2>&1 \
   | grep -E "Passed!|Failed!|^\s+Failed |Error Message" -A2 | grep -v Password | head -60
-echo "exit=${PIPESTATUS[0]}"
+test_exit=${PIPESTATUS[0]}
+echo "exit=$test_exit"
 # Leftover check: every test database must have been dropped.
-docker exec -e MYSQL_PWD="$(cat ~/bm-captain/secrets/mysql-root.password)" bm-captain-mysql mysql -uroot -N \
-  -e "SELECT COUNT(*) AS leftover_test_databases FROM information_schema.schemata WHERE schema_name LIKE 'buildmind\\_test\\_%';"
+remaining=$(docker exec -e MYSQL_PWD="$(cat ~/bm-captain/secrets/mysql-root.password)" bm-captain-mysql mysql -uroot -N \
+  -e "SELECT COUNT(*) AS leftover_test_databases FROM information_schema.schemata WHERE schema_name LIKE 'buildmind\\_test\\_%';")
+echo "leftover test databases: $remaining"
+[[ "$remaining" == 0 && "$test_exit" == 0 ]]

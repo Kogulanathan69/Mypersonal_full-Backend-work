@@ -24,7 +24,7 @@ prepare() {
     -extfile "$V/mysql-certs/server.ext" -out "$V/mysql-certs/server-cert.pem" 2>/dev/null
   cp "$S/tls/ca.pem" "$S/tls/client-cert.pem" "$S/tls/client-key.pem" "$V/mysql-certs/"
   rm -f "$V/mysql-certs/server.csr" "$V/mysql-certs/server.ext"
-  chmod 644 "$V/mysql-certs/"*.pem   # read by the mysql (uid 999) and app containers
+  chmod 644 "$V/mysql-certs/ca.pem" "$V/mysql-certs/server-cert.pem" "$V/mysql-certs/client-cert.pem"   # read by the mysql (uid 999) and app containers
   for name in root runtime migrator; do [ -s "$V/secrets/$name.password" ] || openssl rand -hex 24 > "$V/secrets/$name.password"; done
   # Full idempotent schema script from the current migrations.
   . tools/captain/env.sh
@@ -47,12 +47,12 @@ SQL
 mysql -uroot -p"\$(cat /run/secrets/mysql_root_password)" buildmind_dev < /docker-entrypoint-initdb.d/schema/20-schema.sql
 EOF
   mkdir -p "$V/initdb/schema" && mv "$V/initdb/20-schema.sql" "$V/initdb/schema/20-schema.sql"
-  chmod 644 "$V/initdb/10-accounts.sh" "$V/initdb/schema/20-schema.sql"; chmod 755 "$V/initdb" "$V/initdb/schema"
+  chmod 600 "$V/initdb/10-accounts.sh"; chmod 644 "$V/initdb/schema/20-schema.sql"; chmod 755 "$V/initdb" "$V/initdb/schema"
   # python-services mTLS material (existing PKI: server cert SAN includes python-services) and token.
   cp "$S/pki/python-server.crt" "$S/pki/python-server.key" "$S/pki/client-ca.crt" "$S/pki/server-ca.crt" \
      "$S/pki/api-client.crt" "$S/pki/api-client.key" "$V/pki/"
-  chmod 644 "$V/pki/"*
-  cp "$S/python-internal.token" "$V/secrets/python-internal.token"; chmod 644 "$V/secrets/python-internal.token" "$V/secrets/root.password"
+  chmod 644 "$V/pki/"*.crt
+  cp "$S/python-internal.token" "$V/secrets/python-internal.token"; chmod 600 "$V/secrets/python-internal.token" "$V/secrets/root.password"
   # API environment: identical to the local stack, translated to container hostnames and paths.
   CaptainIntegration__GenerationPolicyFile="$PWD/docs/captain-development/samples/generation-policy.synthetic.json" \
   ADMIN_BOOTSTRAP_EMAIL="$(cat "$S/captain-admin.email" 2>/dev/null || true)" \
@@ -76,7 +76,7 @@ EOF
     -days 30 -sha256 -extfile "$V/mail/mailpit.ext" -out "$V/mail/mailpit.crt" 2>/dev/null
   rm -f "$V/mail/mailpit.csr" "$V/mail/mailpit.ext"
   { docker run --rm --entrypoint cat buildmind-api:verify /etc/ssl/certs/ca-certificates.crt; cat "$S/pki/server-ca.crt"; } > "$V/mail/ca-bundle.pem"
-  chmod 755 "$V/mail"; chmod 644 "$V/mail/"*
+  chmod 755 "$V/mail"; chmod 644 "$V/mail/"*.crt "$V/mail/"*.pem; chmod 600 "$V/mail/mailpit.key"
   {
     echo "SSL_CERT_FILE=/run/bm/ca-bundle.pem"
     echo "CaptainIntegration__Email__SmtpHost=mailpit"
@@ -104,28 +104,45 @@ EOF
 BUILDMIND_RAG_INTERNAL_TOKENS=%s
 ' "$(cat "$S/rag-internal.token")" > "$V/secrets/rag.env"
   chmod 600 "$V/secrets/api.env" "$V/secrets/rag.env"
-  cp "$S/pki/rag-server.crt" "$S/pki/rag-server.key" "$V/pki/"; chmod 644 "$V/pki/"*
+  cp "$S/pki/rag-server.crt" "$S/pki/rag-server.key" "$V/pki/"; chmod 644 "$V/pki/"*.crt
   echo "prepared $V"
+  restrict_credentials
+}
+
+restrict_credentials() {
+  local acl=tools/captain/restrict-credential.py
+  python3 "$acl" "$V/mysql-certs/server-key.pem" 999
+  python3 "$acl" "$V/mysql-certs/client-key.pem" 1654
+  python3 "$acl" "$V/secrets/root.password" 999
+  python3 "$acl" "$V/initdb/10-accounts.sh" 999
+  python3 "$acl" "$V/secrets/python-internal.token" 10001
+  python3 "$acl" "$V/pki/python-server.key" 10001
+  python3 "$acl" "$V/pki/rag-server.key" "$BM_UID"
+  python3 "$acl" "$V/pki/api-client.key" 1654 10001 "$BM_UID"
+  python3 "$acl" "$V/mail/mailpit.key"
 }
 
 # Upgrade path for an EXISTING verification volume: the init script only runs on an empty volume, so pending migrations
 # are applied as a ranged script (from the last applied migration) by the least-privilege migrator over verified TLS.
 migrate() {
-  "${COMPOSE[@]}" up -d mysql >/dev/null
+  "${COMPOSE[@]}" up -d mysql >/dev/null || return 1
   for i in $(seq 1 60); do docker inspect -f '{{.State.Health.Status}}' bm-captain-verify-mysql-1 2>/dev/null | grep -q healthy && break; sleep 3; done
+  docker inspect -f '{{.State.Health.Status}}' bm-captain-verify-mysql-1 | grep -qx healthy || { echo "migrate: MySQL readiness failed" >&2; return 1; }
   local mysqlx=(docker exec -i -e MYSQL_PWD="$(cat "$V/secrets/migrator.password")" bm-captain-verify-mysql-1
                 mysql -ubm_migrator -hmysql --ssl-mode=VERIFY_IDENTITY --ssl-ca=/etc/mysql/tls/ca.pem buildmind_dev)
   local applied; applied=$("${mysqlx[@]}" -N -e "SELECT MigrationId FROM __EFMigrationsHistory ORDER BY MigrationId DESC LIMIT 1")
   [ -n "$applied" ] || { echo "migrate: no history (volume not initialised)"; return 1; }
   . tools/captain/env.sh
   local script="$V/initdb/pending-$(date +%s).sql"
-  dotnet tool run dotnet-ef migrations script "$applied" --context BuildMindDbContext --configuration Release     --project src/BuildMind.Infrastructure --startup-project src/BuildMind.API --output "$script" >/dev/null
-  if grep -qE "CREATE|ALTER|INSERT" "$script"; then "${mysqlx[@]}" < "$script" && echo "migrate: applied pending migrations after $applied"
+  dotnet tool run dotnet-ef migrations script "$applied" --context BuildMindDbContext --configuration Release     --project src/BuildMind.Infrastructure --startup-project src/BuildMind.API --output "$script" >/dev/null || return 1
+  if grep -qE "CREATE|ALTER|INSERT" "$script"; then "${mysqlx[@]}" < "$script" || return 1; echo "migrate: applied pending migrations after $applied"
   else echo "migrate: up to date ($applied)"; fi
   rm -f "$script"
 }
 
 case "${1:-status}" in
+  restrict-credentials) restrict_credentials ;;
+  expiry-up) "${COMPOSE[@]}" run -d --rm --no-deps --name bm-captain-verify-expiry -p 127.0.0.1:5181:8080 -e CaptainIntegration__SurveyWorker__Enabled=false -e CaptainIntegration__Architect__ConsentLifetimeMinutes=1 -e CaptainIntegration__GenerationPolicyFile=/app/samples/generation-policy.rag.json api ;;
   migrate) migrate ;;
   prepare) prepare ;;
   build)
