@@ -370,3 +370,24 @@ Phase 6 journey coverage:
   5. `unit-suites.sh`;
   6. fix defects; then commit the verified state.
 - **Remaining phases:** AI edit local adapter (X-21), RH09 investigation, internal mTLS, infrastructure/backup scripts, the documentation set of section 27.
+
+## Closure execution (2026-11-25): continuity log
+
+| Commit | Phase | Evidence |
+|---|---|---|
+| `834b2ff` | 3: doors/windows + circulation + access validation | python 1003; journey 2,3,4,6,8,9 155/155 |
+| `2e1f167` | 4: internal mTLS API→python (PKI, rotation) | mtls_tests 12/12 (also after rotation); journey 99/99 |
+| `91c8c06` | 5: RH09 isolated comparison + server-side containment | `~/bm-captain/results/rh09/rh09-081843.json` |
+| `2745372` | 2: Captain coordinate frame (CRS, anchor, digest parity, edges, lineage) | 13 py + 3 .NET parity; journey 2,3,8,10 88/88 |
+| `ba2c2be` | 6: real LLM (llama.cpp b12237 + Qwen2.5-1.5B) | smoke_llm 10/10 (`~/bm-captain/results/llm-journey.log`) |
+| (pending) | 7: SMTP STARTTLS requirement, report-ready/withdraw notifications; 1: Compose v5.7.0, compose.verify.yml, .dockerignore, compose-verify.sh | SmtpDeliveryPolicyTests 7/7; images building |
+
+**Resume notes:**
+- Compose: `bash tools/captain/compose-verify.sh prepare|build|up|down` (project bm-captain-verify, API on 127.0.0.1:8080). Stop the local API/python first to save memory.
+- LLM: `run-llm.sh` (8093) + `LLM_PORT=8093 restart-api.sh`.
+- Local stack: `restart-stack.sh` (mTLS python, Mailpit).
+- **Next:**
+  1. finish the container build and up, then run journeys against `http://127.0.0.1:8080`;
+  2. pip-audit and secret scan;
+  3. full regression (unit, persistence, python, journeys 2–10 RAG, admin);
+  4. FINAL-* documents.

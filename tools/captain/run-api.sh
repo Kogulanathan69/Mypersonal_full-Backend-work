@@ -57,4 +57,8 @@ if [ -n "${RAG_PORT:-}" ] && [ -s "$S/rag-internal.token" ]; then
   export Services__Rag__AuthToken="$(cat "$S/rag-internal.token")"
   export Regulations__Retrieval__Enabled=true
 fi
+if [ "${PRINT_ENV:-0}" = 1 ]; then
+  env | grep -E "^(ASPNETCORE|Database|Authentication|Jwt|CaptainIntegration|Services|ConnectionStrings|Regulations|Cors)__?" || true
+  exit 0
+fi
 exec dotnet src/BuildMind.API/bin/Release/net10.0/BuildMind.API.dll

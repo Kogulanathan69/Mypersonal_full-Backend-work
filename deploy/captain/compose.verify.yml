@@ -1,0 +1,92 @@
+# LOCAL containerized verification of the Captain stack (Development profile, because the Captain integration
+# profile refuses any other environment by design). Generated material comes from tools/captain/compose-verify.sh
+# (BM_VERIFY_DIR, outside the repository). Only the API is published, on loopback. Not a deployment.
+name: bm-captain-verify
+
+networks:
+  internal: { internal: true }
+  edge: {}
+
+volumes:
+  verify-mysql-data: {}
+  verify-artifacts: {}
+
+secrets:
+  mysql_root_password: { file: "${BM_VERIFY_DIR:?run compose-verify.sh}/secrets/root.password" }
+
+x-hardened: &hardened
+  read_only: true
+  cap_drop: [ALL]
+  security_opt: ["no-new-privileges:true"]
+  restart: unless-stopped
+
+services:
+  mysql:
+    image: mysql:8.4@sha256:a81d043930e51745522bd5c430961cf8286f0a23f0a9a2a6e0108f7ea71b0902
+    networks: [internal]
+    command: ["--require-secure-transport=ON", "--ssl-ca=/etc/mysql/tls/ca.pem", "--ssl-cert=/etc/mysql/tls/server-cert.pem",
+              "--ssl-key=/etc/mysql/tls/server-key.pem"]
+    environment:
+      MYSQL_ROOT_PASSWORD_FILE: /run/secrets/mysql_root_password
+    secrets: [mysql_root_password]
+    volumes:
+      - verify-mysql-data:/var/lib/mysql
+      - ${BM_VERIFY_DIR}/mysql-certs:/etc/mysql/tls:ro
+      - ${BM_VERIFY_DIR}/initdb:/docker-entrypoint-initdb.d:ro
+    healthcheck:
+      test: ["CMD-SHELL", "mysqladmin ping -h 127.0.0.1 -uroot -p\"$$(cat /run/secrets/mysql_root_password)\" --silent"]
+      interval: 5s
+      timeout: 5s
+      retries: 60
+    restart: unless-stopped
+    deploy: { resources: { limits: { cpus: "1.0", memory: 900M } } }
+
+  python-services:
+    <<: *hardened
+    image: buildmind-python:verify
+    networks: [internal]
+    tmpfs: ["/tmp:size=512m,mode=1777"]
+    environment:
+      BUILDMIND_PY_AUTH: required
+      BUILDMIND_PY_INTERNAL_TOKENS_FILE: /run/bm/secrets/python-internal.token
+    volumes:
+      - ${BM_VERIFY_DIR}/pki:/run/bm/pki:ro
+      - ${BM_VERIFY_DIR}/secrets/python-internal.token:/run/bm/secrets/python-internal.token:ro
+    command: ["python", "-m", "uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8091", "--no-server-header", "--no-access-log",
+              "--ssl-keyfile", "/run/bm/pki/python-server.key", "--ssl-certfile", "/run/bm/pki/python-server.crt",
+              "--ssl-ca-certs", "/run/bm/pki/client-ca.crt", "--ssl-cert-reqs", "2"]
+    healthcheck:
+      test: ["CMD", "curl", "-fsS", "--cacert", "/run/bm/pki/server-ca.crt", "--cert", "/run/bm/pki/api-client.crt",
+             "--key", "/run/bm/pki/api-client.key", "--resolve", "python-services:8091:127.0.0.1", "https://python-services:8091/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 30
+    deploy: { resources: { limits: { cpus: "1.0", memory: 700M, pids: 128 } } }
+
+  api:
+    <<: *hardened
+    image: buildmind-api:verify
+    networks: [internal, edge]
+    ports: ["127.0.0.1:8080:8080"]
+    tmpfs: ["/tmp:size=128m"]
+    env_file: ["${BM_VERIFY_DIR}/secrets/api.env"]
+    volumes:
+      - ${BM_VERIFY_DIR}/mysql-certs:/run/bm/mysql:ro
+      - ${BM_VERIFY_DIR}/pki:/run/bm/pki:ro
+      - ${BM_SAMPLES:?}:/app/samples:ro
+      - verify-artifacts:/var/lib/buildmind
+    depends_on:
+      mysql: { condition: service_healthy }
+      python-services: { condition: service_healthy }
+      artifacts-init: { condition: service_completed_successfully }
+    stop_grace_period: 30s
+    deploy: { resources: { limits: { cpus: "1.5", memory: 700M } } }
+
+  # One-shot: give the non-root API user ownership of the private artefact volume.
+  artifacts-init:
+    image: buildmind-api:verify
+    user: "0"
+    network_mode: none
+    entrypoint: ["sh", "-c", "mkdir -p /var/lib/buildmind/surveys /var/lib/buildmind/reports && chown -R 1654:1654 /var/lib/buildmind && chmod -R 700 /var/lib/buildmind"]
+    volumes: [verify-artifacts:/var/lib/buildmind]
+    restart: "no"
