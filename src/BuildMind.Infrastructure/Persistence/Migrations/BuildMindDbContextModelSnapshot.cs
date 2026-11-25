@@ -143,6 +143,302 @@ namespace BuildMind.Infrastructure.Persistence.Migrations
                     b.ToTable("admin_audit_events", (string)null);
                 });
 
+            modelBuilder.Entity("BuildMind.Infrastructure.Persistence.Records.Administration.ArchitectFeedbackRecord", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .HasColumnType("char(36)")
+                        .HasColumnName("id");
+
+                    b.Property<Guid>("AuthorId")
+                        .HasColumnType("char(36)")
+                        .HasColumnName("author_id");
+
+                    b.Property<string>("Body")
+                        .IsRequired()
+                        .HasMaxLength(4000)
+                        .HasColumnType("varchar(4000)")
+                        .HasColumnName("body");
+
+                    b.Property<DateTime>("CreatedAtUtc")
+                        .HasColumnType("datetime(6)")
+                        .HasColumnName("created_at_utc");
+
+                    b.Property<string>("Kind")
+                        .IsRequired()
+                        .HasMaxLength(24)
+                        .HasColumnType("varchar(24)")
+                        .HasColumnName("kind");
+
+                    b.Property<Guid>("RequestId")
+                        .HasColumnType("char(36)")
+                        .HasColumnName("request_id");
+
+                    b.HasKey("Id")
+                        .HasName("pk_architect_feedback");
+
+                    b.HasIndex("AuthorId")
+                        .HasDatabaseName("ix_architect_feedback_author_id");
+
+                    b.HasIndex("RequestId", "CreatedAtUtc")
+                        .HasDatabaseName("ix_architect_feedback_request_id");
+
+                    b.ToTable("architect_feedback", (string)null);
+                });
+
+            modelBuilder.Entity("BuildMind.Infrastructure.Persistence.Records.Administration.ArchitectProfileRecord", b =>
+                {
+                    b.Property<Guid>("RecipientId")
+                        .HasColumnType("char(36)")
+                        .HasColumnName("recipient_id");
+
+                    b.Property<bool>("AcceptingRequests")
+                        .HasColumnType("tinyint(1)")
+                        .HasColumnName("accepting_requests");
+
+                    b.Property<DateTime>("CreatedAtUtc")
+                        .HasColumnType("datetime(6)")
+                        .HasColumnName("created_at_utc");
+
+                    b.Property<string>("DisplayName")
+                        .IsRequired()
+                        .HasMaxLength(100)
+                        .HasColumnType("varchar(100)")
+                        .HasColumnName("display_name");
+
+                    b.Property<bool>("IsListed")
+                        .HasColumnType("tinyint(1)")
+                        .HasColumnName("is_listed");
+
+                    b.Property<string>("RegistrationNumber")
+                        .HasMaxLength(64)
+                        .HasColumnType("varchar(64)")
+                        .HasColumnName("registration_number");
+
+                    b.Property<long>("RowVersion")
+                        .IsConcurrencyToken()
+                        .HasColumnType("bigint")
+                        .HasColumnName("row_version");
+
+                    b.Property<Guid>("UserId")
+                        .HasColumnType("char(36)")
+                        .HasColumnName("user_id");
+
+                    b.Property<string>("VerificationReference")
+                        .HasMaxLength(200)
+                        .HasColumnType("varchar(200)")
+                        .HasColumnName("verification_reference");
+
+                    b.Property<string>("VerificationStatus")
+                        .IsRequired()
+                        .HasMaxLength(16)
+                        .HasColumnType("varchar(16)")
+                        .HasColumnName("verification_status");
+
+                    b.Property<DateTime?>("VerifiedAtUtc")
+                        .HasColumnType("datetime(6)")
+                        .HasColumnName("verified_at_utc");
+
+                    b.Property<Guid?>("VerifiedBy")
+                        .HasColumnType("char(36)")
+                        .HasColumnName("verified_by");
+
+                    b.HasKey("RecipientId")
+                        .HasName("pk_architect_profiles");
+
+                    b.HasIndex("UserId")
+                        .IsUnique()
+                        .HasDatabaseName("ux_architect_profiles_user_id");
+
+                    b.HasIndex("VerifiedBy")
+                        .HasDatabaseName("ix_architect_profiles_verified_by");
+
+                    b.ToTable("architect_profiles", (string)null);
+                });
+
+            modelBuilder.Entity("BuildMind.Infrastructure.Persistence.Records.Administration.ArchitectResponseRecord", b =>
+                {
+                    b.Property<Guid>("RequestId")
+                        .HasColumnType("char(36)")
+                        .HasColumnName("request_id");
+
+                    b.Property<string>("Decision")
+                        .IsRequired()
+                        .HasMaxLength(16)
+                        .HasColumnType("varchar(16)")
+                        .HasColumnName("decision");
+
+                    b.Property<string>("Note")
+                        .HasMaxLength(2000)
+                        .HasColumnType("varchar(2000)")
+                        .HasColumnName("note");
+
+                    b.Property<Guid>("RecipientId")
+                        .HasColumnType("char(36)")
+                        .HasColumnName("recipient_id");
+
+                    b.Property<DateTime>("RespondedAtUtc")
+                        .HasColumnType("datetime(6)")
+                        .HasColumnName("responded_at_utc");
+
+                    b.Property<Guid>("RespondedBy")
+                        .HasColumnType("char(36)")
+                        .HasColumnName("responded_by");
+
+                    b.HasKey("RequestId")
+                        .HasName("pk_architect_request_responses");
+
+                    b.HasIndex("RespondedBy")
+                        .HasDatabaseName("ix_architect_request_responses_responded_by");
+
+                    b.ToTable("architect_request_responses", (string)null);
+                });
+
+            modelBuilder.Entity("BuildMind.Infrastructure.Persistence.Records.Administration.NotificationPreferenceRecord", b =>
+                {
+                    b.Property<Guid>("UserId")
+                        .HasColumnType("char(36)")
+                        .HasColumnName("user_id");
+
+                    b.Property<bool>("EmailEnabled")
+                        .HasColumnType("tinyint(1)")
+                        .HasColumnName("email_enabled");
+
+                    b.Property<DateTime>("UpdatedAtUtc")
+                        .HasColumnType("datetime(6)")
+                        .HasColumnName("updated_at_utc");
+
+                    b.HasKey("UserId")
+                        .HasName("pk_notification_preferences");
+
+                    b.ToTable("notification_preferences", (string)null);
+                });
+
+            modelBuilder.Entity("BuildMind.Infrastructure.Persistence.Records.Administration.NotificationRecord", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .HasColumnType("char(36)")
+                        .HasColumnName("id");
+
+                    b.Property<string>("Body")
+                        .IsRequired()
+                        .HasMaxLength(1000)
+                        .HasColumnType("varchar(1000)")
+                        .HasColumnName("body");
+
+                    b.Property<DateTime>("CreatedAtUtc")
+                        .HasColumnType("datetime(6)")
+                        .HasColumnName("created_at_utc");
+
+                    b.Property<string>("Kind")
+                        .IsRequired()
+                        .HasMaxLength(48)
+                        .HasColumnType("varchar(48)")
+                        .HasColumnName("kind");
+
+                    b.Property<string>("Link")
+                        .HasMaxLength(300)
+                        .HasColumnType("varchar(300)")
+                        .HasColumnName("link");
+
+                    b.Property<DateTime?>("ReadAtUtc")
+                        .HasColumnType("datetime(6)")
+                        .HasColumnName("read_at_utc");
+
+                    b.Property<string>("Title")
+                        .IsRequired()
+                        .HasMaxLength(200)
+                        .HasColumnType("varchar(200)")
+                        .HasColumnName("title");
+
+                    b.Property<Guid>("UserId")
+                        .HasColumnType("char(36)")
+                        .HasColumnName("user_id");
+
+                    b.HasKey("Id")
+                        .HasName("pk_notifications");
+
+                    b.HasIndex("UserId", "ReadAtUtc", "CreatedAtUtc")
+                        .HasDatabaseName("ix_notifications_user_unread");
+
+                    b.ToTable("notifications", (string)null);
+                });
+
+            modelBuilder.Entity("BuildMind.Infrastructure.Persistence.Records.Administration.OutboxMessageRecord", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .HasColumnType("char(36)")
+                        .HasColumnName("id");
+
+                    b.Property<int>("Attempts")
+                        .HasColumnType("int")
+                        .HasColumnName("attempts");
+
+                    b.Property<string>("Body")
+                        .IsRequired()
+                        .HasColumnType("text")
+                        .HasColumnName("body");
+
+                    b.Property<DateTime>("CreatedAtUtc")
+                        .HasColumnType("datetime(6)")
+                        .HasColumnName("created_at_utc");
+
+                    b.Property<string>("DedupeKey")
+                        .IsRequired()
+                        .HasMaxLength(128)
+                        .HasColumnType("varchar(128)")
+                        .HasColumnName("dedupe_key");
+
+                    b.Property<string>("Kind")
+                        .IsRequired()
+                        .HasMaxLength(16)
+                        .HasColumnType("varchar(16)")
+                        .HasColumnName("kind");
+
+                    b.Property<string>("LastErrorCode")
+                        .HasMaxLength(64)
+                        .HasColumnType("varchar(64)")
+                        .HasColumnName("last_error_code");
+
+                    b.Property<DateTime>("NextAttemptAtUtc")
+                        .HasColumnType("datetime(6)")
+                        .HasColumnName("next_attempt_at_utc");
+
+                    b.Property<Guid>("RecipientUserId")
+                        .HasColumnType("char(36)")
+                        .HasColumnName("recipient_user_id");
+
+                    b.Property<DateTime?>("SentAtUtc")
+                        .HasColumnType("datetime(6)")
+                        .HasColumnName("sent_at_utc");
+
+                    b.Property<string>("Status")
+                        .IsRequired()
+                        .HasMaxLength(16)
+                        .HasColumnType("varchar(16)")
+                        .HasColumnName("status");
+
+                    b.Property<string>("Subject")
+                        .IsRequired()
+                        .HasMaxLength(200)
+                        .HasColumnType("varchar(200)")
+                        .HasColumnName("subject");
+
+                    b.HasKey("Id")
+                        .HasName("pk_outbox_messages");
+
+                    b.HasIndex("DedupeKey")
+                        .IsUnique()
+                        .HasDatabaseName("ux_outbox_messages_dedupe_key");
+
+                    b.HasIndex("RecipientUserId")
+                        .HasDatabaseName("ix_outbox_messages_recipient");
+
+                    b.HasIndex("Status", "NextAttemptAtUtc")
+                        .HasDatabaseName("ix_outbox_messages_due");
+
+                    b.ToTable("outbox_messages", (string)null);
+                });
+
             modelBuilder.Entity("BuildMind.Infrastructure.Persistence.Records.Administration.PrincipalRoleRecord", b =>
                 {
                     b.Property<Guid>("Id")
@@ -196,6 +492,74 @@ namespace BuildMind.Infrastructure.Persistence.Migrations
                         .HasDatabaseName("ux_principal_roles_user_id_role");
 
                     b.ToTable("principal_roles", (string)null);
+                });
+
+            modelBuilder.Entity("BuildMind.Infrastructure.Persistence.Records.Administration.RequirementCatalogueVersionRecord", b =>
+                {
+                    b.Property<string>("Version")
+                        .HasMaxLength(64)
+                        .HasColumnType("varchar(64)")
+                        .HasColumnName("version");
+
+                    b.Property<DateTime>("CreatedAtUtc")
+                        .HasColumnType("datetime(6)")
+                        .HasColumnName("created_at_utc");
+
+                    b.Property<Guid>("CreatedBy")
+                        .HasColumnType("char(36)")
+                        .HasColumnName("created_by");
+
+                    b.Property<string>("DocumentJson")
+                        .IsRequired()
+                        .HasColumnType("mediumtext")
+                        .HasColumnName("document_json");
+
+                    b.Property<DateTime?>("EffectiveFromUtc")
+                        .HasColumnType("datetime(6)")
+                        .HasColumnName("effective_from_utc");
+
+                    b.Property<string>("Provenance")
+                        .IsRequired()
+                        .HasMaxLength(64)
+                        .HasColumnType("varchar(64)")
+                        .HasColumnName("provenance");
+
+                    b.Property<DateTime?>("PublishedAtUtc")
+                        .HasColumnType("datetime(6)")
+                        .HasColumnName("published_at_utc");
+
+                    b.Property<Guid?>("PublishedBy")
+                        .HasColumnType("char(36)")
+                        .HasColumnName("published_by");
+
+                    b.Property<DateTime?>("RetiredAtUtc")
+                        .HasColumnType("datetime(6)")
+                        .HasColumnName("retired_at_utc");
+
+                    b.Property<long>("RowVersion")
+                        .IsConcurrencyToken()
+                        .HasColumnType("bigint")
+                        .HasColumnName("row_version");
+
+                    b.Property<string>("Status")
+                        .IsRequired()
+                        .HasMaxLength(16)
+                        .HasColumnType("varchar(16)")
+                        .HasColumnName("status");
+
+                    b.HasKey("Version")
+                        .HasName("pk_requirement_catalogue_versions");
+
+                    b.HasIndex("CreatedBy")
+                        .HasDatabaseName("ix_requirement_catalogue_versions_created_by");
+
+                    b.HasIndex("PublishedBy")
+                        .HasDatabaseName("ix_requirement_catalogue_versions_published_by");
+
+                    b.HasIndex("Status", "EffectiveFromUtc")
+                        .HasDatabaseName("ix_requirement_catalogue_versions_served");
+
+                    b.ToTable("requirement_catalogue_versions", (string)null);
                 });
 
             modelBuilder.Entity("BuildMind.Infrastructure.Persistence.Records.Administration.SecurityEventRecord", b =>
@@ -1767,6 +2131,86 @@ namespace BuildMind.Infrastructure.Persistence.Migrations
                         .HasConstraintName("fk_admin_audit_events_users_actor_id");
                 });
 
+            modelBuilder.Entity("BuildMind.Infrastructure.Persistence.Records.Administration.ArchitectFeedbackRecord", b =>
+                {
+                    b.HasOne("BuildMind.Infrastructure.Persistence.Records.UserRecord", null)
+                        .WithMany()
+                        .HasForeignKey("AuthorId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired()
+                        .HasConstraintName("fk_architect_feedback_users");
+
+                    b.HasOne("BuildMind.Infrastructure.Persistence.Records.Deliverables.ArchitectRequestRecord", null)
+                        .WithMany()
+                        .HasForeignKey("RequestId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired()
+                        .HasConstraintName("fk_architect_feedback_requests");
+                });
+
+            modelBuilder.Entity("BuildMind.Infrastructure.Persistence.Records.Administration.ArchitectProfileRecord", b =>
+                {
+                    b.HasOne("BuildMind.Infrastructure.Persistence.Records.UserRecord", null)
+                        .WithMany()
+                        .HasForeignKey("UserId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired()
+                        .HasConstraintName("fk_architect_profiles_users_user_id");
+
+                    b.HasOne("BuildMind.Infrastructure.Persistence.Records.UserRecord", null)
+                        .WithMany()
+                        .HasForeignKey("VerifiedBy")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .HasConstraintName("fk_architect_profiles_users_verified_by");
+                });
+
+            modelBuilder.Entity("BuildMind.Infrastructure.Persistence.Records.Administration.ArchitectResponseRecord", b =>
+                {
+                    b.HasOne("BuildMind.Infrastructure.Persistence.Records.Deliverables.ArchitectRequestRecord", null)
+                        .WithOne()
+                        .HasForeignKey("BuildMind.Infrastructure.Persistence.Records.Administration.ArchitectResponseRecord", "RequestId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired()
+                        .HasConstraintName("fk_architect_request_responses_requests");
+
+                    b.HasOne("BuildMind.Infrastructure.Persistence.Records.UserRecord", null)
+                        .WithMany()
+                        .HasForeignKey("RespondedBy")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired()
+                        .HasConstraintName("fk_architect_request_responses_users");
+                });
+
+            modelBuilder.Entity("BuildMind.Infrastructure.Persistence.Records.Administration.NotificationPreferenceRecord", b =>
+                {
+                    b.HasOne("BuildMind.Infrastructure.Persistence.Records.UserRecord", null)
+                        .WithOne()
+                        .HasForeignKey("BuildMind.Infrastructure.Persistence.Records.Administration.NotificationPreferenceRecord", "UserId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired()
+                        .HasConstraintName("fk_notification_preferences_users");
+                });
+
+            modelBuilder.Entity("BuildMind.Infrastructure.Persistence.Records.Administration.NotificationRecord", b =>
+                {
+                    b.HasOne("BuildMind.Infrastructure.Persistence.Records.UserRecord", null)
+                        .WithMany()
+                        .HasForeignKey("UserId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired()
+                        .HasConstraintName("fk_notifications_users_user_id");
+                });
+
+            modelBuilder.Entity("BuildMind.Infrastructure.Persistence.Records.Administration.OutboxMessageRecord", b =>
+                {
+                    b.HasOne("BuildMind.Infrastructure.Persistence.Records.UserRecord", null)
+                        .WithMany()
+                        .HasForeignKey("RecipientUserId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired()
+                        .HasConstraintName("fk_outbox_messages_users_recipient");
+                });
+
             modelBuilder.Entity("BuildMind.Infrastructure.Persistence.Records.Administration.PrincipalRoleRecord", b =>
                 {
                     b.HasOne("BuildMind.Infrastructure.Persistence.Records.UserRecord", null)
@@ -1787,6 +2231,22 @@ namespace BuildMind.Infrastructure.Persistence.Migrations
                         .OnDelete(DeleteBehavior.Restrict)
                         .IsRequired()
                         .HasConstraintName("fk_principal_roles_users_user_id");
+                });
+
+            modelBuilder.Entity("BuildMind.Infrastructure.Persistence.Records.Administration.RequirementCatalogueVersionRecord", b =>
+                {
+                    b.HasOne("BuildMind.Infrastructure.Persistence.Records.UserRecord", null)
+                        .WithMany()
+                        .HasForeignKey("CreatedBy")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired()
+                        .HasConstraintName("fk_requirement_catalogue_versions_created_by");
+
+                    b.HasOne("BuildMind.Infrastructure.Persistence.Records.UserRecord", null)
+                        .WithMany()
+                        .HasForeignKey("PublishedBy")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .HasConstraintName("fk_requirement_catalogue_versions_published_by");
                 });
 
             modelBuilder.Entity("BuildMind.Infrastructure.Persistence.Records.Administration.SecurityEventRecord", b =>

@@ -111,6 +111,96 @@ internal sealed class SecurityEventRecord
     public required string DetailsJson { get; init; }
 }
 
+/// <summary>Row of <c>requirement_catalogue_versions</c>: versioned product catalogue (not building regulations).</summary>
+internal sealed class RequirementCatalogueVersionRecord
+{
+    public required string Version { get; init; }
+    public required string Status { get; set; }
+    public required string Provenance { get; init; }
+    public required string DocumentJson { get; init; }
+    public DateTimeOffset? EffectiveFromUtc { get; set; }
+    public long RowVersion { get; set; }
+    public Guid CreatedBy { get; init; }
+    public DateTimeOffset CreatedAtUtc { get; init; }
+    public Guid? PublishedBy { get; set; }
+    public DateTimeOffset? PublishedAtUtc { get; set; }
+    public DateTimeOffset? RetiredAtUtc { get; set; }
+}
+
+/// <summary>Row of <c>architect_profiles</c>: persistent directory entry bound to an ARCHITECT user account.</summary>
+internal sealed class ArchitectProfileRecord
+{
+    public Guid RecipientId { get; init; }
+    public Guid UserId { get; init; }
+    public required string DisplayName { get; set; }
+    public string? RegistrationNumber { get; set; }
+    public required string VerificationStatus { get; set; }
+    public string? VerificationReference { get; set; }
+    public Guid? VerifiedBy { get; set; }
+    public DateTimeOffset? VerifiedAtUtc { get; set; }
+    public bool IsListed { get; set; }
+    public bool AcceptingRequests { get; set; }
+    public long RowVersion { get; set; }
+    public DateTimeOffset CreatedAtUtc { get; init; }
+}
+
+/// <summary>Row of <c>architect_request_responses</c>: the architect's accept/decline (M5 request state is untouched).</summary>
+internal sealed class ArchitectResponseRecord
+{
+    public Guid RequestId { get; init; }
+    public Guid RecipientId { get; init; }
+    public required string Decision { get; init; }
+    public string? Note { get; init; }
+    public Guid RespondedBy { get; init; }
+    public DateTimeOffset RespondedAtUtc { get; init; }
+}
+
+internal sealed class ArchitectFeedbackRecord
+{
+    public Guid Id { get; init; }
+    public Guid RequestId { get; init; }
+    public Guid AuthorId { get; init; }
+    public required string Kind { get; init; }
+    public required string Body { get; init; }
+    public DateTimeOffset CreatedAtUtc { get; init; }
+}
+
+internal sealed class NotificationRecord
+{
+    public Guid Id { get; init; }
+    public Guid UserId { get; init; }
+    public required string Kind { get; init; }
+    public required string Title { get; init; }
+    public required string Body { get; init; }
+    public string? Link { get; init; }
+    public DateTimeOffset CreatedAtUtc { get; init; }
+    public DateTimeOffset? ReadAtUtc { get; set; }
+}
+
+/// <summary>Row of <c>outbox_messages</c>: durable at-least-once side effects (email), deduplicated by key.</summary>
+internal sealed class OutboxMessageRecord
+{
+    public Guid Id { get; init; }
+    public required string Kind { get; init; }
+    public Guid RecipientUserId { get; init; }
+    public required string Subject { get; init; }
+    public required string Body { get; init; }
+    public required string Status { get; set; }
+    public int Attempts { get; set; }
+    public DateTimeOffset NextAttemptAtUtc { get; set; }
+    public DateTimeOffset CreatedAtUtc { get; init; }
+    public DateTimeOffset? SentAtUtc { get; set; }
+    public string? LastErrorCode { get; set; }
+    public required string DedupeKey { get; init; }
+}
+
+internal sealed class NotificationPreferenceRecord
+{
+    public Guid UserId { get; init; }
+    public bool EmailEnabled { get; set; }
+    public DateTimeOffset UpdatedAtUtc { get; set; }
+}
+
 internal sealed class SystemPolicyRecord
 {
     public const int ValueMaxBytes = 16 * 1024;

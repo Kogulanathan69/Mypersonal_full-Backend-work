@@ -192,3 +192,16 @@ public interface ISurveyExtractionWork
     /// <summary>Deletes survey blobs that no survey row references and that are older than the grace period.</summary>
     Task<string> ReconcileStorageAsync(CancellationToken cancellationToken);
 }
+
+public sealed record LifecycleMilestone(string Code, bool Satisfied, bool Required);
+
+public sealed record LifecycleStaleness(int StaleGenerationJobs, int StalePlans, int SupersededConfirmations, int StaleReports);
+
+public sealed record ProjectLifecycleView(Guid ProjectId, string Stage, IReadOnlyList<LifecycleMilestone> Milestones, LifecycleStaleness Stale,
+    IReadOnlyList<string> NextActions);
+
+/// <summary>Read-only lifecycle derivation (the caller must establish ownership first).</summary>
+public interface IProjectLifecycleReader
+{
+    Task<ProjectLifecycleView> GetAsync(Guid projectId, CancellationToken cancellationToken);
+}

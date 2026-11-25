@@ -11,7 +11,7 @@ import urllib.request
 import uuid
 
 BASE = next((a for a in sys.argv[1:] if a.startswith("http")), "http://127.0.0.1:5180")
-PHASES = {int(p) for p in (sys.argv[sys.argv.index("--phases") + 1].split(",") if "--phases" in sys.argv else "2,3,4,5,6,7,8".split(","))}
+PHASES = {int(p) for p in (sys.argv[sys.argv.index("--phases") + 1].split(",") if "--phases" in sys.argv else "2,3,4,5,6,7,8,9".split(","))}
 results = []
 state = {}
 
@@ -592,6 +592,11 @@ def phase8():
     status, land, _ = call("POST", f"/api/v1/projects/{pid}/land/confirm",
                            {"exterior": rectangle(14, 12), "expectedCurrentLandRevisionId": None, "surveyId": sid}, token=a)
     check("land/confirm saves the customer-confirmed boundary (201)", status == 201 and land.get("areaM2") == 168.0, land)
+    status, lc, _ = call("GET", f"/api/v1/projects/{pid}/lifecycle", token=a)
+    check("lifecycle derived: GENERATION_READY after land + requirements", status == 200 and lc.get("stage") == "GENERATION_READY"
+          and lc.get("nextActions") == ["START_GENERATION"], lc)
+    status, _, _ = call("GET", f"/api/v1/projects/{pid}/lifecycle", token=b)
+    check("cross-user lifecycle denied (404)", status == 404, status)
 
     # Generation alternatives, selection and plan creation.
     status, job, _ = call("POST", f"/api/v1/projects/{pid}/generation-jobs", {
@@ -610,6 +615,7 @@ def phase8():
     status, selected, _ = call("POST", f"/api/v1/projects/{pid}/generation-jobs/{jid}/select",
                                {"alternativeId": candidates[0]["candidateId"]}, token=a)
     check("select creates plan revision 1 (201)", status == 201 and selected.get("versionNumber") == 1, selected)
+    check("lifecycle derived: PLAN_SELECTED", call("GET", f"/api/v1/projects/{pid}/lifecycle", token=a)[1].get("stage") == "PLAN_SELECTED")
     status, created, _ = call("POST", f"/api/v1/projects/{pid}/plans",
                               {"jobId": jid, "alternativeId": candidates[1]["candidateId"], "changeSummary": "Alternative 2"}, token=a)
     check("POST /plans creates a plan from another alternative (201)", status == 201 and created.get("planId") not in (None, selected.get("planId")), created)
@@ -658,6 +664,13 @@ def phase8():
                                 {"revisionId": head2["revisionId"], "expectedGeometryHash": head2["geometryHash"],
                                  "acknowledgedWarnings": True}, token=a)
     check("confirm alias confirms the exact current revision (201)", status == 201 and confirmed.get("confirmationId"), confirmed)
+    lc = call("GET", f"/api/v1/projects/{pid}/lifecycle", token=a)[1]
+    check("lifecycle derived: PLAN_CONFIRMED, nothing stale", lc.get("stage") == "PLAN_CONFIRMED" and lc["stale"]["supersededConfirmations"] == 0, lc)
+    status, land2, _ = call("POST", f"/api/v1/projects/{pid}/land/confirm", {"exterior": rectangle(15, 12),
+                            "expectedCurrentLandRevisionId": land.get("landRevisionId")}, token=a)
+    lc = call("GET", f"/api/v1/projects/{pid}/lifecycle", token=a)[1]
+    check("new land revision makes plans and confirmation stale (back to GENERATION_READY)",
+          status == 201 and lc.get("stage") == "GENERATION_READY" and lc["stale"]["stalePlans"] == 2 and lc["stale"]["supersededConfirmations"] == 1, lc)
 
     if state.get("project") and 6 in PHASES:
         status, reports, _ = call("GET", f"/api/v1/projects/{state['project']}/reports", token=a)
@@ -666,8 +679,118 @@ def phase8():
         check("cross-user report list denied (404)", status == 404, status)
 
 
+def phase9():
+    """Architect directory + portal, notifications/outbox and requirement catalogue (needs the bootstrapped admin)."""
+    import os
+    import time
+    import urllib.request as ur
+    secrets_dir = os.path.expanduser("~/bm-captain/secrets")
+    if not check("phase 9 prerequisite: admin credentials and the phase 6 report",
+                 os.path.exists(secrets_dir + "/captain-admin.email") and state.get("report")):
+        return
+    status, body, _ = call("POST", "/api/v1/auth/login", {"email": open(secrets_dir + "/captain-admin.email").read().strip(),
+                                                         "password": open(secrets_dir + "/captain-admin.password").read().strip()})
+    admin = body["accessToken"]
+    a, b, pid, rid = state["alice"]["access"], state["bob"]["access"], state["project"], state["report"]
+
+    arch = new_user("architect")
+    arch_id = call("GET", "/api/v1/admin/customers?search=" + arch["email"].split("@")[0], token=admin)[1]["items"][0]["userId"]
+    status, _, _ = call("POST", f"/api/v1/admin/accounts/{arch_id}/roles", {"role": "ARCHITECT", "granted": True}, token=admin)
+    check("admin grants the architect role", status == 200, status)
+    atok = call("POST", "/api/v1/auth/login", {"email": arch["email"], "password": arch["password"]})[1]["accessToken"]
+    status, body, _ = call("GET", "/api/v1/architect/dashboard", token=atok)
+    check("architect without a directory profile refused (403)", status == 403 and code_of(body) == "ARCHITECT_PROFILE_MISSING", body)
+    status, body, _ = call("GET", "/api/v1/architect/dashboard", token=b)
+    check("customer cannot use the architect portal (403)", status == 403, status)
+    status, prof, _ = call("POST", "/api/v1/admin/architects", {"userId": arch_id, "displayName": "Synthetic Architect",
+                                                               "registrationNumber": "SYN-0001"}, token=admin)
+    check("admin creates an UNVERIFIED, unlisted directory profile", status == 201 and prof.get("verificationStatus") == "UNVERIFIED"
+          and prof.get("isListed") is False, prof)
+    rec = prof["recipientId"]
+    status, body, _ = call("PUT", f"/api/v1/admin/architects/{rec}/listing", {"isListed": True, "acceptingRequests": True, "expectedRowVersion": 1},
+                           token=admin)
+    check("unverified architect cannot be listed (422)", status == 422 and code_of(body) == "ARCHITECT_NOT_VERIFIED", body)
+    status, body, _ = call("POST", f"/api/v1/admin/architects/{rec}/verification", {"status": "VERIFIED", "expectedRowVersion": 1}, token=admin)
+    check("verification without an evidence reference refused (422)", status == 422, body)
+    status, body, _ = call("POST", f"/api/v1/admin/architects/{rec}/verification", {"status": "VERIFIED", "reference": "synthetic-evidence-ref-001",
+                                                                                 "expectedRowVersion": 1}, token=admin)
+    check("admin records verification with an evidence reference", status == 200 and body.get("verificationStatus") == "VERIFIED", body)
+    call("PUT", f"/api/v1/admin/architects/{rec}/listing", {"isListed": True, "acceptingRequests": True, "expectedRowVersion": 2}, token=admin)
+    status, directory, _ = call("GET", "/api/v1/architects", token=a)
+    check("customer directory lists the verified architect (no contact data)",
+          any(e["recipientId"] == rec and set(e) == {"recipientId", "displayName", "verificationStatus"} for e in directory.get("architects", [])),
+          directory)
+
+    path = f"/api/v1/projects/{pid}/architect-requests"
+    status, created, _ = call("POST", path, {"recipientId": rec, "reportId": rid, "documentIds": [], "explicitConsent": True,
+                                             "acknowledgedPolicyVersion": POLICY}, token=a)
+    check("customer shares the report with the verified architect (201)", status == 201, created)
+    req = created.get("requestId")
+    status, listing, _ = call("GET", "/api/v1/architect/requests", token=atok)
+    check("architect sees the request addressed to them", any(r["requestId"] == req for r in listing.get("requests", [])), listing)
+    status, pdf, headers = call("GET", f"/api/v1/architect/requests/{req}/report", token=atok)
+    check("architect downloads exactly the consented report (PDF)", status == 200 and isinstance(pdf, bytes) and pdf[:4] == b"%PDF", status)
+    status, _, _ = call("GET", f"/api/v1/architect/requests/{req}", token=b)
+    check("customer cannot read the architect's request view (403)", status == 403, status)
+    status, body, _ = call("POST", f"/api/v1/architect/requests/{req}/feedback", {"kind": "FEEDBACK", "body": "Early note"}, token=atok)
+    check("feedback before acceptance refused (409)", status == 409, body)
+    status, body, _ = call("POST", f"/api/v1/architect/requests/{req}/respond", {"decision": "ACCEPTED", "note": "Happy to review"}, token=atok)
+    check("architect accepts the request", status == 200 and body.get("decision") == "ACCEPTED", body)
+    status, _, _ = call("POST", f"/api/v1/architect/requests/{req}/respond", {"decision": "DECLINED"}, token=atok)
+    check("second response refused (409)", status == 409, status)
+    status, body, _ = call("POST", f"/api/v1/architect/requests/{req}/feedback", {"kind": "REVISION_REQUEST",
+                                                                                "body": "Please widen the kitchen by 0.5 m."}, token=atok)
+    check("architect records a revision request (201)", status == 201, body)
+    status, conv, _ = call("GET", f"{path}/{req}/conversation", token=a)
+    check("customer sees the response and feedback", status == 200 and conv["request"]["decision"] == "ACCEPTED" and len(conv["feedback"]) == 1, conv)
+    status, _, _ = call("GET", f"{path}/{req}/conversation", token=b)
+    check("cross-user conversation denied (404)", status == 404, status)
+    status, unread, _ = call("GET", "/api/v1/notifications/unread-count", token=a)
+    check("customer has unread notifications (response + feedback)", status == 200 and unread.get("unread", 0) >= 2, unread)
+    status, items, _ = call("GET", "/api/v1/notifications?unreadOnly=true", token=a)
+    check("notifications list the architect response", any(n["kind"] == "ARCHITECT_RESPONSE" for n in items.get("items", [])), items)
+    call("POST", "/api/v1/notifications/read-all", token=a)
+    check("mark-all-read clears the unread count", call("GET", "/api/v1/notifications/unread-count", token=a)[1].get("unread") == 0)
+    status, anote, _ = call("GET", "/api/v1/notifications", token=atok)
+    check("architect was notified of the new request", any(n["kind"] == "ARCHITECT_REQUEST_RECEIVED" for n in anote.get("items", [])), anote)
+    delivered = False
+    for _ in range(30):
+        with ur.urlopen("http://127.0.0.1:8025/api/v1/search?query=" + ur.quote("to:" + state["alice"]["email"]), timeout=10) as r:
+            delivered = any("architect" in m.get("Subject", "") for m in json.loads(r.read()).get("messages", []))
+        if delivered:
+            break
+        time.sleep(1)
+    check("outbox delivered the notification email to the local mail capture", delivered)
+
+    status, _, _ = call("POST", f"{path}/{req}/withdraw", {"expectedStateVersion": 1}, token=a)
+    check("customer withdraws consent", status == 200, status)
+    status, _, _ = call("GET", f"/api/v1/architect/requests/{req}/report", token=atok)
+    check("withdrawal revokes the architect's report access (404)", status == 404, status)
+
+    # Requirement catalogue: persistent, versioned, admin-published (product preferences, not regulations).
+    sample = json.load(open(os.path.expanduser("~/bm-captain/src/docs/captain-development/samples/requirement-catalogue.synthetic.json")))
+    version = "captain-dev-" + uuid.uuid4().hex[:8]
+    sample["version"] = version
+    status, body, _ = call("POST", "/api/v1/admin/catalogues", {"version": version + "x", "provenance": "DEVELOPMENT_SYNTHETIC", "document": sample},
+                           token=admin)
+    check("catalogue whose document version differs from its key refused (422)", status == 422, body)
+    status, draft, _ = call("POST", "/api/v1/admin/catalogues", {"version": version, "provenance": "DEVELOPMENT_SYNTHETIC", "document": sample},
+                            token=admin)
+    check("admin imports a DRAFT catalogue", status == 201 and draft.get("status") == "DRAFT", draft)
+    status, _, _ = call("POST", "/api/v1/admin/catalogues", {"version": version, "provenance": "DEVELOPMENT_SYNTHETIC", "document": sample}, token=admin)
+    check("duplicate catalogue version refused (409)", status == 409, status)
+    status, pub, _ = call("POST", f"/api/v1/admin/catalogues/{version}/publish", {"expectedRowVersion": 1}, token=admin)
+    check("admin publishes the catalogue", status == 200 and pub.get("status") == "PUBLISHED", pub)
+    status, ret, _ = call("POST", f"/api/v1/admin/catalogues/{version}/retire", {"expectedRowVersion": 2}, token=admin)
+    check("admin retires it (historical version kept)", status == 200 and ret.get("status") == "RETIRED", ret)
+    status, got, _ = call("GET", f"/api/v1/admin/catalogues/{version}", token=admin)
+    check("historical catalogue lookup returns the exact document", status == 200 and got["document"]["version"] == version, status)
+    status, _, _ = call("GET", "/api/v1/admin/catalogues", token=b)
+    check("customer cannot manage catalogues (403)", status == 403, status)
+
+
 # Phase 8 runs before phase 7, which stops python-services and exercises rate limiting.
-EXTRA_PHASES = [(4, phase4), (5, phase5), (6, phase6), (8, phase8), (7, phase7)]
+EXTRA_PHASES = [(4, phase4), (5, phase5), (6, phase6), (8, phase8), (9, phase9), (7, phase7)]
 
 
 def main():

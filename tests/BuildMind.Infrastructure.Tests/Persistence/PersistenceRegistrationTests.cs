@@ -54,6 +54,8 @@ public sealed class PersistenceRegistrationTests
             ["fk_account_security_users_user_id", "fk_security_events_users_user_id"]),
         ("20261124185244_AddSurveyExtractionReviews", ["survey_extraction_reviews"],
             ["fk_survey_extraction_reviews_extractions", "fk_survey_extraction_reviews_projects", "fk_survey_extraction_reviews_users"]),
+        ("20261124190404_AddCatalogueAndArchitectPortal", ["architect_feedback", "architect_profiles", "architect_request_responses", "notification_preferences", "notifications", "outbox_messages", "requirement_catalogue_versions"],
+            ["fk_architect_feedback_requests", "fk_architect_feedback_users", "fk_architect_profiles_users_user_id", "fk_architect_profiles_users_verified_by", "fk_architect_request_responses_requests", "fk_architect_request_responses_users", "fk_notification_preferences_users", "fk_notifications_users_user_id", "fk_outbox_messages_users_recipient", "fk_requirement_catalogue_versions_created_by", "fk_requirement_catalogue_versions_published_by"]),
     ];
 
     internal static readonly string[] ApprovedTables =

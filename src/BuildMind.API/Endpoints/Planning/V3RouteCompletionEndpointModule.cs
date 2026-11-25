@@ -58,6 +58,15 @@ public sealed class V3RouteCompletionEndpointModule : IApiEndpointModule
             if (status != PlanningStatus.Success) return P.Map(new PlanningResult<object>(status), o => o);
             return Results.Ok(new { reviews = await store.ListAsync(pid, sid, t) });
         }).WithName("ListSurveyExtractionReviews");
+        project.MapGet("/lifecycle", async (string projectId, HttpContext c, PlanningAccess access, IProjectLifecycleReader lifecycle,
+            CancellationToken t) =>
+        {
+            NoStore(c);
+            if (!P.TryId(projectId, out var pid)) return P.Invalid("projectId");
+            var (status, _, _) = await access.AuthorizeAsync(pid, t);
+            if (status != PlanningStatus.Success) return P.Map(new PlanningResult<object>(status), o => o);
+            return Results.Ok(await lifecycle.GetAsync(pid, t));
+        }).WithName("GetProjectLifecycle");
         project.MapPost("/land/validate", ValidateLandAsync).WithName("ValidateProjectLand");
         project.MapPost("/land/confirm", P.PutLandAsync).WithName("ConfirmProjectLand");
         project.MapGet("/generation-jobs/{jobId}/alternatives", AlternativesAsync).WithName("GetGenerationAlternatives");

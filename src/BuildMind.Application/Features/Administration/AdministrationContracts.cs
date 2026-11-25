@@ -186,3 +186,16 @@ public interface ISystemEmailSender
     bool IsConfigured { get; }
     Task<bool> SendAsync(string recipient, string subject, string textBody, CancellationToken cancellationToken);
 }
+
+public sealed record CatalogueVersionView(string Version, string Status, string Provenance, DateTimeOffset? EffectiveFromUtc, long RowVersion,
+    Guid CreatedBy, DateTimeOffset CreatedAtUtc, Guid? PublishedBy, DateTimeOffset? PublishedAtUtc, DateTimeOffset? RetiredAtUtc);
+
+/// <summary>Admin management of the persistent requirement catalogue (product preferences, not regulations).</summary>
+public interface IRequirementCatalogueAdministration
+{
+    Task<IReadOnlyList<CatalogueVersionView>> ListAsync(CancellationToken token);
+    Task<(CatalogueVersionView View, string Document)?> GetAsync(string version, CancellationToken token);
+    Task<AdminResult<CatalogueVersionView>> CreateDraftAsync(Guid admin, string version, string provenance, string documentJson, CancellationToken token);
+    Task<AdminResult<CatalogueVersionView>> TransitionAsync(Guid admin, string version, string target, long expectedRowVersion,
+        DateTimeOffset? effectiveFromUtc, CancellationToken token);
+}

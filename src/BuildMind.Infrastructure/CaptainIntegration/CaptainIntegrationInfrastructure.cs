@@ -39,7 +39,11 @@ public static class CaptainIntegrationInfrastructure
         // Requirements: every write uses the protected atomic path; the policy comes from an operator-supplied file.
         services.TryAddScoped<RequirementRevisionRepository>();
         services.Replace(ServiceDescriptor.Scoped<IRequirementRevisionRepository, OwnerProtectedRequirementRevisionRepository>());
-        services.TryAddSingleton<IRequirementCatalogueProvider, ConfiguredRequirementCatalogueProvider>();
+        services.TryAddSingleton<ConfiguredRequirementCatalogueProvider>();
+        services.TryAddScoped<RequirementCatalogueStore>();
+        services.TryAddScoped<IRequirementCatalogueAdministration>(p => p.GetRequiredService<RequirementCatalogueStore>());
+        services.TryAddScoped<IRequirementCatalogueProvider, PersistentRequirementCatalogueProvider>();
+        services.AddScoped<IProposalApplier, CatalogueDraftProposalApplier>();
 
         // M2 survey upload/status: protected insert, CAS state updates, operator-provisioned private blob directory.
         services.TryAddScoped<IProjectOwnershipGate, ProjectOwnershipGate>();
@@ -92,6 +96,7 @@ public static class CaptainIntegrationInfrastructure
         services.TryAddScoped<ISurveyExtractionWork, SurveyExtractionWork>();
         services.TryAddScoped<SurveyStorageReconciler>();
         services.TryAddScoped<ISurveyReviewStore, MySqlSurveyReviewStore>();
+        services.TryAddScoped<IProjectLifecycleReader, MySqlProjectLifecycleReader>();
         services.TryAddTransient<ISurveyExtractionClient, SurveyExtractionClient>();
         services.TryAddScoped<ISurveyExtractionReader, MySqlSurveyExtractionReader>();
         services.TryAddScoped<IPlanVersionAppendStore, MySqlPlanVersionAppendStore>();
@@ -102,6 +107,9 @@ public static class CaptainIntegrationInfrastructure
         services.TryAddScoped<IPrincipalDirectory, MySqlPrincipalDirectory>();
         services.TryAddScoped<IAdministrationStore, MySqlAdministrationStore>();
         services.TryAddScoped<IAccountSecurityStore, MySqlAccountSecurityStore>();
+        services.TryAddScoped<IArchitectPortalStore, MySqlArchitectPortalStore>();
+        services.TryAddScoped<INotificationStore, MySqlNotificationStore>();
+        services.TryAddScoped<IOutboxDispatcher, MySqlOutboxDispatcher>();
         services.AddScoped<IProposalApplier, SystemPolicyProposalApplier>();
         services.TryAddSingleton<SmtpEmailSender>();
         services.TryAddSingleton<ISystemEmailSender>(p => p.GetRequiredService<SmtpEmailSender>());

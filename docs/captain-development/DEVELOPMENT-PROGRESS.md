@@ -351,3 +351,22 @@ Phase 6 journey coverage:
 
   Allow at least 60 s between runs (auth limiter).
 - Next phases: lifecycle (X-11), requirements catalogue (X-17), architect portal + outbox + notifications (X-24/25), AI edit local adapter (X-21), RH09 investigation, internal mTLS, infrastructure/backup, documentation.
+
+### Interruption checkpoint (stack restart stopped: host low on memory)
+
+- **Committed, verified:** `efa3244` (survey hardening).
+- **Next commit (WIP, built with 0 errors / 0 warnings, NOT yet live-verified):**
+  - derived project lifecycle (`GET /projects/{id}/lifecycle`);
+  - persistent requirement catalogue (admin import/publish/retire; staff draft proposals);
+  - architect directory + portal (verification with an evidence reference, consent-bound report access, response/feedback);
+  - in-app notifications, preferences, transactional email outbox + dispatcher;
+  - migration `20261124190404_AddCatalogueAndArchitectPortal` (generated and pinned, **not yet applied**).
+- **Journey additions not yet run:** `smoke_journey.py` phase 8 lifecycle checks; the new phase 9 (portal/notifications/catalogue).
+- **Next exact action** (when memory allows):
+  1. `RAG=1 restart-stack.sh` (applies the migration);
+  2. `smoke_journey.py` (phases 2–9);
+  3. `smoke_admin.py`;
+  4. `persistence-tests.sh`;
+  5. `unit-suites.sh`;
+  6. fix defects; then commit the verified state.
+- **Remaining phases:** AI edit local adapter (X-21), RH09 investigation, internal mTLS, infrastructure/backup scripts, the documentation set of section 27.

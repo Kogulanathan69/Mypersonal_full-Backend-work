@@ -253,7 +253,8 @@ internal sealed class CaptainArchitectBoundary(
             || proposed.RequestedBy != actor)
             return new(ArchitectBoundaryStatus.Hidden, actor);
         var policy = configuration[PolicyVersionKey];
-        if (string.IsNullOrWhiteSpace(policy) || !Recipients().Contains(proposed.RecipientId))
+        if (string.IsNullOrWhiteSpace(policy) || !(Recipients().Contains(proposed.RecipientId)
+                || await MySqlArchitectPortalStore.IsEligibleAsync(context, proposed.RecipientId, token).ConfigureAwait(false)))
             return new(ArchitectBoundaryStatus.NotEligible, actor);
         if (!string.Equals(policy, proposed.Consent.PolicyVersion, StringComparison.Ordinal))
             return new(ArchitectBoundaryStatus.Conflict, actor);
@@ -280,6 +281,12 @@ internal sealed class CaptainArchitectBoundary(
                 StateVersion = proposed.StateVersion, Status = proposed.Status.ToString(),
             });
             await context.SaveChangesAsync(inner).ConfigureAwait(false);
+            var architect = await context.Set<BuildMind.Infrastructure.Persistence.Records.Administration.ArchitectProfileRecord>()
+                .Where(a => a.RecipientId == consent.RecipientId).Select(a => (Guid?)a.UserId).SingleOrDefaultAsync(inner).ConfigureAwait(false);
+            if (architect is { } architectUser)
+                await Notify.AddAsync(context, architectUser, "ARCHITECT_REQUEST_RECEIVED", "New review request",
+                    "A customer shared a preliminary report with you for review.", $"/architect/requests/{consent.RequestId}",
+                    $"architect-request:{consent.RequestId}", proposed.RequestedAtUtc, inner).ConfigureAwait(false);
             return ProtectedWriteStatus.Written;
         }, token).ConfigureAwait(false);
         return status switch

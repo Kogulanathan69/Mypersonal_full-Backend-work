@@ -121,6 +121,8 @@ public static class CaptainLocalIntegration
         services.AddSingleton<IApiEndpointModule, BuildMind.API.Endpoints.Administration.AccountSecurityEndpointModule>();
         services.AddSingleton<IApiEndpointModule, BuildMind.API.Endpoints.Administration.AdministrationEndpointModule>();
         services.AddHostedService<AdminBootstrapHostedService>();
+        services.AddSingleton<IApiEndpointModule, BuildMind.API.Endpoints.Administration.PortalEndpointModule>();
+        services.AddHostedService<OutboxHostedService>();
         // SMTP delivery (loopback-only unless explicitly allowed) replaces the non-delivering recovery sender.
         if (!string.IsNullOrWhiteSpace(builder.Configuration["CaptainIntegration:Email:SmtpHost"]))
             services.UseCaptainSmtpForPasswordRecovery();

@@ -64,6 +64,27 @@ public sealed class AdministrationEndpointModule : IApiEndpointModule
         admin.MapGet("/audit/verify", (HttpContext c, ICurrentUser u, IPrincipalDirectory d, IAdministrationStore s, CancellationToken t) =>
             AsAdmin(c, u, d, t, async _ => Results.Ok(await s.VerifyAuditChainAsync(t))));
 
+        // Requirement catalogue (persistent, versioned; product preferences, not building regulations).
+        admin.MapGet("/catalogues", (HttpContext c, ICurrentUser u, IPrincipalDirectory d, IRequirementCatalogueAdministration s, CancellationToken t) =>
+            AsAdmin(c, u, d, t, async _ => Results.Ok(new { versions = await s.ListAsync(t) })));
+        admin.MapGet("/catalogues/{version}", (string version, HttpContext c, ICurrentUser u, IPrincipalDirectory d,
+            IRequirementCatalogueAdministration s, CancellationToken t) =>
+            AsAdmin(c, u, d, t, async _ => await s.GetAsync(version, t) is { } found
+                ? Results.Ok(new { version = found.View, document = JsonDocument.Parse(found.Document).RootElement }) : Problem(404, "NOT_FOUND")));
+        admin.MapPost("/catalogues", (HttpContext c, ICurrentUser u, IPrincipalDirectory d, IRequirementCatalogueAdministration s, CancellationToken t) =>
+            AsAdmin(c, u, d, t, async p =>
+            {
+                var body = await P.ReadAsync<CatalogueImportRequest>(c, t);
+                if (body.Failure is not null) return body.Failure;
+                var r = body.Value!;
+                if (r.Version is null || r.Document is not { ValueKind: JsonValueKind.Object } document) return P.Invalid("document");
+                return Map(await s.CreateDraftAsync(p.UserId, r.Version, r.Provenance ?? "", document.GetRawText(), t), x => x, created: true);
+            }));
+        admin.MapPost("/catalogues/{version}/publish", (string version, HttpContext c, ICurrentUser u, IPrincipalDirectory d,
+            IRequirementCatalogueAdministration s, CancellationToken t) => CatalogueTransitionAsync(version, "PUBLISHED", c, u, d, s, t));
+        admin.MapPost("/catalogues/{version}/retire", (string version, HttpContext c, ICurrentUser u, IPrincipalDirectory d,
+            IRequirementCatalogueAdministration s, CancellationToken t) => CatalogueTransitionAsync(version, "RETIRED", c, u, d, s, t));
+
         var staff = apiV1.MapGroup("/staff").WithTags("Staff").RequireAuthorization();
         staff.MapGet("/dashboard", StaffDashboardAsync);
         staff.MapGet("/monitoring/{kind}", (string kind, HttpContext c, ICurrentUser u, IPrincipalDirectory d, IAdministrationStore s,
@@ -257,6 +278,16 @@ public sealed class AdministrationEndpointModule : IApiEndpointModule
         int? page, int? pageSize, string? action, CancellationToken t) =>
         AsAdmin(c, u, d, t, async _ => Results.Ok(PageBody(await s.ListAuditAsync(Page(page, pageSize, action, null, null), t))));
 
+    private static Task<IResult> CatalogueTransitionAsync(string version, string target, HttpContext c, ICurrentUser u, IPrincipalDirectory d,
+        IRequirementCatalogueAdministration s, CancellationToken t) =>
+        AsAdmin(c, u, d, t, async p =>
+        {
+            var body = await P.ReadAsync<CatalogueTransitionRequest>(c, t);
+            if (body.Failure is not null) return body.Failure;
+            if (body.Value!.ExpectedRowVersion is not { } rowVersion) return P.Invalid("expectedRowVersion");
+            return Map(await s.TransitionAsync(p.UserId, version, target, rowVersion, body.Value.EffectiveFromUtc, t), x => x);
+        });
+
     // ---------------------------------------------------------------- staff
 
     private static Task<IResult> StaffDashboardAsync(HttpContext c, ICurrentUser u, IPrincipalDirectory d, IAdministrationStore s, CancellationToken t) =>
@@ -379,3 +410,5 @@ public sealed record ProposalRequest(string? Module, string? TargetType, string?
 public sealed record MoveTaskRequest(string? Status, long? ExpectedVersion, string? Note);
 public sealed record NoteRequest(string? Body);
 public sealed record PurposeRequest(string? Purpose);
+public sealed record CatalogueImportRequest(string? Version, string? Provenance, JsonElement? Document);
+public sealed record CatalogueTransitionRequest(long? ExpectedRowVersion, DateTimeOffset? EffectiveFromUtc);

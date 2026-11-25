@@ -201,6 +201,33 @@ internal sealed class SecurityEventRecordConfiguration : IEntityTypeConfiguratio
     }
 }
 
+internal sealed class RequirementCatalogueVersionRecordConfiguration : IEntityTypeConfiguration<RequirementCatalogueVersionRecord>
+{
+    public void Configure(EntityTypeBuilder<RequirementCatalogueVersionRecord> b)
+    {
+        b.ToTable("requirement_catalogue_versions");
+        b.HasKey(r => r.Version).HasName("pk_requirement_catalogue_versions");
+        b.Property(r => r.Version).HasColumnName("version").HasMaxLength(64).ValueGeneratedNever();
+        b.Property(r => r.Status).HasColumnName("status").HasMaxLength(16).IsRequired();
+        b.Property(r => r.Provenance).HasColumnName("provenance").HasMaxLength(64).IsRequired();
+        b.Property(r => r.DocumentJson).HasColumnName("document_json").HasColumnType("mediumtext").IsRequired();
+        b.Property(r => r.EffectiveFromUtc).HasColumnName("effective_from_utc");
+        b.Property(r => r.RowVersion).HasColumnName("row_version").IsRequired().IsConcurrencyToken();
+        b.Property(r => r.CreatedBy).HasColumnName("created_by").IsRequired();
+        b.Property(r => r.CreatedAtUtc).HasColumnName("created_at_utc").IsRequired();
+        b.Property(r => r.PublishedBy).HasColumnName("published_by");
+        b.Property(r => r.PublishedAtUtc).HasColumnName("published_at_utc");
+        b.Property(r => r.RetiredAtUtc).HasColumnName("retired_at_utc");
+        b.HasOne<UserRecord>().WithMany().HasForeignKey(r => r.CreatedBy)
+            .HasConstraintName("fk_requirement_catalogue_versions_created_by").OnDelete(DeleteBehavior.Restrict);
+        b.HasOne<UserRecord>().WithMany().HasForeignKey(r => r.PublishedBy)
+            .HasConstraintName("fk_requirement_catalogue_versions_published_by").OnDelete(DeleteBehavior.Restrict);
+        b.HasIndex(r => new { r.Status, r.EffectiveFromUtc }).HasDatabaseName("ix_requirement_catalogue_versions_served");
+        b.HasIndex(r => r.CreatedBy).HasDatabaseName("ix_requirement_catalogue_versions_created_by");
+        b.HasIndex(r => r.PublishedBy).HasDatabaseName("ix_requirement_catalogue_versions_published_by");
+    }
+}
+
 internal sealed class SystemPolicyRecordConfiguration : IEntityTypeConfiguration<SystemPolicyRecord>
 {
     public void Configure(EntityTypeBuilder<SystemPolicyRecord> b)

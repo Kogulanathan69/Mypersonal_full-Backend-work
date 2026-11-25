@@ -139,6 +139,9 @@ internal sealed class SurveyWorkQueue(BuildMindDbContext context, TransactionRun
                 context.Add(extraction);
                 await context.SaveChangesAsync(inner).ConfigureAwait(false);
             }
+            await Notify.AddAsync(context, survey.UploadedBy, "SURVEY_PROCESSED", completed ? "Survey processed" : "Survey could not be processed",
+                completed ? "Extracted values are ready for your review." : "Please review the survey or enter the boundary manually.",
+                $"/projects/{survey.ProjectId}/surveys/{survey.Id}", $"survey-processed:{survey.Id}", now, inner).ConfigureAwait(false);
             return ProtectedWriteStatus.Written;
         }, token).ConfigureAwait(false);
         return status switch
