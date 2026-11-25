@@ -1,215 +1,99 @@
 {
-  "components": {
-    "schemas": {
-      "CreateProjectRequest": {
-        "additionalProperties": false,
-        "properties": {
-          "locationReference": {
-            "nullable": true,
-            "type": "string"
-          },
-          "name": {
-            "nullable": true,
-            "type": "string"
-          },
-          "projectType": {
-            "nullable": true,
-            "type": "string"
-          }
-        },
-        "required": [
-          "name",
-          "projectType"
-        ],
-        "type": "object"
-      },
-      "ForgotPasswordRequest": {
-        "additionalProperties": false,
-        "properties": {
-          "email": {
-            "nullable": true,
-            "type": "string"
-          }
-        },
-        "required": [
-          "email"
-        ],
-        "type": "object"
-      },
-      "LoginRequest": {
-        "additionalProperties": false,
-        "properties": {
-          "email": {
-            "nullable": true,
-            "type": "string"
-          },
-          "password": {
-            "nullable": true,
-            "type": "string"
-          }
-        },
-        "required": [
-          "email",
-          "password"
-        ],
-        "type": "object"
-      },
-      "RefreshTokenRequest": {
-        "additionalProperties": false,
-        "properties": {
-          "refreshToken": {
-            "nullable": true,
-            "type": "string"
-          }
-        },
-        "required": [
-          "refreshToken"
-        ],
-        "type": "object"
-      },
-      "RegisterRequest": {
-        "additionalProperties": false,
-        "properties": {
-          "email": {
-            "nullable": true,
-            "type": "string"
-          },
-          "password": {
-            "nullable": true,
-            "type": "string"
-          }
-        },
-        "required": [
-          "email",
-          "password"
-        ],
-        "type": "object"
-      },
-      "ResetPasswordRequest": {
-        "additionalProperties": false,
-        "properties": {
-          "confirmPassword": {
-            "nullable": true,
-            "type": "string"
-          },
-          "email": {
-            "nullable": true,
-            "type": "string"
-          },
-          "newPassword": {
-            "nullable": true,
-            "type": "string"
-          },
-          "token": {
-            "nullable": true,
-            "type": "string"
-          }
-        },
-        "required": [
-          "confirmPassword",
-          "email",
-          "newPassword",
-          "token"
-        ],
-        "type": "object"
-      },
-      "UpdateProfileRequest": {
-        "additionalProperties": false,
-        "properties": {
-          "fullName": {
-            "nullable": true,
-            "type": "string"
-          },
-          "phoneNumber": {
-            "nullable": true,
-            "type": "string"
-          }
-        },
-        "required": [
-          "fullName"
-        ],
-        "type": "object"
-      },
-      "UpdateProjectRequest": {
-        "additionalProperties": false,
-        "properties": {
-          "locationReference": {
-            "nullable": true,
-            "type": "string"
-          },
-          "name": {
-            "nullable": true,
-            "type": "string"
-          },
-          "projectType": {
-            "nullable": true,
-            "type": "string"
-          },
-          "revision": {
-            "format": "int64",
-            "type": "integer"
-          }
-        },
-        "required": [
-          "revision"
-        ],
-        "type": "object"
-      }
-    },
-    "securitySchemes": {
-      "Bearer": {
-        "bearerFormat": "JWT",
-        "description": "Paste the access token returned by POST /api/v1/auth/login (without the 'Bearer ' prefix).",
-        "scheme": "bearer",
-        "type": "http"
-      }
-    }
-  },
+  "openapi": "3.0.4",
   "info": {
-    "description": "Development documentation only. BuildMind produces preliminary planning assistance, not legally certified plans or construction approval.",
     "title": "BuildMind API",
+    "description": "Development documentation only. BuildMind produces preliminary planning assistance, not legally certified plans or construction approval.",
     "version": "v1"
   },
-  "openapi": "3.0.4",
   "paths": {
-    "/api/v1/admin/accounts": {
+    "/api/v1/users/me/password": {
+      "post": {
+        "tags": [
+          "Account security"
+        ],
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        },
+        "security": [
+          {
+            "Bearer": [ ]
+          }
+        ]
+      }
+    },
+    "/api/v1/users/me/security": {
       "get": {
+        "tags": [
+          "Account security"
+        ],
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        },
+        "security": [
+          {
+            "Bearer": [ ]
+          }
+        ]
+      }
+    },
+    "/api/v1/users/me/email-verification": {
+      "post": {
+        "tags": [
+          "Account security"
+        ],
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        },
+        "security": [
+          {
+            "Bearer": [ ]
+          }
+        ]
+      }
+    },
+    "/api/v1/users/me/email-verification/confirm": {
+      "post": {
+        "tags": [
+          "Account security"
+        ],
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        },
+        "security": [
+          {
+            "Bearer": [ ]
+          }
+        ]
+      }
+    },
+    "/api/v1/users/me/security-events": {
+      "get": {
+        "tags": [
+          "Account security"
+        ],
         "parameters": [
           {
-            "in": "query",
             "name": "page",
+            "in": "query",
             "schema": {
-              "format": "int32",
-              "type": "integer"
+              "type": "integer",
+              "format": "int32"
             }
           },
           {
-            "in": "query",
             "name": "pageSize",
-            "schema": {
-              "format": "int32",
-              "type": "integer"
-            }
-          },
-          {
             "in": "query",
-            "name": "search",
             "schema": {
-              "type": "string"
-            }
-          },
-          {
-            "in": "query",
-            "name": "status",
-            "schema": {
-              "type": "string"
-            }
-          },
-          {
-            "in": "query",
-            "name": "sort",
-            "schema": {
-              "type": "string"
+              "type": "integer",
+              "format": "int32"
             }
           }
         ],
@@ -220,482 +104,16 @@
         },
         "security": [
           {
-            "Bearer": []
+            "Bearer": [ ]
           }
-        ],
-        "tags": [
-          "Admin"
-        ]
-      }
-    },
-    "/api/v1/admin/accounts/{userId}": {
-      "get": {
-        "parameters": [
-          {
-            "in": "path",
-            "name": "userId",
-            "required": true,
-            "schema": {
-              "type": "string"
-            }
-          }
-        ],
-        "responses": {
-          "200": {
-            "description": "OK"
-          }
-        },
-        "security": [
-          {
-            "Bearer": []
-          }
-        ],
-        "tags": [
-          "Admin"
-        ]
-      }
-    },
-    "/api/v1/admin/accounts/{userId}/activate": {
-      "post": {
-        "parameters": [
-          {
-            "in": "path",
-            "name": "userId",
-            "required": true,
-            "schema": {
-              "type": "string"
-            }
-          }
-        ],
-        "responses": {
-          "200": {
-            "description": "OK"
-          }
-        },
-        "security": [
-          {
-            "Bearer": []
-          }
-        ],
-        "tags": [
-          "Admin"
-        ]
-      }
-    },
-    "/api/v1/admin/accounts/{userId}/invitation": {
-      "post": {
-        "parameters": [
-          {
-            "in": "path",
-            "name": "userId",
-            "required": true,
-            "schema": {
-              "type": "string"
-            }
-          }
-        ],
-        "responses": {
-          "200": {
-            "description": "OK"
-          }
-        },
-        "security": [
-          {
-            "Bearer": []
-          }
-        ],
-        "tags": [
-          "Admin"
-        ]
-      }
-    },
-    "/api/v1/admin/accounts/{userId}/roles": {
-      "post": {
-        "parameters": [
-          {
-            "in": "path",
-            "name": "userId",
-            "required": true,
-            "schema": {
-              "type": "string"
-            }
-          }
-        ],
-        "responses": {
-          "200": {
-            "description": "OK"
-          }
-        },
-        "security": [
-          {
-            "Bearer": []
-          }
-        ],
-        "tags": [
-          "Admin"
-        ]
-      }
-    },
-    "/api/v1/admin/accounts/{userId}/suspend": {
-      "post": {
-        "parameters": [
-          {
-            "in": "path",
-            "name": "userId",
-            "required": true,
-            "schema": {
-              "type": "string"
-            }
-          }
-        ],
-        "responses": {
-          "200": {
-            "description": "OK"
-          }
-        },
-        "security": [
-          {
-            "Bearer": []
-          }
-        ],
-        "tags": [
-          "Admin"
-        ]
-      }
-    },
-    "/api/v1/admin/architects": {
-      "get": {
-        "responses": {
-          "200": {
-            "description": "OK"
-          }
-        },
-        "security": [
-          {
-            "Bearer": []
-          }
-        ],
-        "tags": [
-          "Admin"
-        ]
-      },
-      "post": {
-        "responses": {
-          "200": {
-            "description": "OK"
-          }
-        },
-        "security": [
-          {
-            "Bearer": []
-          }
-        ],
-        "tags": [
-          "Admin"
-        ]
-      }
-    },
-    "/api/v1/admin/architects/{recipientId}/listing": {
-      "put": {
-        "parameters": [
-          {
-            "in": "path",
-            "name": "recipientId",
-            "required": true,
-            "schema": {
-              "type": "string"
-            }
-          }
-        ],
-        "responses": {
-          "200": {
-            "description": "OK"
-          }
-        },
-        "security": [
-          {
-            "Bearer": []
-          }
-        ],
-        "tags": [
-          "Admin"
-        ]
-      }
-    },
-    "/api/v1/admin/architects/{recipientId}/verification": {
-      "post": {
-        "parameters": [
-          {
-            "in": "path",
-            "name": "recipientId",
-            "required": true,
-            "schema": {
-              "type": "string"
-            }
-          }
-        ],
-        "responses": {
-          "200": {
-            "description": "OK"
-          }
-        },
-        "security": [
-          {
-            "Bearer": []
-          }
-        ],
-        "tags": [
-          "Admin"
-        ]
-      }
-    },
-    "/api/v1/admin/audit": {
-      "get": {
-        "parameters": [
-          {
-            "in": "query",
-            "name": "page",
-            "schema": {
-              "format": "int32",
-              "type": "integer"
-            }
-          },
-          {
-            "in": "query",
-            "name": "pageSize",
-            "schema": {
-              "format": "int32",
-              "type": "integer"
-            }
-          },
-          {
-            "in": "query",
-            "name": "action",
-            "schema": {
-              "type": "string"
-            }
-          }
-        ],
-        "responses": {
-          "200": {
-            "description": "OK"
-          }
-        },
-        "security": [
-          {
-            "Bearer": []
-          }
-        ],
-        "tags": [
-          "Admin"
-        ]
-      }
-    },
-    "/api/v1/admin/audit/verify": {
-      "get": {
-        "responses": {
-          "200": {
-            "description": "OK"
-          }
-        },
-        "security": [
-          {
-            "Bearer": []
-          }
-        ],
-        "tags": [
-          "Admin"
-        ]
-      }
-    },
-    "/api/v1/admin/catalogues": {
-      "get": {
-        "responses": {
-          "200": {
-            "description": "OK"
-          }
-        },
-        "security": [
-          {
-            "Bearer": []
-          }
-        ],
-        "tags": [
-          "Admin"
-        ]
-      },
-      "post": {
-        "responses": {
-          "200": {
-            "description": "OK"
-          }
-        },
-        "security": [
-          {
-            "Bearer": []
-          }
-        ],
-        "tags": [
-          "Admin"
-        ]
-      }
-    },
-    "/api/v1/admin/catalogues/{version}": {
-      "get": {
-        "parameters": [
-          {
-            "in": "path",
-            "name": "version",
-            "required": true,
-            "schema": {
-              "type": "string"
-            }
-          }
-        ],
-        "responses": {
-          "200": {
-            "description": "OK"
-          }
-        },
-        "security": [
-          {
-            "Bearer": []
-          }
-        ],
-        "tags": [
-          "Admin"
-        ]
-      }
-    },
-    "/api/v1/admin/catalogues/{version}/publish": {
-      "post": {
-        "parameters": [
-          {
-            "in": "path",
-            "name": "version",
-            "required": true,
-            "schema": {
-              "type": "string"
-            }
-          }
-        ],
-        "responses": {
-          "200": {
-            "description": "OK"
-          }
-        },
-        "security": [
-          {
-            "Bearer": []
-          }
-        ],
-        "tags": [
-          "Admin"
-        ]
-      }
-    },
-    "/api/v1/admin/catalogues/{version}/retire": {
-      "post": {
-        "parameters": [
-          {
-            "in": "path",
-            "name": "version",
-            "required": true,
-            "schema": {
-              "type": "string"
-            }
-          }
-        ],
-        "responses": {
-          "200": {
-            "description": "OK"
-          }
-        },
-        "security": [
-          {
-            "Bearer": []
-          }
-        ],
-        "tags": [
-          "Admin"
-        ]
-      }
-    },
-    "/api/v1/admin/customers": {
-      "get": {
-        "parameters": [
-          {
-            "in": "query",
-            "name": "page",
-            "schema": {
-              "format": "int32",
-              "type": "integer"
-            }
-          },
-          {
-            "in": "query",
-            "name": "pageSize",
-            "schema": {
-              "format": "int32",
-              "type": "integer"
-            }
-          },
-          {
-            "in": "query",
-            "name": "search",
-            "schema": {
-              "type": "string"
-            }
-          },
-          {
-            "in": "query",
-            "name": "status",
-            "schema": {
-              "type": "string"
-            }
-          },
-          {
-            "in": "query",
-            "name": "sort",
-            "schema": {
-              "type": "string"
-            }
-          }
-        ],
-        "responses": {
-          "200": {
-            "description": "OK"
-          }
-        },
-        "security": [
-          {
-            "Bearer": []
-          }
-        ],
-        "tags": [
-          "Admin"
-        ]
-      }
-    },
-    "/api/v1/admin/dashboard": {
-      "get": {
-        "responses": {
-          "200": {
-            "description": "OK"
-          }
-        },
-        "security": [
-          {
-            "Bearer": []
-          }
-        ],
-        "tags": [
-          "Admin"
         ]
       }
     },
     "/api/v1/admin/modules": {
       "get": {
+        "tags": [
+          "Admin"
+        ],
         "responses": {
           "200": {
             "description": "OK"
@@ -703,144 +121,123 @@
         },
         "security": [
           {
-            "Bearer": []
+            "Bearer": [ ]
           }
-        ],
-        "tags": [
-          "Admin"
         ]
       }
     },
-    "/api/v1/admin/monitoring/{kind}": {
+    "/api/v1/admin/dashboard": {
       "get": {
+        "tags": [
+          "Admin"
+        ],
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        },
+        "security": [
+          {
+            "Bearer": [ ]
+          }
+        ]
+      }
+    },
+    "/api/v1/admin/customers": {
+      "get": {
+        "tags": [
+          "Admin"
+        ],
         "parameters": [
           {
-            "in": "path",
-            "name": "kind",
-            "required": true,
-            "schema": {
-              "type": "string"
-            }
-          },
-          {
-            "in": "query",
             "name": "page",
+            "in": "query",
             "schema": {
-              "format": "int32",
-              "type": "integer"
+              "type": "integer",
+              "format": "int32"
             }
           },
           {
-            "in": "query",
             "name": "pageSize",
+            "in": "query",
             "schema": {
-              "format": "int32",
-              "type": "integer"
+              "type": "integer",
+              "format": "int32"
             }
           },
           {
+            "name": "search",
             "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
             "name": "status",
+            "in": "query",
             "schema": {
               "type": "string"
             }
           },
           {
-            "in": "query",
             "name": "sort",
-            "schema": {
-              "type": "string"
-            }
-          }
-        ],
-        "responses": {
-          "200": {
-            "description": "OK"
-          }
-        },
-        "security": [
-          {
-            "Bearer": []
-          }
-        ],
-        "tags": [
-          "Admin"
-        ]
-      }
-    },
-    "/api/v1/admin/policies": {
-      "get": {
-        "responses": {
-          "200": {
-            "description": "OK"
-          }
-        },
-        "security": [
-          {
-            "Bearer": []
-          }
-        ],
-        "tags": [
-          "Admin"
-        ]
-      }
-    },
-    "/api/v1/admin/policies/{key}": {
-      "put": {
-        "parameters": [
-          {
-            "in": "path",
-            "name": "key",
-            "required": true,
-            "schema": {
-              "type": "string"
-            }
-          }
-        ],
-        "responses": {
-          "200": {
-            "description": "OK"
-          }
-        },
-        "security": [
-          {
-            "Bearer": []
-          }
-        ],
-        "tags": [
-          "Admin"
-        ]
-      }
-    },
-    "/api/v1/admin/proposals": {
-      "get": {
-        "parameters": [
-          {
             "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        },
+        "security": [
+          {
+            "Bearer": [ ]
+          }
+        ]
+      }
+    },
+    "/api/v1/admin/accounts": {
+      "get": {
+        "tags": [
+          "Admin"
+        ],
+        "parameters": [
+          {
             "name": "page",
+            "in": "query",
             "schema": {
-              "format": "int32",
-              "type": "integer"
+              "type": "integer",
+              "format": "int32"
             }
           },
           {
-            "in": "query",
             "name": "pageSize",
+            "in": "query",
             "schema": {
-              "format": "int32",
-              "type": "integer"
+              "type": "integer",
+              "format": "int32"
             }
           },
           {
+            "name": "search",
             "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
             "name": "status",
+            "in": "query",
             "schema": {
               "type": "string"
             }
           },
           {
-            "in": "query",
             "name": "sort",
+            "in": "query",
             "schema": {
               "type": "string"
             }
@@ -853,20 +250,20 @@
         },
         "security": [
           {
-            "Bearer": []
+            "Bearer": [ ]
           }
-        ],
-        "tags": [
-          "Admin"
         ]
       }
     },
-    "/api/v1/admin/proposals/{proposalId}/approve": {
-      "post": {
+    "/api/v1/admin/accounts/{userId}": {
+      "get": {
+        "tags": [
+          "Admin"
+        ],
         "parameters": [
           {
+            "name": "userId",
             "in": "path",
-            "name": "proposalId",
             "required": true,
             "schema": {
               "type": "string"
@@ -880,20 +277,20 @@
         },
         "security": [
           {
-            "Bearer": []
+            "Bearer": [ ]
           }
-        ],
-        "tags": [
-          "Admin"
         ]
       }
     },
-    "/api/v1/admin/proposals/{proposalId}/reject": {
+    "/api/v1/admin/accounts/{userId}/suspend": {
       "post": {
+        "tags": [
+          "Admin"
+        ],
         "parameters": [
           {
+            "name": "userId",
             "in": "path",
-            "name": "proposalId",
             "required": true,
             "schema": {
               "type": "string"
@@ -907,50 +304,131 @@
         },
         "security": [
           {
-            "Bearer": []
+            "Bearer": [ ]
           }
-        ],
+        ]
+      }
+    },
+    "/api/v1/admin/accounts/{userId}/activate": {
+      "post": {
         "tags": [
           "Admin"
+        ],
+        "parameters": [
+          {
+            "name": "userId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        },
+        "security": [
+          {
+            "Bearer": [ ]
+          }
+        ]
+      }
+    },
+    "/api/v1/admin/accounts/{userId}/roles": {
+      "post": {
+        "tags": [
+          "Admin"
+        ],
+        "parameters": [
+          {
+            "name": "userId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        },
+        "security": [
+          {
+            "Bearer": [ ]
+          }
+        ]
+      }
+    },
+    "/api/v1/admin/accounts/{userId}/invitation": {
+      "post": {
+        "tags": [
+          "Admin"
+        ],
+        "parameters": [
+          {
+            "name": "userId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        },
+        "security": [
+          {
+            "Bearer": [ ]
+          }
         ]
       }
     },
     "/api/v1/admin/staff": {
       "get": {
+        "tags": [
+          "Admin"
+        ],
         "parameters": [
           {
-            "in": "query",
             "name": "page",
+            "in": "query",
             "schema": {
-              "format": "int32",
-              "type": "integer"
+              "type": "integer",
+              "format": "int32"
             }
           },
           {
-            "in": "query",
             "name": "pageSize",
+            "in": "query",
             "schema": {
-              "format": "int32",
-              "type": "integer"
+              "type": "integer",
+              "format": "int32"
             }
           },
           {
-            "in": "query",
             "name": "search",
+            "in": "query",
             "schema": {
               "type": "string"
             }
           },
           {
-            "in": "query",
             "name": "status",
+            "in": "query",
             "schema": {
               "type": "string"
             }
           },
           {
-            "in": "query",
             "name": "sort",
+            "in": "query",
             "schema": {
               "type": "string"
             }
@@ -963,14 +441,14 @@
         },
         "security": [
           {
-            "Bearer": []
+            "Bearer": [ ]
           }
-        ],
-        "tags": [
-          "Admin"
         ]
       },
       "post": {
+        "tags": [
+          "Admin"
+        ],
         "responses": {
           "200": {
             "description": "OK"
@@ -978,20 +456,20 @@
         },
         "security": [
           {
-            "Bearer": []
+            "Bearer": [ ]
           }
-        ],
-        "tags": [
-          "Admin"
         ]
       }
     },
     "/api/v1/admin/staff/{userId}/modules": {
       "put": {
+        "tags": [
+          "Admin"
+        ],
         "parameters": [
           {
-            "in": "path",
             "name": "userId",
+            "in": "path",
             "required": true,
             "schema": {
               "type": "string"
@@ -1005,43 +483,146 @@
         },
         "security": [
           {
-            "Bearer": []
+            "Bearer": [ ]
           }
-        ],
+        ]
+      }
+    },
+    "/api/v1/admin/proposals": {
+      "get": {
         "tags": [
           "Admin"
+        ],
+        "parameters": [
+          {
+            "name": "page",
+            "in": "query",
+            "schema": {
+              "type": "integer",
+              "format": "int32"
+            }
+          },
+          {
+            "name": "pageSize",
+            "in": "query",
+            "schema": {
+              "type": "integer",
+              "format": "int32"
+            }
+          },
+          {
+            "name": "status",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "sort",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        },
+        "security": [
+          {
+            "Bearer": [ ]
+          }
+        ]
+      }
+    },
+    "/api/v1/admin/proposals/{proposalId}/approve": {
+      "post": {
+        "tags": [
+          "Admin"
+        ],
+        "parameters": [
+          {
+            "name": "proposalId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        },
+        "security": [
+          {
+            "Bearer": [ ]
+          }
+        ]
+      }
+    },
+    "/api/v1/admin/proposals/{proposalId}/reject": {
+      "post": {
+        "tags": [
+          "Admin"
+        ],
+        "parameters": [
+          {
+            "name": "proposalId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        },
+        "security": [
+          {
+            "Bearer": [ ]
+          }
         ]
       }
     },
     "/api/v1/admin/tasks": {
       "get": {
+        "tags": [
+          "Admin"
+        ],
         "parameters": [
           {
-            "in": "query",
             "name": "page",
+            "in": "query",
             "schema": {
-              "format": "int32",
-              "type": "integer"
+              "type": "integer",
+              "format": "int32"
             }
           },
           {
-            "in": "query",
             "name": "pageSize",
+            "in": "query",
             "schema": {
-              "format": "int32",
-              "type": "integer"
+              "type": "integer",
+              "format": "int32"
             }
           },
           {
-            "in": "query",
             "name": "status",
+            "in": "query",
             "schema": {
               "type": "string"
             }
           },
           {
-            "in": "query",
             "name": "sort",
+            "in": "query",
             "schema": {
               "type": "string"
             }
@@ -1054,14 +635,14 @@
         },
         "security": [
           {
-            "Bearer": []
+            "Bearer": [ ]
           }
-        ],
-        "tags": [
-          "Admin"
         ]
       },
       "post": {
+        "tags": [
+          "Admin"
+        ],
         "responses": {
           "200": {
             "description": "OK"
@@ -1069,20 +650,20 @@
         },
         "security": [
           {
-            "Bearer": []
+            "Bearer": [ ]
           }
-        ],
-        "tags": [
-          "Admin"
         ]
       }
     },
     "/api/v1/admin/tasks/{taskId}": {
       "get": {
+        "tags": [
+          "Admin"
+        ],
         "parameters": [
           {
-            "in": "path",
             "name": "taskId",
+            "in": "path",
             "required": true,
             "schema": {
               "type": "string"
@@ -1096,81 +677,20 @@
         },
         "security": [
           {
-            "Bearer": []
+            "Bearer": [ ]
           }
-        ],
-        "tags": [
-          "Admin"
         ]
       }
     },
     "/api/v1/admin/tasks/{taskId}/status": {
       "post": {
-        "parameters": [
-          {
-            "in": "path",
-            "name": "taskId",
-            "required": true,
-            "schema": {
-              "type": "string"
-            }
-          }
-        ],
-        "responses": {
-          "200": {
-            "description": "OK"
-          }
-        },
-        "security": [
-          {
-            "Bearer": []
-          }
-        ],
         "tags": [
           "Admin"
-        ]
-      }
-    },
-    "/api/v1/architect/dashboard": {
-      "get": {
-        "responses": {
-          "200": {
-            "description": "OK"
-          }
-        },
-        "security": [
-          {
-            "Bearer": []
-          }
         ],
-        "tags": [
-          "Architect portal"
-        ]
-      }
-    },
-    "/api/v1/architect/requests": {
-      "get": {
-        "responses": {
-          "200": {
-            "description": "OK"
-          }
-        },
-        "security": [
-          {
-            "Bearer": []
-          }
-        ],
-        "tags": [
-          "Architect portal"
-        ]
-      }
-    },
-    "/api/v1/architect/requests/{requestId}": {
-      "get": {
         "parameters": [
           {
+            "name": "taskId",
             "in": "path",
-            "name": "requestId",
             "required": true,
             "schema": {
               "type": "string"
@@ -1184,25 +704,190 @@
         },
         "security": [
           {
-            "Bearer": []
+            "Bearer": [ ]
           }
-        ],
-        "tags": [
-          "Architect portal"
         ]
       }
     },
-    "/api/v1/architect/requests/{requestId}/feedback": {
+    "/api/v1/admin/policies": {
+      "get": {
+        "tags": [
+          "Admin"
+        ],
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        },
+        "security": [
+          {
+            "Bearer": [ ]
+          }
+        ]
+      }
+    },
+    "/api/v1/admin/policies/{key}": {
+      "put": {
+        "tags": [
+          "Admin"
+        ],
+        "parameters": [
+          {
+            "name": "key",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        },
+        "security": [
+          {
+            "Bearer": [ ]
+          }
+        ]
+      }
+    },
+    "/api/v1/admin/monitoring/{kind}": {
+      "get": {
+        "tags": [
+          "Admin"
+        ],
+        "parameters": [
+          {
+            "name": "kind",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "page",
+            "in": "query",
+            "schema": {
+              "type": "integer",
+              "format": "int32"
+            }
+          },
+          {
+            "name": "pageSize",
+            "in": "query",
+            "schema": {
+              "type": "integer",
+              "format": "int32"
+            }
+          },
+          {
+            "name": "status",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "sort",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        },
+        "security": [
+          {
+            "Bearer": [ ]
+          }
+        ]
+      }
+    },
+    "/api/v1/admin/audit": {
+      "get": {
+        "tags": [
+          "Admin"
+        ],
+        "parameters": [
+          {
+            "name": "page",
+            "in": "query",
+            "schema": {
+              "type": "integer",
+              "format": "int32"
+            }
+          },
+          {
+            "name": "pageSize",
+            "in": "query",
+            "schema": {
+              "type": "integer",
+              "format": "int32"
+            }
+          },
+          {
+            "name": "action",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        },
+        "security": [
+          {
+            "Bearer": [ ]
+          }
+        ]
+      }
+    },
+    "/api/v1/admin/audit/verify": {
+      "get": {
+        "tags": [
+          "Admin"
+        ],
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        },
+        "security": [
+          {
+            "Bearer": [ ]
+          }
+        ]
+      }
+    },
+    "/api/v1/admin/catalogues": {
+      "get": {
+        "tags": [
+          "Admin"
+        ],
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        },
+        "security": [
+          {
+            "Bearer": [ ]
+          }
+        ]
+      },
       "post": {
-        "parameters": [
-          {
-            "in": "path",
-            "name": "requestId",
-            "required": true,
-            "schema": {
-              "type": "string"
-            }
-          }
+        "tags": [
+          "Admin"
         ],
         "responses": {
           "200": {
@@ -1211,20 +896,20 @@
         },
         "security": [
           {
-            "Bearer": []
+            "Bearer": [ ]
           }
-        ],
-        "tags": [
-          "Architect portal"
         ]
       }
     },
-    "/api/v1/architect/requests/{requestId}/report": {
+    "/api/v1/admin/catalogues/{version}": {
       "get": {
+        "tags": [
+          "Admin"
+        ],
         "parameters": [
           {
+            "name": "version",
             "in": "path",
-            "name": "requestId",
             "required": true,
             "schema": {
               "type": "string"
@@ -1238,20 +923,20 @@
         },
         "security": [
           {
-            "Bearer": []
+            "Bearer": [ ]
           }
-        ],
-        "tags": [
-          "Architect portal"
         ]
       }
     },
-    "/api/v1/architect/requests/{requestId}/respond": {
+    "/api/v1/admin/catalogues/{version}/publish": {
       "post": {
+        "tags": [
+          "Admin"
+        ],
         "parameters": [
           {
+            "name": "version",
             "in": "path",
-            "name": "requestId",
             "required": true,
             "schema": {
               "type": "string"
@@ -1265,87 +950,129 @@
         },
         "security": [
           {
-            "Bearer": []
+            "Bearer": [ ]
+          }
+        ]
+      }
+    },
+    "/api/v1/admin/catalogues/{version}/retire": {
+      "post": {
+        "tags": [
+          "Admin"
+        ],
+        "parameters": [
+          {
+            "name": "version",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
           }
         ],
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        },
+        "security": [
+          {
+            "Bearer": [ ]
+          }
+        ]
+      }
+    },
+    "/api/v1/admin/architects": {
+      "get": {
         "tags": [
-          "Architect portal"
+          "Admin"
+        ],
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        },
+        "security": [
+          {
+            "Bearer": [ ]
+          }
+        ]
+      },
+      "post": {
+        "tags": [
+          "Admin"
+        ],
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        },
+        "security": [
+          {
+            "Bearer": [ ]
+          }
+        ]
+      }
+    },
+    "/api/v1/admin/architects/{recipientId}/verification": {
+      "post": {
+        "tags": [
+          "Admin"
+        ],
+        "parameters": [
+          {
+            "name": "recipientId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        },
+        "security": [
+          {
+            "Bearer": [ ]
+          }
+        ]
+      }
+    },
+    "/api/v1/admin/architects/{recipientId}/listing": {
+      "put": {
+        "tags": [
+          "Admin"
+        ],
+        "parameters": [
+          {
+            "name": "recipientId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        },
+        "security": [
+          {
+            "Bearer": [ ]
+          }
         ]
       }
     },
     "/api/v1/architects": {
       "get": {
-        "responses": {
-          "200": {
-            "description": "OK"
-          }
-        },
-        "security": [
-          {
-            "Bearer": []
-          }
-        ],
         "tags": [
           "Architect directory"
-        ]
-      }
-    },
-    "/api/v1/auth/forgot-password": {
-      "post": {
-        "requestBody": {
-          "content": {
-            "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/ForgotPasswordRequest"
-              }
-            }
-          },
-          "required": true
-        },
-        "responses": {
-          "200": {
-            "description": "OK"
-          }
-        },
-        "tags": [
-          "ProvisionalPasswordRecoveryEndpointModule"
-        ]
-      }
-    },
-    "/api/v1/auth/login": {
-      "post": {
-        "requestBody": {
-          "content": {
-            "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/LoginRequest"
-              }
-            }
-          },
-          "required": true
-        },
-        "responses": {
-          "200": {
-            "description": "OK"
-          }
-        },
-        "tags": [
-          "Authentication"
-        ]
-      }
-    },
-    "/api/v1/auth/logout": {
-      "post": {
-        "requestBody": {
-          "content": {
-            "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/RefreshTokenRequest"
-              }
-            }
-          },
-          "required": true
-        },
+        ],
         "responses": {
           "200": {
             "description": "OK"
@@ -1353,16 +1080,16 @@
         },
         "security": [
           {
-            "Bearer": []
+            "Bearer": [ ]
           }
-        ],
-        "tags": [
-          "Authentication"
         ]
       }
     },
-    "/api/v1/auth/logout-all": {
-      "post": {
+    "/api/v1/architect/dashboard": {
+      "get": {
+        "tags": [
+          "Architect portal"
+        ],
         "responses": {
           "200": {
             "description": "OK"
@@ -1370,38 +1097,141 @@
         },
         "security": [
           {
-            "Bearer": []
+            "Bearer": [ ]
           }
-        ],
-        "tags": [
-          "Authentication"
         ]
       }
     },
-    "/api/v1/auth/refresh": {
-      "post": {
-        "requestBody": {
-          "content": {
-            "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/RefreshTokenRequest"
-              }
-            }
-          },
-          "required": true
-        },
+    "/api/v1/architect/requests": {
+      "get": {
+        "tags": [
+          "Architect portal"
+        ],
         "responses": {
           "200": {
             "description": "OK"
           }
         },
+        "security": [
+          {
+            "Bearer": [ ]
+          }
+        ]
+      }
+    },
+    "/api/v1/architect/requests/{requestId}": {
+      "get": {
         "tags": [
-          "Authentication"
+          "Architect portal"
+        ],
+        "parameters": [
+          {
+            "name": "requestId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        },
+        "security": [
+          {
+            "Bearer": [ ]
+          }
+        ]
+      }
+    },
+    "/api/v1/architect/requests/{requestId}/report": {
+      "get": {
+        "tags": [
+          "Architect portal"
+        ],
+        "parameters": [
+          {
+            "name": "requestId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        },
+        "security": [
+          {
+            "Bearer": [ ]
+          }
+        ]
+      }
+    },
+    "/api/v1/architect/requests/{requestId}/respond": {
+      "post": {
+        "tags": [
+          "Architect portal"
+        ],
+        "parameters": [
+          {
+            "name": "requestId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        },
+        "security": [
+          {
+            "Bearer": [ ]
+          }
+        ]
+      }
+    },
+    "/api/v1/architect/requests/{requestId}/feedback": {
+      "post": {
+        "tags": [
+          "Architect portal"
+        ],
+        "parameters": [
+          {
+            "name": "requestId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        },
+        "security": [
+          {
+            "Bearer": [ ]
+          }
         ]
       }
     },
     "/api/v1/auth/register": {
       "post": {
+        "tags": [
+          "Authentication"
+        ],
         "requestBody": {
           "content": {
             "application/json": {
@@ -1416,19 +1246,63 @@
           "200": {
             "description": "OK"
           }
-        },
-        "tags": [
-          "Authentication"
-        ]
+        }
       }
     },
-    "/api/v1/auth/reset-password": {
+    "/api/v1/auth/login": {
       "post": {
+        "tags": [
+          "Authentication"
+        ],
         "requestBody": {
           "content": {
             "application/json": {
               "schema": {
-                "$ref": "#/components/schemas/ResetPasswordRequest"
+                "$ref": "#/components/schemas/LoginRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      }
+    },
+    "/api/v1/auth/refresh": {
+      "post": {
+        "tags": [
+          "Authentication"
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RefreshTokenRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      }
+    },
+    "/api/v1/auth/logout": {
+      "post": {
+        "tags": [
+          "Authentication"
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RefreshTokenRequest"
               }
             }
           },
@@ -1439,13 +1313,47 @@
             "description": "OK"
           }
         },
-        "tags": [
-          "ProvisionalPasswordRecoveryEndpointModule"
+        "security": [
+          {
+            "Bearer": [ ]
+          }
         ]
+      }
+    },
+    "/api/v1/auth/logout-all": {
+      "post": {
+        "tags": [
+          "Authentication"
+        ],
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        },
+        "security": [
+          {
+            "Bearer": [ ]
+          }
+        ]
+      }
+    },
+    "/health": {
+      "get": {
+        "tags": [
+          "BuildMind.API"
+        ],
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
       }
     },
     "/api/v1/dashboard/summary": {
       "get": {
+        "tags": [
+          "Dashboard"
+        ],
         "operationId": "GetCustomerDashboardSummary",
         "responses": {
           "200": {
@@ -1454,36 +1362,36 @@
         },
         "security": [
           {
-            "Bearer": []
+            "Bearer": [ ]
           }
-        ],
-        "tags": [
-          "Dashboard"
         ]
       }
     },
     "/api/v1/notifications": {
       "get": {
+        "tags": [
+          "Notifications"
+        ],
         "parameters": [
           {
-            "in": "query",
             "name": "page",
+            "in": "query",
             "schema": {
-              "format": "int32",
-              "type": "integer"
+              "type": "integer",
+              "format": "int32"
             }
           },
           {
-            "in": "query",
             "name": "pageSize",
+            "in": "query",
             "schema": {
-              "format": "int32",
-              "type": "integer"
+              "type": "integer",
+              "format": "int32"
             }
           },
           {
-            "in": "query",
             "name": "unreadOnly",
+            "in": "query",
             "schema": {
               "type": "boolean"
             }
@@ -1496,33 +1404,16 @@
         },
         "security": [
           {
-            "Bearer": []
+            "Bearer": [ ]
           }
-        ],
-        "tags": [
-          "Notifications"
-        ]
-      }
-    },
-    "/api/v1/notifications/read-all": {
-      "post": {
-        "responses": {
-          "200": {
-            "description": "OK"
-          }
-        },
-        "security": [
-          {
-            "Bearer": []
-          }
-        ],
-        "tags": [
-          "Notifications"
         ]
       }
     },
     "/api/v1/notifications/unread-count": {
       "get": {
+        "tags": [
+          "Notifications"
+        ],
         "responses": {
           "200": {
             "description": "OK"
@@ -1530,20 +1421,20 @@
         },
         "security": [
           {
-            "Bearer": []
+            "Bearer": [ ]
           }
-        ],
-        "tags": [
-          "Notifications"
         ]
       }
     },
     "/api/v1/notifications/{notificationId}/read": {
       "post": {
+        "tags": [
+          "Notifications"
+        ],
         "parameters": [
           {
-            "in": "path",
             "name": "notificationId",
+            "in": "path",
             "required": true,
             "schema": {
               "type": "string"
@@ -1557,16 +1448,16 @@
         },
         "security": [
           {
-            "Bearer": []
+            "Bearer": [ ]
           }
-        ],
-        "tags": [
-          "Notifications"
         ]
       }
     },
-    "/api/v1/profile": {
-      "get": {
+    "/api/v1/notifications/read-all": {
+      "post": {
+        "tags": [
+          "Notifications"
+        ],
         "responses": {
           "200": {
             "description": "OK"
@@ -1574,14 +1465,1119 @@
         },
         "security": [
           {
-            "Bearer": []
+            "Bearer": [ ]
           }
-        ],
+        ]
+      }
+    },
+    "/api/v1/users/me/notification-preferences": {
+      "get": {
         "tags": [
-          "Profile"
+          "Notifications"
+        ],
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        },
+        "security": [
+          {
+            "Bearer": [ ]
+          }
         ]
       },
       "put": {
+        "tags": [
+          "Notifications"
+        ],
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        },
+        "security": [
+          {
+            "Bearer": [ ]
+          }
+        ]
+      }
+    },
+    "/api/v1/projects/{projectId}/plans/{planId}/versions": {
+      "get": {
+        "tags": [
+          "Plan Editor"
+        ],
+        "operationId": "ListPlanRevisions",
+        "parameters": [
+          {
+            "name": "projectId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "planId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "pageSize",
+            "in": "query",
+            "schema": {
+              "type": "integer",
+              "format": "int32"
+            }
+          },
+          {
+            "name": "cursor",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        },
+        "security": [
+          {
+            "Bearer": [ ]
+          }
+        ]
+      },
+      "post": {
+        "tags": [
+          "Planning"
+        ],
+        "operationId": "SavePlanVersion",
+        "parameters": [
+          {
+            "name": "projectId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "planId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        },
+        "security": [
+          {
+            "Bearer": [ ]
+          }
+        ]
+      }
+    },
+    "/api/v1/projects/{projectId}/plans/{planId}/versions/{revisionId}": {
+      "get": {
+        "tags": [
+          "Plan Editor"
+        ],
+        "operationId": "GetPlanRevision",
+        "parameters": [
+          {
+            "name": "projectId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "planId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "revisionId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        },
+        "security": [
+          {
+            "Bearer": [ ]
+          }
+        ]
+      }
+    },
+    "/api/v1/projects/{projectId}/plans/{planId}/candidates": {
+      "post": {
+        "tags": [
+          "Plan Editor"
+        ],
+        "operationId": "CreatePlanEditCandidate",
+        "parameters": [
+          {
+            "name": "projectId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "planId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        },
+        "security": [
+          {
+            "Bearer": [ ]
+          }
+        ]
+      }
+    },
+    "/api/v1/projects/{projectId}/plans/{planId}/candidates/{candidateId}/apply": {
+      "post": {
+        "tags": [
+          "Plan Editor"
+        ],
+        "operationId": "ApplyPlanEditCandidate",
+        "parameters": [
+          {
+            "name": "projectId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "planId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "candidateId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        },
+        "security": [
+          {
+            "Bearer": [ ]
+          }
+        ]
+      }
+    },
+    "/api/v1/projects/{projectId}/plans/{planId}/candidates/{candidateId}/reject": {
+      "post": {
+        "tags": [
+          "Plan Editor"
+        ],
+        "operationId": "RejectPlanEditCandidate",
+        "parameters": [
+          {
+            "name": "projectId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "planId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "candidateId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        },
+        "security": [
+          {
+            "Bearer": [ ]
+          }
+        ]
+      }
+    },
+    "/api/v1/projects/{projectId}/plans": {
+      "get": {
+        "tags": [
+          "Plan Lifecycle"
+        ],
+        "operationId": "ListProjectPlans",
+        "parameters": [
+          {
+            "name": "projectId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        },
+        "security": [
+          {
+            "Bearer": [ ]
+          }
+        ]
+      },
+      "post": {
+        "tags": [
+          "Planning"
+        ],
+        "operationId": "CreatePlanFromAlternative",
+        "parameters": [
+          {
+            "name": "projectId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        },
+        "security": [
+          {
+            "Bearer": [ ]
+          }
+        ]
+      }
+    },
+    "/api/v1/projects/{projectId}/plans/{planId}": {
+      "get": {
+        "tags": [
+          "Plan Lifecycle"
+        ],
+        "operationId": "GetCurrentPlan",
+        "parameters": [
+          {
+            "name": "projectId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "planId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        },
+        "security": [
+          {
+            "Bearer": [ ]
+          }
+        ]
+      }
+    },
+    "/api/v1/projects/{projectId}/plans/{planId}/confirmation": {
+      "post": {
+        "tags": [
+          "Plan Lifecycle"
+        ],
+        "operationId": "ConfirmPlan",
+        "parameters": [
+          {
+            "name": "projectId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "planId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        },
+        "security": [
+          {
+            "Bearer": [ ]
+          }
+        ]
+      }
+    },
+    "/api/v1/projects/{projectId}/architect-requests/{requestId}/conversation": {
+      "get": {
+        "tags": [
+          "Planning"
+        ],
+        "parameters": [
+          {
+            "name": "projectId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "requestId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        },
+        "security": [
+          {
+            "Bearer": [ ]
+          }
+        ]
+      }
+    },
+    "/api/v1/projects/{projectId}/land": {
+      "get": {
+        "tags": [
+          "Planning"
+        ],
+        "operationId": "GetProjectLand",
+        "parameters": [
+          {
+            "name": "projectId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        },
+        "security": [
+          {
+            "Bearer": [ ]
+          }
+        ]
+      },
+      "put": {
+        "tags": [
+          "Planning"
+        ],
+        "operationId": "ReplaceProjectLand",
+        "parameters": [
+          {
+            "name": "projectId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        },
+        "security": [
+          {
+            "Bearer": [ ]
+          }
+        ]
+      }
+    },
+    "/api/v1/projects/{projectId}/generation-jobs": {
+      "post": {
+        "tags": [
+          "Planning"
+        ],
+        "operationId": "StartGeneration",
+        "parameters": [
+          {
+            "name": "projectId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        },
+        "security": [
+          {
+            "Bearer": [ ]
+          }
+        ]
+      }
+    },
+    "/api/v1/projects/{projectId}/generation-jobs/{jobId}": {
+      "get": {
+        "tags": [
+          "Planning"
+        ],
+        "operationId": "GetGenerationJob",
+        "parameters": [
+          {
+            "name": "projectId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "jobId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        },
+        "security": [
+          {
+            "Bearer": [ ]
+          }
+        ]
+      }
+    },
+    "/api/v1/projects/{projectId}/generation-jobs/{jobId}/candidates/{candidateId}/save": {
+      "post": {
+        "tags": [
+          "Planning"
+        ],
+        "operationId": "SaveGeneratedCandidate",
+        "parameters": [
+          {
+            "name": "projectId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "jobId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "candidateId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        },
+        "security": [
+          {
+            "Bearer": [ ]
+          }
+        ]
+      }
+    },
+    "/api/v1/projects/{projectId}/surveys/{surveyId}/extraction": {
+      "get": {
+        "tags": [
+          "Planning"
+        ],
+        "operationId": "GetSurveyExtraction",
+        "parameters": [
+          {
+            "name": "projectId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "surveyId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        },
+        "security": [
+          {
+            "Bearer": [ ]
+          }
+        ]
+      }
+    },
+    "/api/v1/projects/{projectId}/surveys/{surveyId}/extraction/reviews": {
+      "post": {
+        "tags": [
+          "Planning"
+        ],
+        "operationId": "ReviewSurveyExtraction",
+        "parameters": [
+          {
+            "name": "projectId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "surveyId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        },
+        "security": [
+          {
+            "Bearer": [ ]
+          }
+        ]
+      },
+      "get": {
+        "tags": [
+          "Planning"
+        ],
+        "operationId": "ListSurveyExtractionReviews",
+        "parameters": [
+          {
+            "name": "projectId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "surveyId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        },
+        "security": [
+          {
+            "Bearer": [ ]
+          }
+        ]
+      }
+    },
+    "/api/v1/projects/{projectId}/lifecycle": {
+      "get": {
+        "tags": [
+          "Planning"
+        ],
+        "operationId": "GetProjectLifecycle",
+        "parameters": [
+          {
+            "name": "projectId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        },
+        "security": [
+          {
+            "Bearer": [ ]
+          }
+        ]
+      }
+    },
+    "/api/v1/projects/{projectId}/land/frame": {
+      "get": {
+        "tags": [
+          "Planning"
+        ],
+        "operationId": "GetLandFrame",
+        "parameters": [
+          {
+            "name": "projectId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        },
+        "security": [
+          {
+            "Bearer": [ ]
+          }
+        ]
+      }
+    },
+    "/api/v1/projects/{projectId}/land/transform-preview": {
+      "post": {
+        "tags": [
+          "Planning"
+        ],
+        "operationId": "PreviewLandTransformation",
+        "parameters": [
+          {
+            "name": "projectId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        },
+        "security": [
+          {
+            "Bearer": [ ]
+          }
+        ]
+      }
+    },
+    "/api/v1/projects/{projectId}/land/validate": {
+      "post": {
+        "tags": [
+          "Planning"
+        ],
+        "operationId": "ValidateProjectLand",
+        "parameters": [
+          {
+            "name": "projectId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        },
+        "security": [
+          {
+            "Bearer": [ ]
+          }
+        ]
+      }
+    },
+    "/api/v1/projects/{projectId}/land/confirm": {
+      "post": {
+        "tags": [
+          "Planning"
+        ],
+        "operationId": "ConfirmProjectLand",
+        "parameters": [
+          {
+            "name": "projectId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        },
+        "security": [
+          {
+            "Bearer": [ ]
+          }
+        ]
+      }
+    },
+    "/api/v1/projects/{projectId}/generation-jobs/{jobId}/alternatives": {
+      "get": {
+        "tags": [
+          "Planning"
+        ],
+        "operationId": "GetGenerationAlternatives",
+        "parameters": [
+          {
+            "name": "projectId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "jobId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        },
+        "security": [
+          {
+            "Bearer": [ ]
+          }
+        ]
+      }
+    },
+    "/api/v1/projects/{projectId}/generation-jobs/{jobId}/select": {
+      "post": {
+        "tags": [
+          "Planning"
+        ],
+        "operationId": "SelectGenerationAlternative",
+        "parameters": [
+          {
+            "name": "projectId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "jobId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        },
+        "security": [
+          {
+            "Bearer": [ ]
+          }
+        ]
+      }
+    },
+    "/api/v1/projects/{projectId}/plans/{planId}/edits/validate": {
+      "post": {
+        "tags": [
+          "Planning"
+        ],
+        "operationId": "ValidatePlanEdit",
+        "parameters": [
+          {
+            "name": "projectId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "planId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        },
+        "security": [
+          {
+            "Bearer": [ ]
+          }
+        ]
+      }
+    },
+    "/api/v1/projects/{projectId}/plans/{planId}/ai-edit/proposals": {
+      "post": {
+        "tags": [
+          "Planning"
+        ],
+        "operationId": "ProposeAiPlanEdit",
+        "parameters": [
+          {
+            "name": "projectId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "planId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        },
+        "security": [
+          {
+            "Bearer": [ ]
+          }
+        ]
+      }
+    },
+    "/api/v1/projects/{projectId}/plans/{planId}/confirm": {
+      "post": {
+        "tags": [
+          "Planning"
+        ],
+        "operationId": "ConfirmPlanV3",
+        "parameters": [
+          {
+            "name": "projectId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "planId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        },
+        "security": [
+          {
+            "Bearer": [ ]
+          }
+        ]
+      }
+    },
+    "/api/v1/projects/{projectId}/reports": {
+      "get": {
+        "tags": [
+          "Planning"
+        ],
+        "operationId": "ListReports",
+        "parameters": [
+          {
+            "name": "projectId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        },
+        "security": [
+          {
+            "Bearer": [ ]
+          }
+        ]
+      },
+      "post": {
+        "tags": [
+          "Reports and Architect Requests"
+        ],
+        "operationId": "GenerateReport",
+        "parameters": [
+          {
+            "name": "projectId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        },
+        "security": [
+          {
+            "Bearer": [ ]
+          }
+        ]
+      }
+    },
+    "/api/v1/profile": {
+      "get": {
+        "tags": [
+          "Profile"
+        ],
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        },
+        "security": [
+          {
+            "Bearer": [ ]
+          }
+        ]
+      },
+      "put": {
+        "tags": [
+          "Profile"
+        ],
         "requestBody": {
           "content": {
             "application/json": {
@@ -1599,16 +2595,17 @@
         },
         "security": [
           {
-            "Bearer": []
+            "Bearer": [ ]
           }
-        ],
-        "tags": [
-          "Profile"
         ]
       }
     },
-    "/api/v1/projects": {
+    "/api/v1/users/me": {
       "get": {
+        "tags": [
+          "Profile"
+        ],
+        "operationId": "GetCurrentUserV3",
         "responses": {
           "200": {
             "description": "OK"
@@ -1616,14 +2613,42 @@
         },
         "security": [
           {
-            "Bearer": []
+            "Bearer": [ ]
           }
-        ],
-        "tags": [
-          "Projects"
         ]
       },
+      "put": {
+        "tags": [
+          "Profile"
+        ],
+        "operationId": "UpdateCurrentUserV3",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UpdateProfileRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        },
+        "security": [
+          {
+            "Bearer": [ ]
+          }
+        ]
+      }
+    },
+    "/api/v1/projects": {
       "post": {
+        "tags": [
+          "Projects"
+        ],
         "requestBody": {
           "content": {
             "application/json": {
@@ -1641,24 +2666,39 @@
         },
         "security": [
           {
-            "Bearer": []
+            "Bearer": [ ]
           }
-        ],
+        ]
+      },
+      "get": {
         "tags": [
           "Projects"
+        ],
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        },
+        "security": [
+          {
+            "Bearer": [ ]
+          }
         ]
       }
     },
     "/api/v1/projects/{id}": {
       "get": {
+        "tags": [
+          "Projects"
+        ],
         "parameters": [
           {
-            "in": "path",
             "name": "id",
+            "in": "path",
             "required": true,
             "schema": {
-              "format": "uuid",
-              "type": "string"
+              "type": "string",
+              "format": "uuid"
             }
           }
         ],
@@ -1669,22 +2709,22 @@
         },
         "security": [
           {
-            "Bearer": []
+            "Bearer": [ ]
           }
-        ],
-        "tags": [
-          "Projects"
         ]
       },
       "patch": {
+        "tags": [
+          "Projects"
+        ],
         "parameters": [
           {
-            "in": "path",
             "name": "id",
+            "in": "path",
             "required": true,
             "schema": {
-              "format": "uuid",
-              "type": "string"
+              "type": "string",
+              "format": "uuid"
             }
           }
         ],
@@ -1705,1868 +2745,21 @@
         },
         "security": [
           {
-            "Bearer": []
+            "Bearer": [ ]
           }
-        ],
-        "tags": [
-          "Projects"
         ]
       }
     },
-    "/api/v1/projects/{id}/design-method": {
-      "put": {
-        "operationId": "ReplaceRequirementDesignMethod",
-        "parameters": [
-          {
-            "in": "path",
-            "name": "id",
-            "required": true,
-            "schema": {
-              "type": "string"
-            }
-          }
-        ],
-        "responses": {
-          "200": {
-            "description": "OK"
-          }
-        },
-        "security": [
-          {
-            "Bearer": []
-          }
-        ],
-        "tags": [
-          "Requirements"
-        ]
-      }
-    },
-    "/api/v1/projects/{id}/requirements": {
-      "get": {
-        "operationId": "GetProjectRequirements",
-        "parameters": [
-          {
-            "in": "path",
-            "name": "id",
-            "required": true,
-            "schema": {
-              "type": "string"
-            }
-          }
-        ],
-        "responses": {
-          "200": {
-            "description": "OK"
-          }
-        },
-        "security": [
-          {
-            "Bearer": []
-          }
-        ],
-        "tags": [
-          "Requirements"
-        ]
-      },
-      "put": {
-        "operationId": "ReplaceProjectRequirements",
-        "parameters": [
-          {
-            "in": "path",
-            "name": "id",
-            "required": true,
-            "schema": {
-              "type": "string"
-            }
-          }
-        ],
-        "responses": {
-          "200": {
-            "description": "OK"
-          }
-        },
-        "security": [
-          {
-            "Bearer": []
-          }
-        ],
-        "tags": [
-          "Requirements"
-        ]
-      }
-    },
-    "/api/v1/projects/{id}/requirements/relationships": {
-      "get": {
-        "operationId": "GetRequirementRelationships",
-        "parameters": [
-          {
-            "in": "path",
-            "name": "id",
-            "required": true,
-            "schema": {
-              "type": "string"
-            }
-          }
-        ],
-        "responses": {
-          "200": {
-            "description": "OK"
-          }
-        },
-        "security": [
-          {
-            "Bearer": []
-          }
-        ],
-        "tags": [
-          "Requirements"
-        ]
-      },
-      "put": {
-        "operationId": "ReplaceRequirementRelationships",
-        "parameters": [
-          {
-            "in": "path",
-            "name": "id",
-            "required": true,
-            "schema": {
-              "type": "string"
-            }
-          }
-        ],
-        "responses": {
-          "200": {
-            "description": "OK"
-          }
-        },
-        "security": [
-          {
-            "Bearer": []
-          }
-        ],
-        "tags": [
-          "Requirements"
-        ]
-      }
-    },
-    "/api/v1/projects/{id}/requirements/spaces": {
-      "get": {
-        "operationId": "GetRequirementSpaces",
-        "parameters": [
-          {
-            "in": "path",
-            "name": "id",
-            "required": true,
-            "schema": {
-              "type": "string"
-            }
-          }
-        ],
-        "responses": {
-          "200": {
-            "description": "OK"
-          }
-        },
-        "security": [
-          {
-            "Bearer": []
-          }
-        ],
-        "tags": [
-          "Requirements"
-        ]
-      },
-      "put": {
-        "operationId": "ReplaceRequirementSpaces",
-        "parameters": [
-          {
-            "in": "path",
-            "name": "id",
-            "required": true,
-            "schema": {
-              "type": "string"
-            }
-          }
-        ],
-        "responses": {
-          "200": {
-            "description": "OK"
-          }
-        },
-        "security": [
-          {
-            "Bearer": []
-          }
-        ],
-        "tags": [
-          "Requirements"
-        ]
-      }
-    },
-    "/api/v1/projects/{id}/requirements/summary": {
-      "get": {
-        "operationId": "GetRequirementsSummary",
-        "parameters": [
-          {
-            "in": "path",
-            "name": "id",
-            "required": true,
-            "schema": {
-              "type": "string"
-            }
-          }
-        ],
-        "responses": {
-          "200": {
-            "description": "OK"
-          }
-        },
-        "security": [
-          {
-            "Bearer": []
-          }
-        ],
-        "tags": [
-          "Requirements"
-        ]
-      }
-    },
-    "/api/v1/projects/{id}/surveys": {
+    "/api/v1/auth/forgot-password": {
       "post": {
-        "operationId": "UploadProjectSurvey",
-        "parameters": [
-          {
-            "in": "path",
-            "name": "id",
-            "required": true,
-            "schema": {
-              "type": "string"
-            }
-          }
-        ],
-        "responses": {
-          "200": {
-            "description": "OK"
-          }
-        },
-        "security": [
-          {
-            "Bearer": []
-          }
-        ],
         "tags": [
-          "Survey"
-        ]
-      }
-    },
-    "/api/v1/projects/{id}/surveys/{surveyId}": {
-      "get": {
-        "operationId": "GetProjectSurveyStatus",
-        "parameters": [
-          {
-            "in": "path",
-            "name": "id",
-            "required": true,
-            "schema": {
-              "type": "string"
-            }
-          },
-          {
-            "in": "path",
-            "name": "surveyId",
-            "required": true,
-            "schema": {
-              "type": "string"
-            }
-          }
+          "ProvisionalPasswordRecoveryEndpointModule"
         ],
-        "responses": {
-          "200": {
-            "description": "OK"
-          }
-        },
-        "security": [
-          {
-            "Bearer": []
-          }
-        ],
-        "tags": [
-          "Survey"
-        ]
-      }
-    },
-    "/api/v1/projects/{projectId}/architect-requests": {
-      "get": {
-        "operationId": "ListArchitectRequests",
-        "parameters": [
-          {
-            "in": "path",
-            "name": "projectId",
-            "required": true,
-            "schema": {
-              "type": "string"
-            }
-          }
-        ],
-        "responses": {
-          "200": {
-            "description": "OK"
-          }
-        },
-        "security": [
-          {
-            "Bearer": []
-          }
-        ],
-        "tags": [
-          "Reports and Architect Requests"
-        ]
-      },
-      "post": {
-        "operationId": "CreateArchitectRequest",
-        "parameters": [
-          {
-            "in": "path",
-            "name": "projectId",
-            "required": true,
-            "schema": {
-              "type": "string"
-            }
-          }
-        ],
-        "responses": {
-          "200": {
-            "description": "OK"
-          }
-        },
-        "security": [
-          {
-            "Bearer": []
-          }
-        ],
-        "tags": [
-          "Reports and Architect Requests"
-        ]
-      }
-    },
-    "/api/v1/projects/{projectId}/architect-requests/{requestId}": {
-      "get": {
-        "operationId": "GetArchitectRequest",
-        "parameters": [
-          {
-            "in": "path",
-            "name": "projectId",
-            "required": true,
-            "schema": {
-              "type": "string"
-            }
-          },
-          {
-            "in": "path",
-            "name": "requestId",
-            "required": true,
-            "schema": {
-              "type": "string"
-            }
-          }
-        ],
-        "responses": {
-          "200": {
-            "description": "OK"
-          }
-        },
-        "security": [
-          {
-            "Bearer": []
-          }
-        ],
-        "tags": [
-          "Reports and Architect Requests"
-        ]
-      }
-    },
-    "/api/v1/projects/{projectId}/architect-requests/{requestId}/conversation": {
-      "get": {
-        "parameters": [
-          {
-            "in": "path",
-            "name": "projectId",
-            "required": true,
-            "schema": {
-              "type": "string"
-            }
-          },
-          {
-            "in": "path",
-            "name": "requestId",
-            "required": true,
-            "schema": {
-              "type": "string"
-            }
-          }
-        ],
-        "responses": {
-          "200": {
-            "description": "OK"
-          }
-        },
-        "security": [
-          {
-            "Bearer": []
-          }
-        ],
-        "tags": [
-          "Planning"
-        ]
-      }
-    },
-    "/api/v1/projects/{projectId}/architect-requests/{requestId}/withdraw": {
-      "post": {
-        "operationId": "WithdrawArchitectRequest",
-        "parameters": [
-          {
-            "in": "path",
-            "name": "projectId",
-            "required": true,
-            "schema": {
-              "type": "string"
-            }
-          },
-          {
-            "in": "path",
-            "name": "requestId",
-            "required": true,
-            "schema": {
-              "type": "string"
-            }
-          }
-        ],
-        "responses": {
-          "200": {
-            "description": "OK"
-          }
-        },
-        "security": [
-          {
-            "Bearer": []
-          }
-        ],
-        "tags": [
-          "Reports and Architect Requests"
-        ]
-      }
-    },
-    "/api/v1/projects/{projectId}/generation-jobs": {
-      "post": {
-        "operationId": "StartGeneration",
-        "parameters": [
-          {
-            "in": "path",
-            "name": "projectId",
-            "required": true,
-            "schema": {
-              "type": "string"
-            }
-          }
-        ],
-        "responses": {
-          "200": {
-            "description": "OK"
-          }
-        },
-        "security": [
-          {
-            "Bearer": []
-          }
-        ],
-        "tags": [
-          "Planning"
-        ]
-      }
-    },
-    "/api/v1/projects/{projectId}/generation-jobs/{jobId}": {
-      "get": {
-        "operationId": "GetGenerationJob",
-        "parameters": [
-          {
-            "in": "path",
-            "name": "projectId",
-            "required": true,
-            "schema": {
-              "type": "string"
-            }
-          },
-          {
-            "in": "path",
-            "name": "jobId",
-            "required": true,
-            "schema": {
-              "type": "string"
-            }
-          }
-        ],
-        "responses": {
-          "200": {
-            "description": "OK"
-          }
-        },
-        "security": [
-          {
-            "Bearer": []
-          }
-        ],
-        "tags": [
-          "Planning"
-        ]
-      }
-    },
-    "/api/v1/projects/{projectId}/generation-jobs/{jobId}/alternatives": {
-      "get": {
-        "operationId": "GetGenerationAlternatives",
-        "parameters": [
-          {
-            "in": "path",
-            "name": "projectId",
-            "required": true,
-            "schema": {
-              "type": "string"
-            }
-          },
-          {
-            "in": "path",
-            "name": "jobId",
-            "required": true,
-            "schema": {
-              "type": "string"
-            }
-          }
-        ],
-        "responses": {
-          "200": {
-            "description": "OK"
-          }
-        },
-        "security": [
-          {
-            "Bearer": []
-          }
-        ],
-        "tags": [
-          "Planning"
-        ]
-      }
-    },
-    "/api/v1/projects/{projectId}/generation-jobs/{jobId}/candidates/{candidateId}/save": {
-      "post": {
-        "operationId": "SaveGeneratedCandidate",
-        "parameters": [
-          {
-            "in": "path",
-            "name": "projectId",
-            "required": true,
-            "schema": {
-              "type": "string"
-            }
-          },
-          {
-            "in": "path",
-            "name": "jobId",
-            "required": true,
-            "schema": {
-              "type": "string"
-            }
-          },
-          {
-            "in": "path",
-            "name": "candidateId",
-            "required": true,
-            "schema": {
-              "type": "string"
-            }
-          }
-        ],
-        "responses": {
-          "200": {
-            "description": "OK"
-          }
-        },
-        "security": [
-          {
-            "Bearer": []
-          }
-        ],
-        "tags": [
-          "Planning"
-        ]
-      }
-    },
-    "/api/v1/projects/{projectId}/generation-jobs/{jobId}/select": {
-      "post": {
-        "operationId": "SelectGenerationAlternative",
-        "parameters": [
-          {
-            "in": "path",
-            "name": "projectId",
-            "required": true,
-            "schema": {
-              "type": "string"
-            }
-          },
-          {
-            "in": "path",
-            "name": "jobId",
-            "required": true,
-            "schema": {
-              "type": "string"
-            }
-          }
-        ],
-        "responses": {
-          "200": {
-            "description": "OK"
-          }
-        },
-        "security": [
-          {
-            "Bearer": []
-          }
-        ],
-        "tags": [
-          "Planning"
-        ]
-      }
-    },
-    "/api/v1/projects/{projectId}/land": {
-      "get": {
-        "operationId": "GetProjectLand",
-        "parameters": [
-          {
-            "in": "path",
-            "name": "projectId",
-            "required": true,
-            "schema": {
-              "type": "string"
-            }
-          }
-        ],
-        "responses": {
-          "200": {
-            "description": "OK"
-          }
-        },
-        "security": [
-          {
-            "Bearer": []
-          }
-        ],
-        "tags": [
-          "Planning"
-        ]
-      },
-      "put": {
-        "operationId": "ReplaceProjectLand",
-        "parameters": [
-          {
-            "in": "path",
-            "name": "projectId",
-            "required": true,
-            "schema": {
-              "type": "string"
-            }
-          }
-        ],
-        "responses": {
-          "200": {
-            "description": "OK"
-          }
-        },
-        "security": [
-          {
-            "Bearer": []
-          }
-        ],
-        "tags": [
-          "Planning"
-        ]
-      }
-    },
-    "/api/v1/projects/{projectId}/land/confirm": {
-      "post": {
-        "operationId": "ConfirmProjectLand",
-        "parameters": [
-          {
-            "in": "path",
-            "name": "projectId",
-            "required": true,
-            "schema": {
-              "type": "string"
-            }
-          }
-        ],
-        "responses": {
-          "200": {
-            "description": "OK"
-          }
-        },
-        "security": [
-          {
-            "Bearer": []
-          }
-        ],
-        "tags": [
-          "Planning"
-        ]
-      }
-    },
-    "/api/v1/projects/{projectId}/land/validate": {
-      "post": {
-        "operationId": "ValidateProjectLand",
-        "parameters": [
-          {
-            "in": "path",
-            "name": "projectId",
-            "required": true,
-            "schema": {
-              "type": "string"
-            }
-          }
-        ],
-        "responses": {
-          "200": {
-            "description": "OK"
-          }
-        },
-        "security": [
-          {
-            "Bearer": []
-          }
-        ],
-        "tags": [
-          "Planning"
-        ]
-      }
-    },
-    "/api/v1/projects/{projectId}/lifecycle": {
-      "get": {
-        "operationId": "GetProjectLifecycle",
-        "parameters": [
-          {
-            "in": "path",
-            "name": "projectId",
-            "required": true,
-            "schema": {
-              "type": "string"
-            }
-          }
-        ],
-        "responses": {
-          "200": {
-            "description": "OK"
-          }
-        },
-        "security": [
-          {
-            "Bearer": []
-          }
-        ],
-        "tags": [
-          "Planning"
-        ]
-      }
-    },
-    "/api/v1/projects/{projectId}/plans": {
-      "get": {
-        "operationId": "ListProjectPlans",
-        "parameters": [
-          {
-            "in": "path",
-            "name": "projectId",
-            "required": true,
-            "schema": {
-              "type": "string"
-            }
-          }
-        ],
-        "responses": {
-          "200": {
-            "description": "OK"
-          }
-        },
-        "security": [
-          {
-            "Bearer": []
-          }
-        ],
-        "tags": [
-          "Plan Lifecycle"
-        ]
-      },
-      "post": {
-        "operationId": "CreatePlanFromAlternative",
-        "parameters": [
-          {
-            "in": "path",
-            "name": "projectId",
-            "required": true,
-            "schema": {
-              "type": "string"
-            }
-          }
-        ],
-        "responses": {
-          "200": {
-            "description": "OK"
-          }
-        },
-        "security": [
-          {
-            "Bearer": []
-          }
-        ],
-        "tags": [
-          "Planning"
-        ]
-      }
-    },
-    "/api/v1/projects/{projectId}/plans/{planId}": {
-      "get": {
-        "operationId": "GetCurrentPlan",
-        "parameters": [
-          {
-            "in": "path",
-            "name": "projectId",
-            "required": true,
-            "schema": {
-              "type": "string"
-            }
-          },
-          {
-            "in": "path",
-            "name": "planId",
-            "required": true,
-            "schema": {
-              "type": "string"
-            }
-          }
-        ],
-        "responses": {
-          "200": {
-            "description": "OK"
-          }
-        },
-        "security": [
-          {
-            "Bearer": []
-          }
-        ],
-        "tags": [
-          "Plan Lifecycle"
-        ]
-      }
-    },
-    "/api/v1/projects/{projectId}/plans/{planId}/ai-edit/proposals": {
-      "post": {
-        "operationId": "ProposeAiPlanEdit",
-        "parameters": [
-          {
-            "in": "path",
-            "name": "projectId",
-            "required": true,
-            "schema": {
-              "type": "string"
-            }
-          },
-          {
-            "in": "path",
-            "name": "planId",
-            "required": true,
-            "schema": {
-              "type": "string"
-            }
-          }
-        ],
-        "responses": {
-          "200": {
-            "description": "OK"
-          }
-        },
-        "security": [
-          {
-            "Bearer": []
-          }
-        ],
-        "tags": [
-          "Planning"
-        ]
-      }
-    },
-    "/api/v1/projects/{projectId}/plans/{planId}/candidates": {
-      "post": {
-        "operationId": "CreatePlanEditCandidate",
-        "parameters": [
-          {
-            "in": "path",
-            "name": "projectId",
-            "required": true,
-            "schema": {
-              "type": "string"
-            }
-          },
-          {
-            "in": "path",
-            "name": "planId",
-            "required": true,
-            "schema": {
-              "type": "string"
-            }
-          }
-        ],
-        "responses": {
-          "200": {
-            "description": "OK"
-          }
-        },
-        "security": [
-          {
-            "Bearer": []
-          }
-        ],
-        "tags": [
-          "Plan Editor"
-        ]
-      }
-    },
-    "/api/v1/projects/{projectId}/plans/{planId}/candidates/{candidateId}/apply": {
-      "post": {
-        "operationId": "ApplyPlanEditCandidate",
-        "parameters": [
-          {
-            "in": "path",
-            "name": "projectId",
-            "required": true,
-            "schema": {
-              "type": "string"
-            }
-          },
-          {
-            "in": "path",
-            "name": "planId",
-            "required": true,
-            "schema": {
-              "type": "string"
-            }
-          },
-          {
-            "in": "path",
-            "name": "candidateId",
-            "required": true,
-            "schema": {
-              "type": "string"
-            }
-          }
-        ],
-        "responses": {
-          "200": {
-            "description": "OK"
-          }
-        },
-        "security": [
-          {
-            "Bearer": []
-          }
-        ],
-        "tags": [
-          "Plan Editor"
-        ]
-      }
-    },
-    "/api/v1/projects/{projectId}/plans/{planId}/candidates/{candidateId}/reject": {
-      "post": {
-        "operationId": "RejectPlanEditCandidate",
-        "parameters": [
-          {
-            "in": "path",
-            "name": "projectId",
-            "required": true,
-            "schema": {
-              "type": "string"
-            }
-          },
-          {
-            "in": "path",
-            "name": "planId",
-            "required": true,
-            "schema": {
-              "type": "string"
-            }
-          },
-          {
-            "in": "path",
-            "name": "candidateId",
-            "required": true,
-            "schema": {
-              "type": "string"
-            }
-          }
-        ],
-        "responses": {
-          "200": {
-            "description": "OK"
-          }
-        },
-        "security": [
-          {
-            "Bearer": []
-          }
-        ],
-        "tags": [
-          "Plan Editor"
-        ]
-      }
-    },
-    "/api/v1/projects/{projectId}/plans/{planId}/confirm": {
-      "post": {
-        "operationId": "ConfirmPlanV3",
-        "parameters": [
-          {
-            "in": "path",
-            "name": "projectId",
-            "required": true,
-            "schema": {
-              "type": "string"
-            }
-          },
-          {
-            "in": "path",
-            "name": "planId",
-            "required": true,
-            "schema": {
-              "type": "string"
-            }
-          }
-        ],
-        "responses": {
-          "200": {
-            "description": "OK"
-          }
-        },
-        "security": [
-          {
-            "Bearer": []
-          }
-        ],
-        "tags": [
-          "Planning"
-        ]
-      }
-    },
-    "/api/v1/projects/{projectId}/plans/{planId}/confirmation": {
-      "post": {
-        "operationId": "ConfirmPlan",
-        "parameters": [
-          {
-            "in": "path",
-            "name": "projectId",
-            "required": true,
-            "schema": {
-              "type": "string"
-            }
-          },
-          {
-            "in": "path",
-            "name": "planId",
-            "required": true,
-            "schema": {
-              "type": "string"
-            }
-          }
-        ],
-        "responses": {
-          "200": {
-            "description": "OK"
-          }
-        },
-        "security": [
-          {
-            "Bearer": []
-          }
-        ],
-        "tags": [
-          "Plan Lifecycle"
-        ]
-      }
-    },
-    "/api/v1/projects/{projectId}/plans/{planId}/edits/validate": {
-      "post": {
-        "operationId": "ValidatePlanEdit",
-        "parameters": [
-          {
-            "in": "path",
-            "name": "projectId",
-            "required": true,
-            "schema": {
-              "type": "string"
-            }
-          },
-          {
-            "in": "path",
-            "name": "planId",
-            "required": true,
-            "schema": {
-              "type": "string"
-            }
-          }
-        ],
-        "responses": {
-          "200": {
-            "description": "OK"
-          }
-        },
-        "security": [
-          {
-            "Bearer": []
-          }
-        ],
-        "tags": [
-          "Planning"
-        ]
-      }
-    },
-    "/api/v1/projects/{projectId}/plans/{planId}/versions": {
-      "get": {
-        "operationId": "ListPlanRevisions",
-        "parameters": [
-          {
-            "in": "path",
-            "name": "projectId",
-            "required": true,
-            "schema": {
-              "type": "string"
-            }
-          },
-          {
-            "in": "path",
-            "name": "planId",
-            "required": true,
-            "schema": {
-              "type": "string"
-            }
-          },
-          {
-            "in": "query",
-            "name": "pageSize",
-            "schema": {
-              "format": "int32",
-              "type": "integer"
-            }
-          },
-          {
-            "in": "query",
-            "name": "cursor",
-            "schema": {
-              "type": "string"
-            }
-          }
-        ],
-        "responses": {
-          "200": {
-            "description": "OK"
-          }
-        },
-        "security": [
-          {
-            "Bearer": []
-          }
-        ],
-        "tags": [
-          "Plan Editor"
-        ]
-      },
-      "post": {
-        "operationId": "SavePlanVersion",
-        "parameters": [
-          {
-            "in": "path",
-            "name": "projectId",
-            "required": true,
-            "schema": {
-              "type": "string"
-            }
-          },
-          {
-            "in": "path",
-            "name": "planId",
-            "required": true,
-            "schema": {
-              "type": "string"
-            }
-          }
-        ],
-        "responses": {
-          "200": {
-            "description": "OK"
-          }
-        },
-        "security": [
-          {
-            "Bearer": []
-          }
-        ],
-        "tags": [
-          "Planning"
-        ]
-      }
-    },
-    "/api/v1/projects/{projectId}/plans/{planId}/versions/{revisionId}": {
-      "get": {
-        "operationId": "GetPlanRevision",
-        "parameters": [
-          {
-            "in": "path",
-            "name": "projectId",
-            "required": true,
-            "schema": {
-              "type": "string"
-            }
-          },
-          {
-            "in": "path",
-            "name": "planId",
-            "required": true,
-            "schema": {
-              "type": "string"
-            }
-          },
-          {
-            "in": "path",
-            "name": "revisionId",
-            "required": true,
-            "schema": {
-              "type": "string"
-            }
-          }
-        ],
-        "responses": {
-          "200": {
-            "description": "OK"
-          }
-        },
-        "security": [
-          {
-            "Bearer": []
-          }
-        ],
-        "tags": [
-          "Plan Editor"
-        ]
-      }
-    },
-    "/api/v1/projects/{projectId}/reports": {
-      "get": {
-        "operationId": "ListReports",
-        "parameters": [
-          {
-            "in": "path",
-            "name": "projectId",
-            "required": true,
-            "schema": {
-              "type": "string"
-            }
-          }
-        ],
-        "responses": {
-          "200": {
-            "description": "OK"
-          }
-        },
-        "security": [
-          {
-            "Bearer": []
-          }
-        ],
-        "tags": [
-          "Planning"
-        ]
-      },
-      "post": {
-        "operationId": "GenerateReport",
-        "parameters": [
-          {
-            "in": "path",
-            "name": "projectId",
-            "required": true,
-            "schema": {
-              "type": "string"
-            }
-          }
-        ],
-        "responses": {
-          "200": {
-            "description": "OK"
-          }
-        },
-        "security": [
-          {
-            "Bearer": []
-          }
-        ],
-        "tags": [
-          "Reports and Architect Requests"
-        ]
-      }
-    },
-    "/api/v1/projects/{projectId}/reports/{reportId}": {
-      "get": {
-        "operationId": "GetReportStatus",
-        "parameters": [
-          {
-            "in": "path",
-            "name": "projectId",
-            "required": true,
-            "schema": {
-              "type": "string"
-            }
-          },
-          {
-            "in": "path",
-            "name": "reportId",
-            "required": true,
-            "schema": {
-              "type": "string"
-            }
-          }
-        ],
-        "responses": {
-          "200": {
-            "description": "OK"
-          }
-        },
-        "security": [
-          {
-            "Bearer": []
-          }
-        ],
-        "tags": [
-          "Reports and Architect Requests"
-        ]
-      }
-    },
-    "/api/v1/projects/{projectId}/reports/{reportId}/download": {
-      "get": {
-        "operationId": "DownloadReport",
-        "parameters": [
-          {
-            "in": "path",
-            "name": "projectId",
-            "required": true,
-            "schema": {
-              "type": "string"
-            }
-          },
-          {
-            "in": "path",
-            "name": "reportId",
-            "required": true,
-            "schema": {
-              "type": "string"
-            }
-          }
-        ],
-        "responses": {
-          "200": {
-            "description": "OK"
-          }
-        },
-        "security": [
-          {
-            "Bearer": []
-          }
-        ],
-        "tags": [
-          "Reports and Architect Requests"
-        ]
-      }
-    },
-    "/api/v1/projects/{projectId}/surveys/{surveyId}/extraction": {
-      "get": {
-        "operationId": "GetSurveyExtraction",
-        "parameters": [
-          {
-            "in": "path",
-            "name": "projectId",
-            "required": true,
-            "schema": {
-              "type": "string"
-            }
-          },
-          {
-            "in": "path",
-            "name": "surveyId",
-            "required": true,
-            "schema": {
-              "type": "string"
-            }
-          }
-        ],
-        "responses": {
-          "200": {
-            "description": "OK"
-          }
-        },
-        "security": [
-          {
-            "Bearer": []
-          }
-        ],
-        "tags": [
-          "Planning"
-        ]
-      }
-    },
-    "/api/v1/projects/{projectId}/surveys/{surveyId}/extraction/reviews": {
-      "get": {
-        "operationId": "ListSurveyExtractionReviews",
-        "parameters": [
-          {
-            "in": "path",
-            "name": "projectId",
-            "required": true,
-            "schema": {
-              "type": "string"
-            }
-          },
-          {
-            "in": "path",
-            "name": "surveyId",
-            "required": true,
-            "schema": {
-              "type": "string"
-            }
-          }
-        ],
-        "responses": {
-          "200": {
-            "description": "OK"
-          }
-        },
-        "security": [
-          {
-            "Bearer": []
-          }
-        ],
-        "tags": [
-          "Planning"
-        ]
-      },
-      "post": {
-        "operationId": "ReviewSurveyExtraction",
-        "parameters": [
-          {
-            "in": "path",
-            "name": "projectId",
-            "required": true,
-            "schema": {
-              "type": "string"
-            }
-          },
-          {
-            "in": "path",
-            "name": "surveyId",
-            "required": true,
-            "schema": {
-              "type": "string"
-            }
-          }
-        ],
-        "responses": {
-          "200": {
-            "description": "OK"
-          }
-        },
-        "security": [
-          {
-            "Bearer": []
-          }
-        ],
-        "tags": [
-          "Planning"
-        ]
-      }
-    },
-    "/api/v1/regulations/retrieve": {
-      "post": {
-        "operationId": "RetrieveRegulationEvidence",
-        "responses": {
-          "200": {
-            "description": "OK"
-          }
-        },
-        "security": [
-          {
-            "Bearer": []
-          }
-        ],
-        "tags": [
-          "Regulations"
-        ]
-      }
-    },
-    "/api/v1/staff/dashboard": {
-      "get": {
-        "responses": {
-          "200": {
-            "description": "OK"
-          }
-        },
-        "security": [
-          {
-            "Bearer": []
-          }
-        ],
-        "tags": [
-          "Staff"
-        ]
-      }
-    },
-    "/api/v1/staff/monitoring/{kind}": {
-      "get": {
-        "parameters": [
-          {
-            "in": "path",
-            "name": "kind",
-            "required": true,
-            "schema": {
-              "type": "string"
-            }
-          },
-          {
-            "in": "query",
-            "name": "page",
-            "schema": {
-              "format": "int32",
-              "type": "integer"
-            }
-          },
-          {
-            "in": "query",
-            "name": "pageSize",
-            "schema": {
-              "format": "int32",
-              "type": "integer"
-            }
-          },
-          {
-            "in": "query",
-            "name": "status",
-            "schema": {
-              "type": "string"
-            }
-          },
-          {
-            "in": "query",
-            "name": "sort",
-            "schema": {
-              "type": "string"
-            }
-          }
-        ],
-        "responses": {
-          "200": {
-            "description": "OK"
-          }
-        },
-        "security": [
-          {
-            "Bearer": []
-          }
-        ],
-        "tags": [
-          "Staff"
-        ]
-      }
-    },
-    "/api/v1/staff/policies": {
-      "get": {
-        "responses": {
-          "200": {
-            "description": "OK"
-          }
-        },
-        "security": [
-          {
-            "Bearer": []
-          }
-        ],
-        "tags": [
-          "Staff"
-        ]
-      }
-    },
-    "/api/v1/staff/proposals": {
-      "get": {
-        "parameters": [
-          {
-            "in": "query",
-            "name": "page",
-            "schema": {
-              "format": "int32",
-              "type": "integer"
-            }
-          },
-          {
-            "in": "query",
-            "name": "pageSize",
-            "schema": {
-              "format": "int32",
-              "type": "integer"
-            }
-          },
-          {
-            "in": "query",
-            "name": "status",
-            "schema": {
-              "type": "string"
-            }
-          }
-        ],
-        "responses": {
-          "200": {
-            "description": "OK"
-          }
-        },
-        "security": [
-          {
-            "Bearer": []
-          }
-        ],
-        "tags": [
-          "Staff"
-        ]
-      },
-      "post": {
-        "responses": {
-          "200": {
-            "description": "OK"
-          }
-        },
-        "security": [
-          {
-            "Bearer": []
-          }
-        ],
-        "tags": [
-          "Staff"
-        ]
-      }
-    },
-    "/api/v1/staff/proposals/{proposalId}/withdraw": {
-      "post": {
-        "parameters": [
-          {
-            "in": "path",
-            "name": "proposalId",
-            "required": true,
-            "schema": {
-              "type": "string"
-            }
-          }
-        ],
-        "responses": {
-          "200": {
-            "description": "OK"
-          }
-        },
-        "security": [
-          {
-            "Bearer": []
-          }
-        ],
-        "tags": [
-          "Staff"
-        ]
-      }
-    },
-    "/api/v1/staff/tasks": {
-      "get": {
-        "parameters": [
-          {
-            "in": "query",
-            "name": "page",
-            "schema": {
-              "format": "int32",
-              "type": "integer"
-            }
-          },
-          {
-            "in": "query",
-            "name": "pageSize",
-            "schema": {
-              "format": "int32",
-              "type": "integer"
-            }
-          },
-          {
-            "in": "query",
-            "name": "status",
-            "schema": {
-              "type": "string"
-            }
-          },
-          {
-            "in": "query",
-            "name": "sort",
-            "schema": {
-              "type": "string"
-            }
-          }
-        ],
-        "responses": {
-          "200": {
-            "description": "OK"
-          }
-        },
-        "security": [
-          {
-            "Bearer": []
-          }
-        ],
-        "tags": [
-          "Staff"
-        ]
-      }
-    },
-    "/api/v1/staff/tasks/{taskId}": {
-      "get": {
-        "parameters": [
-          {
-            "in": "path",
-            "name": "taskId",
-            "required": true,
-            "schema": {
-              "type": "string"
-            }
-          }
-        ],
-        "responses": {
-          "200": {
-            "description": "OK"
-          }
-        },
-        "security": [
-          {
-            "Bearer": []
-          }
-        ],
-        "tags": [
-          "Staff"
-        ]
-      }
-    },
-    "/api/v1/staff/tasks/{taskId}/notes": {
-      "post": {
-        "parameters": [
-          {
-            "in": "path",
-            "name": "taskId",
-            "required": true,
-            "schema": {
-              "type": "string"
-            }
-          }
-        ],
-        "responses": {
-          "200": {
-            "description": "OK"
-          }
-        },
-        "security": [
-          {
-            "Bearer": []
-          }
-        ],
-        "tags": [
-          "Staff"
-        ]
-      }
-    },
-    "/api/v1/staff/tasks/{taskId}/project-review": {
-      "post": {
-        "parameters": [
-          {
-            "in": "path",
-            "name": "taskId",
-            "required": true,
-            "schema": {
-              "type": "string"
-            }
-          }
-        ],
-        "responses": {
-          "200": {
-            "description": "OK"
-          }
-        },
-        "security": [
-          {
-            "Bearer": []
-          }
-        ],
-        "tags": [
-          "Staff"
-        ]
-      }
-    },
-    "/api/v1/staff/tasks/{taskId}/status": {
-      "post": {
-        "parameters": [
-          {
-            "in": "path",
-            "name": "taskId",
-            "required": true,
-            "schema": {
-              "type": "string"
-            }
-          }
-        ],
-        "responses": {
-          "200": {
-            "description": "OK"
-          }
-        },
-        "security": [
-          {
-            "Bearer": []
-          }
-        ],
-        "tags": [
-          "Staff"
-        ]
-      }
-    },
-    "/api/v1/users/me": {
-      "get": {
-        "operationId": "GetCurrentUserV3",
-        "responses": {
-          "200": {
-            "description": "OK"
-          }
-        },
-        "security": [
-          {
-            "Bearer": []
-          }
-        ],
-        "tags": [
-          "Profile"
-        ]
-      },
-      "put": {
-        "operationId": "UpdateCurrentUserV3",
         "requestBody": {
           "content": {
             "application/json": {
               "schema": {
-                "$ref": "#/components/schemas/UpdateProfileRequest"
+                "$ref": "#/components/schemas/ForgotPasswordRequest"
               }
             }
           },
@@ -3576,36 +2769,37 @@
           "200": {
             "description": "OK"
           }
-        },
-        "security": [
-          {
-            "Bearer": []
-          }
-        ],
-        "tags": [
-          "Profile"
-        ]
+        }
       }
     },
-    "/api/v1/users/me/email-verification": {
+    "/api/v1/auth/reset-password": {
       "post": {
+        "tags": [
+          "ProvisionalPasswordRecoveryEndpointModule"
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ResetPasswordRequest"
+              }
+            }
+          },
+          "required": true
+        },
         "responses": {
           "200": {
             "description": "OK"
           }
-        },
-        "security": [
-          {
-            "Bearer": []
-          }
-        ],
-        "tags": [
-          "Account security"
-        ]
+        }
       }
     },
-    "/api/v1/users/me/email-verification/confirm": {
+    "/api/v1/regulations/retrieve": {
       "post": {
+        "tags": [
+          "Regulations"
+        ],
+        "operationId": "RetrieveRegulationEvidence",
         "responses": {
           "200": {
             "description": "OK"
@@ -3613,97 +2807,32 @@
         },
         "security": [
           {
-            "Bearer": []
+            "Bearer": [ ]
           }
-        ],
-        "tags": [
-          "Account security"
         ]
       }
     },
-    "/api/v1/users/me/notification-preferences": {
+    "/api/v1/projects/{projectId}/reports/{reportId}": {
       "get": {
-        "responses": {
-          "200": {
-            "description": "OK"
-          }
-        },
-        "security": [
-          {
-            "Bearer": []
-          }
-        ],
         "tags": [
-          "Notifications"
-        ]
-      },
-      "put": {
-        "responses": {
-          "200": {
-            "description": "OK"
-          }
-        },
-        "security": [
-          {
-            "Bearer": []
-          }
+          "Reports and Architect Requests"
         ],
-        "tags": [
-          "Notifications"
-        ]
-      }
-    },
-    "/api/v1/users/me/password": {
-      "post": {
-        "responses": {
-          "200": {
-            "description": "OK"
-          }
-        },
-        "security": [
-          {
-            "Bearer": []
-          }
-        ],
-        "tags": [
-          "Account security"
-        ]
-      }
-    },
-    "/api/v1/users/me/security": {
-      "get": {
-        "responses": {
-          "200": {
-            "description": "OK"
-          }
-        },
-        "security": [
-          {
-            "Bearer": []
-          }
-        ],
-        "tags": [
-          "Account security"
-        ]
-      }
-    },
-    "/api/v1/users/me/security-events": {
-      "get": {
+        "operationId": "GetReportStatus",
         "parameters": [
           {
-            "in": "query",
-            "name": "page",
+            "name": "projectId",
+            "in": "path",
+            "required": true,
             "schema": {
-              "format": "int32",
-              "type": "integer"
+              "type": "string"
             }
           },
           {
-            "in": "query",
-            "name": "pageSize",
+            "name": "reportId",
+            "in": "path",
+            "required": true,
             "schema": {
-              "format": "int32",
-              "type": "integer"
+              "type": "string"
             }
           }
         ],
@@ -3714,24 +2843,951 @@
         },
         "security": [
           {
-            "Bearer": []
+            "Bearer": [ ]
           }
-        ],
-        "tags": [
-          "Account security"
         ]
       }
     },
-    "/health": {
+    "/api/v1/projects/{projectId}/reports/{reportId}/download": {
       "get": {
+        "tags": [
+          "Reports and Architect Requests"
+        ],
+        "operationId": "DownloadReport",
+        "parameters": [
+          {
+            "name": "projectId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "reportId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
         "responses": {
           "200": {
             "description": "OK"
           }
         },
-        "tags": [
-          "BuildMind.API"
+        "security": [
+          {
+            "Bearer": [ ]
+          }
         ]
+      }
+    },
+    "/api/v1/projects/{projectId}/architect-requests": {
+      "post": {
+        "tags": [
+          "Reports and Architect Requests"
+        ],
+        "operationId": "CreateArchitectRequest",
+        "parameters": [
+          {
+            "name": "projectId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        },
+        "security": [
+          {
+            "Bearer": [ ]
+          }
+        ]
+      },
+      "get": {
+        "tags": [
+          "Reports and Architect Requests"
+        ],
+        "operationId": "ListArchitectRequests",
+        "parameters": [
+          {
+            "name": "projectId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        },
+        "security": [
+          {
+            "Bearer": [ ]
+          }
+        ]
+      }
+    },
+    "/api/v1/projects/{projectId}/architect-requests/{requestId}": {
+      "get": {
+        "tags": [
+          "Reports and Architect Requests"
+        ],
+        "operationId": "GetArchitectRequest",
+        "parameters": [
+          {
+            "name": "projectId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "requestId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        },
+        "security": [
+          {
+            "Bearer": [ ]
+          }
+        ]
+      }
+    },
+    "/api/v1/projects/{projectId}/architect-requests/{requestId}/withdraw": {
+      "post": {
+        "tags": [
+          "Reports and Architect Requests"
+        ],
+        "operationId": "WithdrawArchitectRequest",
+        "parameters": [
+          {
+            "name": "projectId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "requestId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        },
+        "security": [
+          {
+            "Bearer": [ ]
+          }
+        ]
+      }
+    },
+    "/api/v1/projects/{id}/design-method": {
+      "put": {
+        "tags": [
+          "Requirements"
+        ],
+        "operationId": "ReplaceRequirementDesignMethod",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        },
+        "security": [
+          {
+            "Bearer": [ ]
+          }
+        ]
+      }
+    },
+    "/api/v1/projects/{id}/requirements": {
+      "get": {
+        "tags": [
+          "Requirements"
+        ],
+        "operationId": "GetProjectRequirements",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        },
+        "security": [
+          {
+            "Bearer": [ ]
+          }
+        ]
+      },
+      "put": {
+        "tags": [
+          "Requirements"
+        ],
+        "operationId": "ReplaceProjectRequirements",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        },
+        "security": [
+          {
+            "Bearer": [ ]
+          }
+        ]
+      }
+    },
+    "/api/v1/projects/{id}/requirements/spaces": {
+      "get": {
+        "tags": [
+          "Requirements"
+        ],
+        "operationId": "GetRequirementSpaces",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        },
+        "security": [
+          {
+            "Bearer": [ ]
+          }
+        ]
+      },
+      "put": {
+        "tags": [
+          "Requirements"
+        ],
+        "operationId": "ReplaceRequirementSpaces",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        },
+        "security": [
+          {
+            "Bearer": [ ]
+          }
+        ]
+      }
+    },
+    "/api/v1/projects/{id}/requirements/relationships": {
+      "get": {
+        "tags": [
+          "Requirements"
+        ],
+        "operationId": "GetRequirementRelationships",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        },
+        "security": [
+          {
+            "Bearer": [ ]
+          }
+        ]
+      },
+      "put": {
+        "tags": [
+          "Requirements"
+        ],
+        "operationId": "ReplaceRequirementRelationships",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        },
+        "security": [
+          {
+            "Bearer": [ ]
+          }
+        ]
+      }
+    },
+    "/api/v1/projects/{id}/requirements/summary": {
+      "get": {
+        "tags": [
+          "Requirements"
+        ],
+        "operationId": "GetRequirementsSummary",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        },
+        "security": [
+          {
+            "Bearer": [ ]
+          }
+        ]
+      }
+    },
+    "/api/v1/staff/dashboard": {
+      "get": {
+        "tags": [
+          "Staff"
+        ],
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        },
+        "security": [
+          {
+            "Bearer": [ ]
+          }
+        ]
+      }
+    },
+    "/api/v1/staff/monitoring/{kind}": {
+      "get": {
+        "tags": [
+          "Staff"
+        ],
+        "parameters": [
+          {
+            "name": "kind",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "page",
+            "in": "query",
+            "schema": {
+              "type": "integer",
+              "format": "int32"
+            }
+          },
+          {
+            "name": "pageSize",
+            "in": "query",
+            "schema": {
+              "type": "integer",
+              "format": "int32"
+            }
+          },
+          {
+            "name": "status",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "sort",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        },
+        "security": [
+          {
+            "Bearer": [ ]
+          }
+        ]
+      }
+    },
+    "/api/v1/staff/policies": {
+      "get": {
+        "tags": [
+          "Staff"
+        ],
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        },
+        "security": [
+          {
+            "Bearer": [ ]
+          }
+        ]
+      }
+    },
+    "/api/v1/staff/proposals": {
+      "post": {
+        "tags": [
+          "Staff"
+        ],
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        },
+        "security": [
+          {
+            "Bearer": [ ]
+          }
+        ]
+      },
+      "get": {
+        "tags": [
+          "Staff"
+        ],
+        "parameters": [
+          {
+            "name": "page",
+            "in": "query",
+            "schema": {
+              "type": "integer",
+              "format": "int32"
+            }
+          },
+          {
+            "name": "pageSize",
+            "in": "query",
+            "schema": {
+              "type": "integer",
+              "format": "int32"
+            }
+          },
+          {
+            "name": "status",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        },
+        "security": [
+          {
+            "Bearer": [ ]
+          }
+        ]
+      }
+    },
+    "/api/v1/staff/proposals/{proposalId}/withdraw": {
+      "post": {
+        "tags": [
+          "Staff"
+        ],
+        "parameters": [
+          {
+            "name": "proposalId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        },
+        "security": [
+          {
+            "Bearer": [ ]
+          }
+        ]
+      }
+    },
+    "/api/v1/staff/tasks": {
+      "get": {
+        "tags": [
+          "Staff"
+        ],
+        "parameters": [
+          {
+            "name": "page",
+            "in": "query",
+            "schema": {
+              "type": "integer",
+              "format": "int32"
+            }
+          },
+          {
+            "name": "pageSize",
+            "in": "query",
+            "schema": {
+              "type": "integer",
+              "format": "int32"
+            }
+          },
+          {
+            "name": "status",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "sort",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        },
+        "security": [
+          {
+            "Bearer": [ ]
+          }
+        ]
+      }
+    },
+    "/api/v1/staff/tasks/{taskId}": {
+      "get": {
+        "tags": [
+          "Staff"
+        ],
+        "parameters": [
+          {
+            "name": "taskId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        },
+        "security": [
+          {
+            "Bearer": [ ]
+          }
+        ]
+      }
+    },
+    "/api/v1/staff/tasks/{taskId}/status": {
+      "post": {
+        "tags": [
+          "Staff"
+        ],
+        "parameters": [
+          {
+            "name": "taskId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        },
+        "security": [
+          {
+            "Bearer": [ ]
+          }
+        ]
+      }
+    },
+    "/api/v1/staff/tasks/{taskId}/notes": {
+      "post": {
+        "tags": [
+          "Staff"
+        ],
+        "parameters": [
+          {
+            "name": "taskId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        },
+        "security": [
+          {
+            "Bearer": [ ]
+          }
+        ]
+      }
+    },
+    "/api/v1/staff/tasks/{taskId}/project-review": {
+      "post": {
+        "tags": [
+          "Staff"
+        ],
+        "parameters": [
+          {
+            "name": "taskId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        },
+        "security": [
+          {
+            "Bearer": [ ]
+          }
+        ]
+      }
+    },
+    "/api/v1/projects/{id}/surveys": {
+      "post": {
+        "tags": [
+          "Survey"
+        ],
+        "operationId": "UploadProjectSurvey",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        },
+        "security": [
+          {
+            "Bearer": [ ]
+          }
+        ]
+      }
+    },
+    "/api/v1/projects/{id}/surveys/{surveyId}": {
+      "get": {
+        "tags": [
+          "Survey"
+        ],
+        "operationId": "GetProjectSurveyStatus",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "surveyId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        },
+        "security": [
+          {
+            "Bearer": [ ]
+          }
+        ]
+      }
+    }
+  },
+  "components": {
+    "schemas": {
+      "CreateProjectRequest": {
+        "required": [
+          "name",
+          "projectType"
+        ],
+        "type": "object",
+        "properties": {
+          "name": {
+            "type": "string",
+            "nullable": true
+          },
+          "projectType": {
+            "type": "string",
+            "nullable": true
+          },
+          "locationReference": {
+            "type": "string",
+            "nullable": true
+          }
+        },
+        "additionalProperties": false
+      },
+      "ForgotPasswordRequest": {
+        "required": [
+          "email"
+        ],
+        "type": "object",
+        "properties": {
+          "email": {
+            "type": "string",
+            "nullable": true
+          }
+        },
+        "additionalProperties": false
+      },
+      "LoginRequest": {
+        "required": [
+          "email",
+          "password"
+        ],
+        "type": "object",
+        "properties": {
+          "email": {
+            "type": "string",
+            "nullable": true
+          },
+          "password": {
+            "type": "string",
+            "nullable": true
+          }
+        },
+        "additionalProperties": false
+      },
+      "RefreshTokenRequest": {
+        "required": [
+          "refreshToken"
+        ],
+        "type": "object",
+        "properties": {
+          "refreshToken": {
+            "type": "string",
+            "nullable": true
+          }
+        },
+        "additionalProperties": false
+      },
+      "RegisterRequest": {
+        "required": [
+          "email",
+          "password"
+        ],
+        "type": "object",
+        "properties": {
+          "email": {
+            "type": "string",
+            "nullable": true
+          },
+          "password": {
+            "type": "string",
+            "nullable": true
+          }
+        },
+        "additionalProperties": false
+      },
+      "ResetPasswordRequest": {
+        "required": [
+          "confirmPassword",
+          "email",
+          "newPassword",
+          "token"
+        ],
+        "type": "object",
+        "properties": {
+          "email": {
+            "type": "string",
+            "nullable": true
+          },
+          "token": {
+            "type": "string",
+            "nullable": true
+          },
+          "newPassword": {
+            "type": "string",
+            "nullable": true
+          },
+          "confirmPassword": {
+            "type": "string",
+            "nullable": true
+          }
+        },
+        "additionalProperties": false
+      },
+      "UpdateProfileRequest": {
+        "required": [
+          "fullName"
+        ],
+        "type": "object",
+        "properties": {
+          "fullName": {
+            "type": "string",
+            "nullable": true
+          },
+          "phoneNumber": {
+            "type": "string",
+            "nullable": true
+          }
+        },
+        "additionalProperties": false
+      },
+      "UpdateProjectRequest": {
+        "required": [
+          "revision"
+        ],
+        "type": "object",
+        "properties": {
+          "name": {
+            "type": "string",
+            "nullable": true
+          },
+          "projectType": {
+            "type": "string",
+            "nullable": true
+          },
+          "locationReference": {
+            "type": "string",
+            "nullable": true
+          },
+          "revision": {
+            "type": "integer",
+            "format": "int64"
+          }
+        },
+        "additionalProperties": false
+      }
+    },
+    "securitySchemes": {
+      "Bearer": {
+        "type": "http",
+        "description": "Paste the access token returned by POST /api/v1/auth/login (without the 'Bearer ' prefix).",
+        "scheme": "bearer",
+        "bearerFormat": "JWT"
       }
     }
   },

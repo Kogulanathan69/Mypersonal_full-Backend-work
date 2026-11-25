@@ -391,3 +391,29 @@ Phase 6 journey coverage:
   2. pip-audit and secret scan;
   3. full regression (unit, persistence, python, journeys 2–10 RAG, admin);
   4. FINAL-* documents.
+
+### Closure execution: completion (2026-11-25)
+
+All ten phases were executed. The per-phase verdicts are in FINAL-BACKEND-HANDOVER.
+
+| Commit | Content |
+|---|---|
+| `27e327d` | openings severity fix |
+| `add53f8` | notifications + STARTTLS |
+| `a168cf1` | containers |
+| `0730afd` | email report |
+| `afb5dc2` | RAG report |
+| `8213f69` | P-13 |
+| `8070e9c` | P-14 |
+| `a69086a` | docs + generators |
+| final | final documents |
+
+Final regression: 3632 automated tests passed (.NET 2373 + 27 contract checks, Python 1259). Live at HEAD: journey 202/202, admin 65/65, mTLS 12/12.
+
+Runtime state at handover:
+- the local API, python and RAG processes are stopped;
+- the `bm-captain-mysql` and Mailpit containers are running;
+- the verification Compose project is down (volumes kept);
+- llama-server is stopped.
+
+The Captain DB is intact (37 tables, never reset).

@@ -1,4 +1,4 @@
-# Final pending development register (closure-order discovery, HEAD `ce4cf1f`)
+# Final pending development register (discovery at HEAD `ce4cf1f`; outcomes at closure)
 
 ## Environment at start
 
@@ -37,3 +37,31 @@ Order: code phases first, container build/verification last, so the images conta
 | P-15 | Final OpenAPI export, inventory, docs, regression | 9/10 | §7, §11 | docs | — | actionable |
 
 Excluded: cost, BOQ, 3D, payments.
+
+## Outcomes at closure (2026-11-25)
+
+| ID | Outcome | Commit(s) | Verdict |
+|---|---|---|---|
+| P-01 | Compose v5.7.0; images built; containerized journeys 132/132 and 110/111; restart persistence | `a168cf1` | COMPLETE_AND_VERIFIED (local) |
+| P-02 | `captain-frame-v1`: SLD99 auto-selection, anchor, provenance, digest parity, persisted frame | `2745372` | COMPLETE_AND_VERIFIED |
+| P-03 | UUIDv5 edge identity (sorted endpoints) + split lineage | `2745372` | COMPLETE_AND_VERIFIED (roles UNASSIGNED) |
+| P-04 | Doors/windows/circulation/access tree; `PHYSICAL_ACCESS_NOT_EVALUATED` removed from generated plans | `834b2ff`, `27e327d` | COMPLETE_AND_VERIFIED |
+| P-05 | Opening validation; severity policy for edited plans | `834b2ff`, `27e327d` | COMPLETE_AND_VERIFIED |
+| P-06 | API → python mTLS, 12/12 negatives, rotation | `2e1f167` | COMPLETE_AND_VERIFIED (RAG link protected) |
+| P-07 | RH09 isolated comparison + server containment | `91c8c06` | BLOCKED_BY_EXTERNAL_DEPENDENCY |
+| P-08 | Real LLM via llama.cpp + Qwen2.5-1.5B; 10/10 | `ba2c2be` | COMPLETE_AND_VERIFIED (local); external I-1 |
+| P-09 | External SMTP requires STARTTLS; policy tests 7/7 | `add53f8` | IMPLEMENTED_AWAITING_EXTERNAL_ACTIVATION |
+| P-10 | REPORT_READY + ARCHITECT_REQUEST_WITHDRAWN (transactional) | `add53f8` | COMPLETE_AND_VERIFIED. Generation-completion is intentionally not notified (synchronous response). |
+| P-11 | Root cause diagnosed read-only; exact change request | `afb5dc2` | BLOCKED_BY_EXPLICIT_PROTECTED_SCOPE |
+| P-12 | pip-audit 0/0; NuGet audit clean; PDF QA executed (Reports.Tests 164, 0 skipped) | — | COMPLETE_AND_VERIFIED |
+| P-13 | Root cause demonstrated (early 413 + close vs in-flight upload); deterministic test | `8213f69` | COMPLETE_AND_VERIFIED |
+| P-14 | Specific rejection reasons via a Captain decorator (M3 untouched) | `8070e9c` | COMPLETE_AND_VERIFIED |
+| P-15 | OpenAPI re-exported (127 ops), TypeScript declarations (strict tsc), inventory, final docs, regression | `a69086a` + final docs commit | COMPLETE_AND_VERIFIED |
+
+**Discovered during closure and fixed:**
+- an edit-validation regression after the CRS change (`27e327d`);
+- the MySQL rejection of `--idempotent` migration scripts (container init uses the full script).
+
+**Discovered and documented:**
+- H01 timing sensitivity;
+- connection exhaustion when the persistence suite shares MySQL with a running stack (operational guidance: run persistence tests on a quiet server).

@@ -52,5 +52,5 @@ Supporting tests:
 
 - **Latency.** About 120 s for an accepted proposal on this host (2 CPUs, about 2 GB free alongside the stack). It is not interactive-grade; a GPU host or an external provider is needed for production UX.
 - **Quality.** This was a single successful valid-instruction run with a 1.5B model. With a short prompt (probe), the same model wrongly rejected a valid instruction. Acceptance-rate measurement over a prompt suite was **not** performed.
-- **Error reasons.** The specific rejection reason is collapsed by the M3 orchestration to `AI_PROPOSAL_INVALID` (M3-owned).
+- **Error reasons.** At the time of the 10/10 run, the M3 orchestration collapsed rejection reasons to `AI_PROPOSAL_INVALID`. Since `8070e9c` (P-14), the Captain endpoint returns the port's specific code (e.g. `MODEL_DECLINED_OR_INVALID`, `AMBIGUOUS_TARGET`) through a request-scoped decorator; M3 is unchanged. This is verified live with the rule-based port (journey 202/202) and by unit tests; the LLM run was not repeated after P-14.
 - **External providers.** Not exercised (no authorized provider or credentials; input I-1).
