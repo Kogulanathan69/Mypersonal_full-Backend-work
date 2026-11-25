@@ -32,8 +32,10 @@ internal sealed class SmtpEmailSender(IConfiguration configuration, ILogger<Smtp
         get
         {
             if (string.IsNullOrWhiteSpace(Host) || string.IsNullOrWhiteSpace(From)) return false;
-            if (Flag("AllowExternalDelivery")) return true;
-            return Host is "localhost" || (IPAddress.TryParse(Host, out var ip) && IPAddress.IsLoopback(ip));
+            var loopback = Host is "localhost" || (IPAddress.TryParse(Host, out var ip) && IPAddress.IsLoopback(ip));
+            if (loopback) return true;
+            // External delivery: explicitly allowed AND encrypted (STARTTLS with platform certificate validation, never disabled).
+            return Flag("AllowExternalDelivery") && Flag("UseStartTls");
         }
     }
 

@@ -157,7 +157,10 @@ internal sealed class CaptainReportBoundary(
                     .SetProperty(r => r.ArtifactByteLength, artifact.ByteLength).SetProperty(r => r.ArtifactContentHash, artifact.ContentHash)
                     .SetProperty(r => r.ArtifactCreatedAtUtc, artifact.CreatedAtUtc).SetProperty(r => r.CompletedAtUtc, now), inner)
                 .ConfigureAwait(false);
-            return moved == 1 ? ProtectedWriteStatus.Written : ProtectedWriteStatus.Conflict;
+            if (moved != 1) return ProtectedWriteStatus.Conflict;
+            await Notify.AddAsync(context, actor, "REPORT_READY", "Your preliminary report is ready", "A preliminary PDF report was generated.",
+                $"/projects/{pending.ProjectId}/reports/{pending.Id}", $"report-ready:{pending.Id}", now, inner).ConfigureAwait(false);
+            return ProtectedWriteStatus.Written;
         }, token).ConfigureAwait(false);
         if (status == ProtectedWriteStatus.Written)
             return new(ReportPublicationStatus.Published, ready.Artifact);
@@ -328,12 +331,21 @@ internal sealed class CaptainArchitectBoundary(
             return new(ArchitectBoundaryStatus.Conflict, actor);
         var withdrawn = previous.ProposeWithdrawal(version, new MicrosecondTimeProvider(TimeProvider.System).GetUtcNow());
         var status = await new ProtectedPlanningWriter(context, transactions).RunAsync(project, actor, authVersion, async inner =>
-            await context.Set<ArchitectRequestRecord>()
+        {
+            var moved = await context.Set<ArchitectRequestRecord>()
                 .Where(r => r.RequestId == request && r.StateVersion == version && r.Status == nameof(ArchitectRequestStatus.Pending))
                 .ExecuteUpdateAsync(s => s.SetProperty(r => r.StateVersion, withdrawn.StateVersion)
                     .SetProperty(r => r.Status, nameof(ArchitectRequestStatus.Withdrawn))
-                    .SetProperty(r => r.WithdrawnAtUtc, withdrawn.WithdrawnAtUtc), inner).ConfigureAwait(false) == 1
-                ? ProtectedWriteStatus.Written : ProtectedWriteStatus.Conflict, token).ConfigureAwait(false);
+                    .SetProperty(r => r.WithdrawnAtUtc, withdrawn.WithdrawnAtUtc), inner).ConfigureAwait(false);
+            if (moved != 1) return ProtectedWriteStatus.Conflict;
+            var architect = await context.Set<BuildMind.Infrastructure.Persistence.Records.Administration.ArchitectProfileRecord>()
+                .Where(a => a.RecipientId == previous.RecipientId).Select(a => (Guid?)a.UserId).SingleOrDefaultAsync(inner).ConfigureAwait(false);
+            if (architect is { } user)
+                await Notify.AddAsync(context, user, "ARCHITECT_REQUEST_WITHDRAWN", "A review request was withdrawn",
+                    "The customer withdrew consent; the shared report is no longer accessible.", null, $"architect-withdrawn:{request}",
+                    withdrawn.WithdrawnAtUtc!.Value, inner).ConfigureAwait(false);
+            return ProtectedWriteStatus.Written;
+        }, token).ConfigureAwait(false);
         return status switch
         {
             ProtectedWriteStatus.Written => new(ArchitectBoundaryStatus.Accepted, actor, withdrawn, previous),

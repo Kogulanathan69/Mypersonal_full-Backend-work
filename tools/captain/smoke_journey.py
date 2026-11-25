@@ -786,6 +786,10 @@ def phase9():
     check("customer withdraws consent", status == 200, status)
     status, _, _ = call("GET", f"/api/v1/architect/requests/{req}/report", token=atok)
     check("withdrawal revokes the architect's report access (404)", status == 404, status)
+    kinds = {n["kind"] for n in call("GET", "/api/v1/notifications?pageSize=100", token=atok)[1].get("items", [])}
+    check("architect notified that consent was withdrawn", "ARCHITECT_REQUEST_WITHDRAWN" in kinds, kinds)
+    kinds = {n["kind"] for n in call("GET", "/api/v1/notifications?pageSize=100", token=a)[1].get("items", [])}
+    check("customer was notified when the report became ready", "REPORT_READY" in kinds, kinds)
 
     # Requirement catalogue: persistent, versioned, admin-published (product preferences, not regulations).
     sample = json.load(open(os.path.expanduser("~/bm-captain/src/docs/captain-development/samples/requirement-catalogue.synthetic.json")))
