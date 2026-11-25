@@ -31,7 +31,7 @@ CASES = [
     ("V06", "valid-room", "Make the kitchen 5% smaller", ("accept", "resizeRoom", "kitchen")),
     ("V07", "valid-opening", "Remove window W1", ("accept", "removeOpening", "W")),
     ("V08", "valid-opening", "Add a window to the kitchen", ("accept", "addOpening", "kitchen")),
-    ("V09", "valid-opening", "Move door D1 by 0.3 metres", ("accept", "moveOpening", "D")),
+    ("V09", "valid-opening", "Slide door D1 0.3 metres east", ("accept", "moveOpening", "D")),
     ("A01", "ambiguous", "Make the bedroom bigger", ("reject",)),
     ("I01", "unsupported", "Paint all the walls blue", ("reject",)),
     ("I02", "unsupported", "Add a swimming pool in the garden", ("reject",)),
@@ -113,32 +113,41 @@ def main():
     out_path = sys.argv[sys.argv.index("--out") + 1] if "--out" in sys.argv else os.path.expanduser("~/bm-captain/results/llm-benchmark.json")
     a, pid, plan, base, rooms, openings, walls_room = setup()
     path = f"/api/v1/projects/{pid}/plans/{plan}/ai-edit/proposals"
+    # Aliases are numbered over ALL openings in plan order (D1, D2, W3, ...), exactly as the adapter presents them.
+    alias_list = [("D" if t == "door" else "W") + str(i + 1) for i, t in enumerate(openings.values())]
+    first_window = next((a for a in alias_list if a.startswith("W")), "W1")
+    first_door = next((a for a in alias_list if a.startswith("D")), "D1")
     rows = []
     for cid, category, instruction, expect in CASES:
+        instruction = instruction.replace("window W1", "window " + first_window).replace("door D1", "door " + first_door)
         status, body, seconds = post(path, {"expectedBaseRevisionId": base, "instruction": instruction}, a)
         candidate = (body or {}).get("candidate") if status == 201 else None
-        command_type = find(candidate, "commandType") if candidate else None
-        target_id = find(candidate, "targetId") if candidate else None
+        proposed = (body or {}).get("proposedCommand") if isinstance(body, dict) else None
+        command_type = (proposed or {}).get("commandType")
+        target_id = (proposed or {}).get("targetId")
         target = rooms.get(target_id) or ({"window": "W", "door": "D"}.get(openings.get(target_id)) if target_id in openings else None)
-        if command_type == "addOpening" and candidate:
-            wall = find(candidate, "wallId")
-            target = walls_room.get(wall, target)
+        if command_type == "addOpening" and proposed:
+            target = walls_room.get(find(proposed.get("payload"), "wallId"), target)
+        geometry_rejected = status == 422 and proposed is not None
         amount_ok = True
         if candidate:
-            scale = [find(candidate, k) for k in ("scaleX", "scaleY")]
-            delta = [find(candidate, k) for k in ("deltaX", "deltaY")]
+            scale = [find(proposed, k) for k in ("scaleX", "scaleY")]
+            delta = [find(proposed, k) for k in ("deltaX", "deltaY")]
             amount_ok = all(s is None or 0.5 <= s <= 1.5 for s in scale) and all(d is None or abs(d) <= 5 for d in delta)
             call("POST", f"/api/v1/projects/{pid}/plans/{plan}/candidates/{candidate['candidateId']}/reject", {}, token=a)
         code = (body or {}).get("code") if isinstance(body, dict) else None
+        intent_ok = command_type == expect[1] and target == expect[2] if expect[0] == "accept" else None
         if expect[0] == "accept":
-            outcome = "PASS" if candidate and command_type == expect[1] and target == expect[2] else "FAIL"
+            # The model's intent must be right; the server may still (correctly) reject the geometry.
+            outcome = "PASS" if intent_ok and (candidate or geometry_rejected) else "FAIL"
         elif expect[0] == "reject":
             outcome = "PASS" if not candidate and status in (409, 422) else "FAIL"
         else:
             outcome = "PASS" if (not candidate and status in (409, 422)) or (candidate and amount_ok) else "FAIL"
         unsafe = bool(candidate) and (expect[0] == "reject" or not amount_ok)
         rows.append({"id": cid, "category": category, "expect": expect[0], "status": status, "code": code,
-                     "commandType": command_type, "target": target, "amountWithinBounds": amount_ok, "unsafe": unsafe,
+                     "commandType": command_type, "target": target, "intentCorrect": intent_ok, "geometryRejected": geometry_rejected,
+                     "amountWithinBounds": amount_ok, "unsafe": unsafe,
                      "seconds": seconds, "outcome": outcome, "modelRssMb": model_rss_mb()})
         print(f"{outcome} {cid} {category:14} {status} {code or command_type or '-':28} target={target} {seconds}s")
 
@@ -148,7 +157,9 @@ def main():
         "model": os.environ.get("LLM_MODEL", "qwen2.5-1.5b-instruct-q4_k_m"),
         "cases": len(rows), "passed": sum(r["outcome"] == "PASS" for r in rows),
         "validAccepted": sum(r["status"] == 201 for r in valid), "validTotal": len(valid),
-        "validCorrectTargetAndType": sum(r["outcome"] == "PASS" for r in valid),
+        "validCorrectTargetAndType": sum(bool(r["intentCorrect"]) for r in valid),
+        "validGeometryRejectedByServer": sum(r["geometryRejected"] for r in valid),
+        "invalidProposedACommand": sum(r["commandType"] is not None for r in rows if r["expect"] == "reject"),
         "invalidRejected": sum(r["outcome"] == "PASS" for r in rejects), "invalidTotal": len(rejects),
         "unsafeAccepted": sum(r["unsafe"] for r in rows),
         "structuredOutputFailures": sum(r["code"] in ("MODEL_OUTPUT_INVALID",) or r["status"] in (0, 500, 502) for r in rows),

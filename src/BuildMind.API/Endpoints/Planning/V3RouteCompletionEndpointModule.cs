@@ -240,7 +240,7 @@ public sealed class V3RouteCompletionEndpointModule : IApiEndpointModule
             // POST …/candidates/{candidateId}/apply. The source is the local rule-based parser, not an AI model.
             AiEditOrchestrationStatus.CandidateCreated => Results.Json(new
             {
-                candidate = result.Candidate, proposalSource = source, applied = false,
+                candidate = result.Candidate, proposalSource = source, applied = false, proposedCommand = rejection.Proposed,
                 notice = source.StartsWith("LLM:", StringComparison.Ordinal)
                     ? "Proposal from a language model, checked by the server. Review, then apply or reject it."
                     : "Proposal from the local rule-based instruction parser (not an AI model). Review, then apply or reject it.",
@@ -248,6 +248,15 @@ public sealed class V3RouteCompletionEndpointModule : IApiEndpointModule
             // The Captain port's specific reason (recorded in the request scope); M3 reports every rejection generically.
             AiEditOrchestrationStatus.ProposalRejected when rejection.Code == "STALE_BASE_REVISION" => Problem(409, "STALE_BASE_REVISION"),
             AiEditOrchestrationStatus.ProposalRejected => Problem(422, rejection.Code ?? result.Diagnostic?.Code ?? "INSTRUCTION_NOT_SUPPORTED"),
+            // The proposal was turned into a command but the server rejected the resulting geometry: report what was
+            // proposed (type/target/bounded payload) so the caller can explain it; nothing was stored.
+            _ when rejection.Proposed is { } proposed => Results.Problem(statusCode: 422,
+                type: ProblemDetailsDefaults.GetTypeForCode(result.Diagnostic?.Code ?? PlanEditorErrorCodes.InvalidEditCommand),
+                extensions: new Dictionary<string, object?>
+                {
+                    [ProblemDetailsDefaults.CodeExtension] = result.Diagnostic?.Code ?? PlanEditorErrorCodes.InvalidEditCommand,
+                    ["proposedCommand"] = proposed, ["proposalSource"] = source,
+                }),
             _ => Problem(422, result.Diagnostic?.Code ?? PlanEditorErrorCodes.InvalidEditCommand),
         };
     }

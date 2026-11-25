@@ -77,4 +77,23 @@ public sealed class LlmEditIntentTests
     [InlineData("""{"decision":"propose","commandType":"moveRoom","room":"x","amount":1,"unit":"m","direction":"east","axis":"none","openingRef":"","openingType":"none","sql":"x"}""")]
     public void Schema_violations_are_rejected_server_side(string json) =>
         Assert.Throws<JsonException>(() => OpenAiCompatibleEditProposalPort.ValidateSchema(JsonDocument.Parse(json).RootElement));
+
+    private static PlanEditCommandDto Target(Guid room) => new()
+    {
+        CommandId = Guid.NewGuid(), CommandType = "resizeRoom", FloorId = Floor, TargetId = room,
+        Payload = System.Text.Json.JsonDocument.Parse("{}").RootElement.Clone(),
+    };
+
+    [Theory]
+    [InlineData("Make the bedroom bigger", true)]           // two bedrooms: the model picked one arbitrarily
+    [InlineData("make bedroom 1 bigger", false)]
+    [InlineData("Please enlarge Bedroom 1 by 10%", false)]
+    [InlineData("make bed 1 larger", false)]
+    [InlineData("make bedroom 2 bigger", true)]             // names the OTHER bedroom than the targeted one
+    public void Ambiguous_room_reference_is_detected_deterministically(string instruction, bool ambiguous) =>
+        Assert.Equal(ambiguous, OpenAiCompatibleEditProposalPort.AmbiguousRoomReference(Target(Bed1), Plan(), instruction));
+
+    [Fact]
+    public void A_unique_room_type_is_never_ambiguous() =>
+        Assert.False(OpenAiCompatibleEditProposalPort.AmbiguousRoomReference(Target(Kitchen), Plan(), "make it bigger"));
 }

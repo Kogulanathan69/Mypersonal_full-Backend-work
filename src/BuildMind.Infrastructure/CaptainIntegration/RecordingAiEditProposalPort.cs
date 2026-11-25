@@ -12,6 +12,12 @@ public sealed partial class AiProposalRejectionContext
 {
     public string? Code { get; private set; }
 
+    /// <summary>The single command the provider proposed (before server validation), for transparency in responses.</summary>
+    public ProposedCommandSummary? Proposed { get; private set; }
+
+    public void RecordProposal(BuildMind.Application.Features.PlanEditor.Contracts.PlanEditCommandDto command) =>
+        Proposed = new ProposedCommandSummary(command.CommandType, command.TargetId, command.Payload);
+
     /// <summary>Records a port-defined code; anything that is not an upper-case constant identifier is ignored.</summary>
     public void Record(string? code)
     {
@@ -32,6 +38,11 @@ public sealed class RecordingAiEditProposalPort(IAiEditProposalPort inner, AiPro
             .ConfigureAwait(false);
         if (proposal is { Status: AiEditProposalStatus.Rejected, Diagnostics: { Count: > 0 } diagnostics })
             rejections.Record(diagnostics[0]?.Code);
+        if (proposal is { Status: AiEditProposalStatus.Proposed, Commands: [{ } command] })
+            rejections.RecordProposal(command);
         return proposal;
     }
 }
+
+/// <summary>What the AI provider proposed: command type, target id and the server-computed bounded payload.</summary>
+public sealed record ProposedCommandSummary(string CommandType, Guid? TargetId, System.Text.Json.JsonElement Payload);
