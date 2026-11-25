@@ -13,6 +13,7 @@ namespace BuildMind.Infrastructure.CaptainIntegration;
 public sealed record SurveySummaryDto(Guid SurveyId, string OriginalFileName, string MediaType, long ByteLength, string Sha256Hash,
     string Status, DateTimeOffset UploadedAtUtc, DateTimeOffset? CompletedAtUtc, string? FailureCode, int ProcessingAttempts);
 public sealed record SurveyListDto(IReadOnlyList<SurveySummaryDto> Items);
+public sealed record SurveyFileDto(byte[]? Content, string? FailureCode, string MediaType, string OriginalFileName, string Sha256Hash);
 
 public sealed record LandRevisionSummaryDto(Guid LandRevisionId, long RevisionNumber, double AreaM2, int EdgeCount, Guid? SurveyId,
     string? GeometryDigest, bool Georeferenced, bool IsCurrent, DateTimeOffset CreatedAtUtc);
@@ -54,11 +55,28 @@ public sealed class CaptainReadModels
 {
     private readonly BuildMindDbContext _context;
     private readonly TimeProvider _time;
+    private readonly SurveyBlobReader _blobs;
 
-    internal CaptainReadModels(BuildMindDbContext context, TimeProvider time)
+    internal CaptainReadModels(BuildMindDbContext context, TimeProvider time, SurveyBlobReader blobs)
     {
         _context = context;
         _time = time;
+        _blobs = blobs;
+    }
+
+    /// <summary>
+    /// The original survey file of a project the caller was authorized for. Resolved only from the server-side storage
+    /// GUID (never from client input), refusing symlinks, size mismatch and SHA-256 mismatch (integrity).
+    /// </summary>
+    public async Task<SurveyFileDto?> SurveyFileAsync(Guid projectId, Guid surveyId, CancellationToken token)
+    {
+        var s = await _context.Set<SurveyRecord>().AsNoTracking()
+            .Where(x => x.ProjectId == projectId && x.Id == surveyId)
+            .Select(x => new { x.StorageId, x.ByteLength, x.Sha256Hash, x.MediaType, x.OriginalFileName })
+            .SingleOrDefaultAsync(token).ConfigureAwait(false);
+        if (s is null) return null;
+        var read = await _blobs.ReadAsync(s.StorageId, s.ByteLength, s.Sha256Hash, token).ConfigureAwait(false);
+        return new SurveyFileDto(read.Content, read.FailureCode, s.MediaType, s.OriginalFileName, s.Sha256Hash);
     }
 
     public async Task<SurveyListDto> SurveysAsync(Guid projectId, CancellationToken token) =>

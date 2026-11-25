@@ -41,6 +41,8 @@ public interface IArchitectPortalStore
     Task<IReadOnlyList<ArchitectRequestView>> RequestsForAsync(Guid recipientId, CancellationToken token);
     Task<ArchitectRequestView?> RequestForAsync(Guid recipientId, Guid requestId, CancellationToken token);
     Task<byte[]?> ReportForAsync(Guid architectUserId, Guid recipientId, Guid requestId, CancellationToken token);
+    /// <summary>Architect marks an ACCEPTED, unexpired request completed (ends consent-bound access).</summary>
+    Task<AdminResult<ArchitectRequestView>> CompleteAsync(Guid architectUserId, Guid recipientId, Guid requestId, CancellationToken token);
     Task<AdminResult<ArchitectRequestView>> RespondAsync(Guid architectUserId, Guid recipientId, Guid requestId, string decision, string? note,
         CancellationToken token);
     Task<AdminResult<FeedbackView>> AddFeedbackAsync(Guid architectUserId, Guid recipientId, Guid requestId, string kind, string body,

@@ -1396,6 +1396,65 @@ namespace BuildMind.Infrastructure.Persistence.Migrations
                     b.ToTable("generation_jobs", (string)null);
                 });
 
+            modelBuilder.Entity("BuildMind.Infrastructure.Persistence.Records.Planning.LandEdgeRoleRecord", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .HasColumnType("char(36)")
+                        .HasColumnName("id");
+
+                    b.Property<Guid>("EdgeId")
+                        .HasColumnType("char(36)")
+                        .HasColumnName("edge_id");
+
+                    b.Property<string>("EvidenceNote")
+                        .HasMaxLength(500)
+                        .HasColumnType("varchar(500)")
+                        .HasColumnName("evidence_note");
+
+                    b.Property<string>("EvidenceSource")
+                        .IsRequired()
+                        .HasMaxLength(32)
+                        .HasColumnType("varchar(32)")
+                        .HasColumnName("evidence_source");
+
+                    b.Property<Guid>("LandRevisionId")
+                        .HasColumnType("char(36)")
+                        .HasColumnName("land_revision_id");
+
+                    b.Property<Guid>("ProjectId")
+                        .HasColumnType("char(36)")
+                        .HasColumnName("project_id");
+
+                    b.Property<DateTime>("ReviewedAtUtc")
+                        .HasColumnType("datetime(6)")
+                        .HasColumnName("reviewed_at_utc");
+
+                    b.Property<Guid>("ReviewedBy")
+                        .HasColumnType("char(36)")
+                        .HasColumnName("reviewed_by");
+
+                    b.Property<string>("Role")
+                        .IsRequired()
+                        .HasMaxLength(16)
+                        .HasColumnType("varchar(16)")
+                        .HasColumnName("role");
+
+                    b.HasKey("Id")
+                        .HasName("pk_land_edge_roles");
+
+                    b.HasIndex("ProjectId")
+                        .HasDatabaseName("ix_land_edge_roles_project_id");
+
+                    b.HasIndex("ReviewedBy")
+                        .HasDatabaseName("ix_land_edge_roles_reviewed_by");
+
+                    b.HasIndex("LandRevisionId", "EdgeId")
+                        .IsUnique()
+                        .HasDatabaseName("ux_land_edge_roles_land_revision_id_edge_id");
+
+                    b.ToTable("land_edge_roles", (string)null);
+                });
+
             modelBuilder.Entity("BuildMind.Infrastructure.Persistence.Records.Planning.LandRevisionRecord", b =>
                 {
                     b.Property<Guid>("Id")
@@ -2479,6 +2538,30 @@ namespace BuildMind.Infrastructure.Persistence.Migrations
                         .OnDelete(DeleteBehavior.Restrict)
                         .IsRequired()
                         .HasConstraintName("fk_generation_jobs_users_requested_by");
+                });
+
+            modelBuilder.Entity("BuildMind.Infrastructure.Persistence.Records.Planning.LandEdgeRoleRecord", b =>
+                {
+                    b.HasOne("BuildMind.Infrastructure.Persistence.Records.Planning.LandRevisionRecord", null)
+                        .WithMany()
+                        .HasForeignKey("LandRevisionId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired()
+                        .HasConstraintName("fk_land_edge_roles_land_revisions");
+
+                    b.HasOne("BuildMind.Infrastructure.Persistence.Records.ProjectRecord", null)
+                        .WithMany()
+                        .HasForeignKey("ProjectId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired()
+                        .HasConstraintName("fk_land_edge_roles_projects_project_id");
+
+                    b.HasOne("BuildMind.Infrastructure.Persistence.Records.UserRecord", null)
+                        .WithMany()
+                        .HasForeignKey("ReviewedBy")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired()
+                        .HasConstraintName("fk_land_edge_roles_users_reviewed_by");
                 });
 
             modelBuilder.Entity("BuildMind.Infrastructure.Persistence.Records.Planning.LandRevisionRecord", b =>

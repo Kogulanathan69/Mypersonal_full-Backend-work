@@ -104,3 +104,17 @@ internal sealed class PlanValidationEvidenceRecord
     public DateTimeOffset ValidatedAtUtc { get; init; }
     public required string DiagnosticsJson { get; init; }
 }
+
+/// <summary>A customer-reviewed boundary role for one physical edge of one exact land revision (never inferred).</summary>
+internal sealed class LandEdgeRoleRecord
+{
+    public Guid Id { get; set; }
+    public Guid ProjectId { get; set; }
+    public Guid LandRevisionId { get; set; }
+    public Guid EdgeId { get; set; }
+    public required string Role { get; set; }
+    public required string EvidenceSource { get; set; }
+    public string? EvidenceNote { get; set; }
+    public Guid ReviewedBy { get; set; }
+    public DateTimeOffset ReviewedAtUtc { get; set; }
+}

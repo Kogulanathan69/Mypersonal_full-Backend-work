@@ -12,7 +12,7 @@ import urllib.request
 import uuid
 
 BASE = next((a for a in sys.argv[1:] if a.startswith("http")), "http://127.0.0.1:5180")
-PHASES = {int(p) for p in (sys.argv[sys.argv.index("--phases") + 1].split(",") if "--phases" in sys.argv else "2,3,4,5,6,7,8,9,10,11".split(","))}
+PHASES = {int(p) for p in (sys.argv[sys.argv.index("--phases") + 1].split(",") if "--phases" in sys.argv else "2,3,4,5,6,7,8,9,10,11,12".split(","))}
 results = []
 state = {}
 
@@ -381,6 +381,15 @@ def phase6():
           and "application/pdf" in headers.get("Content-Type", "") and "attachment" in headers.get("Content-Disposition", "")
           and "no-store" in headers.get("Cache-Control", ""), (status, headers.get("Content-Type")))
     state["pdf_bytes"] = len(pdf) if isinstance(pdf, bytes) else 0
+    if isinstance(pdf, bytes) and __import__("os").environ.get("RAG_CORPUS", "1") == "1":
+        import subprocess
+        text = subprocess.run(["pdftotext", "-q", "-layout", "-", "-"], input=pdf, capture_output=True).stdout.decode("utf-8", "replace")
+        approved = ("14e829328be1d1caf0767c04532d8ad3aaccdfb30cad9d3a83501d83c87ef0f7",
+                    "e480ad2ffcf4ff08635a322e800703cc0fc191757b0fbe9cde12c0c7313a55f3",
+                    "eee5bb470d14649f626af2ff2958026f51843065272856015c1fea66d7d834c7")
+        check("report PDF contains regulation citations: approved document SHA-256, page and passage provenance",
+              "Regulation evidence consulted" in text and any(d in text for d in approved) and " page " in text
+              and "passage:" in text and "not a legal" in text, text[-600:])
     if isinstance(pdf, bytes):
         import os
         target = os.path.expanduser("~/bm-captain/results/journey-report.pdf")
@@ -765,6 +774,7 @@ def phase9():
     check("admin creates an UNVERIFIED, unlisted directory profile", status == 201 and prof.get("verificationStatus") == "UNVERIFIED"
           and prof.get("isListed") is False, prof)
     rec = prof["recipientId"]
+    state["architect"], state["recipient"] = arch, rec
     status, body, _ = call("PUT", f"/api/v1/admin/architects/{rec}/listing", {"isListed": True, "acceptingRequests": True, "expectedRowVersion": 1},
                            token=admin)
     check("unverified architect cannot be listed (422)", status == 422 and code_of(body) == "ARCHITECT_NOT_VERIFIED", body)
@@ -1016,8 +1026,109 @@ def phase11():
     check("customer cannot read dependency diagnostics (403)", status == 403, status)
 
 
+
+def phase12():
+    """R-01 boundary roles, R-02 survey download, R-04 architect completion + consent expiry (5181: 1-minute lifetime)."""
+    import hashlib
+    import threading
+    import time
+    global BASE
+    a, b, pid = state["alice"]["access"], state["bob"]["access"], state.get("project")
+    if not check("phase 12 prerequisite: project", pid):
+        return
+    # ---- R-02 survey file download
+    surveys = call("GET", f"/api/v1/projects/{pid}/surveys", token=a)[1].get("items", [])
+    if check("a survey exists for download", surveys, surveys):
+        s0 = surveys[0]
+        path = f"/api/v1/projects/{pid}/surveys/{s0['surveyId']}/file"
+        status, blob, headers = call("GET", path, token=a)
+        check("owner downloads the original survey: exact bytes, SHA-256 matches, attachment, no-store",
+              status == 200 and isinstance(blob, bytes) and len(blob) == s0["byteLength"]
+              and hashlib.sha256(blob).hexdigest() == s0["sha256Hash"] == headers.get("X-Content-SHA256")
+              and "attachment" in headers.get("Content-Disposition", "") and "no-store" in headers.get("Cache-Control", "")
+              and headers.get("X-Content-Type-Options") == "nosniff", (status, dict(headers or {})))
+        check("cross-user survey download denied (404)", call("GET", path, token=b)[0] == 404)
+        check("unauthenticated survey download (401)", call("GET", path)[0] == 401)
+        check("unknown survey download (404)", call("GET", f"/api/v1/projects/{pid}/surveys/{uuid.uuid4()}/file", token=a)[0] == 404)
+
+    # ---- R-01 boundary roles (fresh project: exact revision binding + lineage)
+    status, proj, _ = call("POST", "/api/v1/projects", {"name": "Boundary roles", "projectType": "Residential"}, token=a)
+    p2 = proj["id"]
+    land1 = call("PUT", f"/api/v1/projects/{p2}/land", {"exterior": rectangle(14, 12), "expectedCurrentLandRevisionId": None}, token=a)[1]
+    status, edges, _ = call("GET", f"/api/v1/projects/{p2}/land/edges", token=a)
+    check("edges listed with stable ids; nothing inferred (all UNASSIGNED, review incomplete)",
+          status == 200 and len(edges["edges"]) == 4 and all(e["role"] == "UNASSIGNED" and e["suggestedRole"] is None for e in edges["edges"])
+          and edges["reviewComplete"] is False and edges["landRevisionId"] == land1["landRevisionId"], edges)
+    ids = [e["edgeId"] for e in edges["edges"]]
+    role_path = lambda edge: f"/api/v1/projects/{p2}/land/edges/{edge}/role"  # noqa: E731
+    body = lambda role, expected=land1["landRevisionId"]: {"expectedLandRevisionId": expected, "role": role,  # noqa: E731
+                                                           "evidenceNote": "customer reviewed survey plan"}
+    check("invalid role refused (400)", call("PUT", role_path(ids[0]), body("FRONT_GARDEN"), token=a)[0] == 400)
+    check("stale land revision refused (409)", call("PUT", role_path(ids[0]), body("SIDE", str(uuid.uuid4())), token=a)[0] == 409)
+    check("unknown edge refused (404)", call("PUT", role_path(uuid.uuid4()), body("SIDE"), token=a)[0] == 404)
+    check("cross-user role review denied (404)", call("PUT", role_path(ids[0]), body("SIDE"), token=b)[0] == 404)
+    for edge, role in zip(ids, ["ROAD_FRONTAGE", "SIDE", "REAR", "SIDE"]):
+        status, after, _ = call("PUT", role_path(edge), body(role), token=a)
+    check("customer-declared roles recorded on the exact revision; review complete with one road frontage",
+          status == 200 and after["reviewComplete"] is True and after["roadFrontageEdges"] == 1
+          and all(e["roleSource"] == "CUSTOMER_DECLARED" for e in after["edges"]), after)
+    land2 = call("PUT", f"/api/v1/projects/{p2}/land", {"exterior": rectangle(14, 12),
+                                                        "expectedCurrentLandRevisionId": land1["landRevisionId"]}, token=a)[1]
+    after2 = call("GET", f"/api/v1/projects/{p2}/land/edges", token=a)[1]
+    check("new land revision: roles NOT carried over; previous reviews offered only as suggestions (lineage)",
+          after2["landRevisionId"] == land2["landRevisionId"] and all(e["role"] == "UNASSIGNED" for e in after2["edges"])
+          and sorted(e["suggestedRole"] for e in after2["edges"]) == ["REAR", "ROAD_FRONTAGE", "SIDE", "SIDE"], after2)
+    check("old revision's review can no longer be written (409)", call("PUT", role_path(ids[0]), body("SIDE"), token=a)[0] == 409)
+
+    # ---- R-04 architect completion, concurrency, consent expiry
+    arch, rec, rid = state.get("architect"), state.get("recipient"), state.get("report")
+    if not check("architect fixtures from phase 9", arch and rec and rid):
+        return
+    atok = call("POST", "/api/v1/auth/login", {"email": arch["email"], "password": arch["password"]})[1]["accessToken"]
+    share = {"recipientId": rec, "reportId": rid, "documentIds": [], "explicitConsent": True, "acknowledgedPolicyVersion": POLICY}
+    req = call("POST", f"/api/v1/projects/{pid}/architect-requests", share, token=a)[1]["requestId"]
+    complete = f"/api/v1/architect/requests/{req}/complete"
+    check("completion before acceptance refused (409)", call("POST", complete, {}, token=atok)[0] == 409)
+    call("POST", f"/api/v1/architect/requests/{req}/respond", {"decision": "ACCEPTED", "note": "ok"}, token=atok)
+    check("customer cannot complete the architect's request (403/404)", call("POST", complete, {}, token=a)[0] in (403, 404))
+    results = []
+    threads = [threading.Thread(target=lambda: results.append(call("POST", complete, {}, token=atok)[0])) for _ in range(3)]
+    [t.start() for t in threads]
+    [t.join() for t in threads]
+    check("concurrent completion: exactly one succeeds, the others are refused", sorted(results)[0] == 200 and results.count(200) == 1
+          and all(s in (404, 409) for s in results if s != 200), results)
+    check("after completion the architect loses access to the request and report (404)",
+          call("GET", f"/api/v1/architect/requests/{req}", token=atok)[0] == 404
+          and call("GET", f"/api/v1/architect/requests/{req}/report", token=atok)[0] == 404)
+    conv = call("GET", f"/api/v1/projects/{pid}/architect-requests/{req}/conversation", token=a)[1]
+    check("customer sees the request as Completed", "Completed" in json.dumps(conv), conv)
+    check("completed request cannot be withdrawn (409)",
+          call("POST", f"/api/v1/projects/{pid}/architect-requests/{req}/withdraw", {"expectedStateVersion": 2}, token=a)[0] == 409)
+    kinds = {n["kind"] for n in call("GET", "/api/v1/notifications?pageSize=100", token=a)[1].get("items", [])}
+    check("customer notified of completion", "ARCHITECT_REQUEST_COMPLETED" in kinds, kinds)
+    # Consent expiry: instance 5181 runs with a 1-minute consent lifetime (same database), 5180 with 30 days.
+    req2 = call("POST", f"/api/v1/projects/{pid}/architect-requests", share, token=a)[1]["requestId"]
+    saved = BASE
+    try:
+        BASE = "http://127.0.0.1:5181"
+        atok81 = call("POST", "/api/v1/auth/login", {"email": arch["email"], "password": arch["password"]})[1]["accessToken"]
+        check("fresh consent visible to the architect (5181)", call("GET", f"/api/v1/architect/requests/{req2}", token=atok81)[0] == 200)
+        time.sleep(70)
+        ids81 = [r.get("requestId") for r in call("GET", "/api/v1/architect/requests", token=atok81)[1].get("requests", [])]
+        check("expired consent: request, report, response and feedback all 404; absent from the list (no disclosure)",
+              call("GET", f"/api/v1/architect/requests/{req2}", token=atok81)[0] == 404
+              and call("GET", f"/api/v1/architect/requests/{req2}/report", token=atok81)[0] == 404
+              and call("POST", f"/api/v1/architect/requests/{req2}/respond", {"decision": "ACCEPTED"}, token=atok81)[0] == 404
+              and req2 not in ids81, ids81)
+    finally:
+        BASE = saved
+    check("the same consent is still within its 30-day lifetime on the default instance (time-based rule)",
+          call("GET", f"/api/v1/architect/requests/{req2}", token=atok)[0] == 200)
+    call("POST", f"/api/v1/projects/{pid}/architect-requests/{req2}/withdraw", {"expectedStateVersion": 1}, token=a)
+
+
 # Phase 8 runs before phase 7, which stops python-services and exercises rate limiting.
-EXTRA_PHASES = [(4, phase4), (5, phase5), (6, phase6), (8, phase8), (9, phase9), (10, phase10), (11, phase11), (7, phase7)]
+EXTRA_PHASES = [(4, phase4), (5, phase5), (6, phase6), (8, phase8), (9, phase9), (10, phase10), (11, phase11), (12, phase12), (7, phase7)]
 
 
 def main():

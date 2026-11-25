@@ -124,8 +124,17 @@ internal sealed class MySqlNotificationStore(BuildMindDbContext context, TimePro
 
 internal sealed class MySqlArchitectPortalStore(
     BuildMindDbContext context, TransactionRunner transactions, CaptainReportBoundary reports, PrivateReportArtifactStore artifacts,
-    TimeProvider time) : IArchitectPortalStore
+    TimeProvider time, Microsoft.Extensions.Configuration.IConfiguration configuration) : IArchitectPortalStore
 {
+    /// <summary>
+    /// Consent lifetime: a request is visible to the architect only while Pending AND within this period after the
+    /// customer granted consent. Default 30 days; bounded 1 minute .. 365 days. Expired consent is indistinguishable from
+    /// a foreign/unknown request (404) so nothing about it is disclosed after expiry.
+    /// </summary>
+    private TimeSpan ConsentLifetime =>
+        TimeSpan.FromMinutes(int.TryParse(configuration["CaptainIntegration:Architect:ConsentLifetimeMinutes"], out var m) && m is >= 1 and <= 525600
+            ? m : 43200);
+
     private DateTimeOffset Now()
     {
         var now = time.GetUtcNow();
@@ -253,8 +262,9 @@ internal sealed class MySqlArchitectPortalStore(
     /// <summary>Requests addressed to this recipient that are not withdrawn. Filters are applied before projection (EF).</summary>
     private async Task<List<ArchitectRequestView>> RequestsAsync(Guid recipientId, Guid? requestId, CancellationToken token)
     {
+        var cutoff = Now() - ConsentLifetime;
         var requests = context.Set<ArchitectRequestRecord>().AsNoTracking()
-            .Where(r => r.RecipientId == recipientId && r.Status == nameof(ArchitectRequestStatus.Pending));
+            .Where(r => r.RecipientId == recipientId && r.Status == nameof(ArchitectRequestStatus.Pending) && r.GrantedAtUtc > cutoff);
         if (requestId is { } id) requests = requests.Where(r => r.RequestId == id);
         var rows = await requests.OrderByDescending(r => r.RequestedAtUtc).Take(200)
             .Select(r => new { r.RequestId, r.ProjectId, r.Status, r.ReportId, r.RequestedAtUtc }).ToListAsync(token).ConfigureAwait(false);
@@ -317,6 +327,33 @@ internal sealed class MySqlArchitectPortalStore(
             return AdminResult<ArchitectRequestView>.Ok(request with { Decision = decision, DecisionNote = note?.Trim(), RespondedAtUtc = now });
         }, token);
     }
+
+    public Task<AdminResult<ArchitectRequestView>> CompleteAsync(Guid architectUserId, Guid recipientId, Guid requestId, CancellationToken token) =>
+        WriteAsync(async inner =>
+        {
+            // Row lock first: concurrent completions/withdrawals serialize; the CAS below admits exactly one transition.
+            await context.Database.ExecuteSqlInterpolatedAsync(
+                $"SELECT request_id FROM architect_requests WHERE request_id = {requestId} FOR UPDATE", inner).ConfigureAwait(false);
+            var request = await RequestForAsync(recipientId, requestId, inner).ConfigureAwait(false);
+            if (request is null) return new AdminResult<ArchitectRequestView>(AdminStatus.NotFound, null, "NOT_FOUND"); // foreign, withdrawn, completed or expired
+            if (request.Decision != "ACCEPTED") return new(AdminStatus.Conflict, null, "REQUEST_NOT_ACCEPTED");
+            var version = await context.Set<ArchitectRequestRecord>().AsNoTracking().Where(r => r.RequestId == requestId)
+                .Select(r => r.StateVersion).SingleAsync(inner).ConfigureAwait(false);
+            var moved = await context.Set<ArchitectRequestRecord>()
+                .Where(r => r.RequestId == requestId && r.StateVersion == version && r.Status == nameof(ArchitectRequestStatus.Pending))
+                .ExecuteUpdateAsync(x => x.SetProperty(r => r.Status, nameof(ArchitectRequestStatus.Completed))
+                    .SetProperty(r => r.StateVersion, version + 1), inner).ConfigureAwait(false);
+            if (moved != 1) return new(AdminStatus.Conflict, null, "STATE_CHANGED");
+            var now = Now();
+            var owner = await context.Set<ArchitectRequestRecord>().AsNoTracking().Where(r => r.RequestId == requestId).Select(r => r.GrantedBy)
+                .SingleAsync(inner).ConfigureAwait(false);
+            await Notify.AddAsync(context, owner, "ARCHITECT_REQUEST_COMPLETED", "Your architect review is complete",
+                "The architect marked your review request as completed; the shared report is no longer accessible to them.",
+                $"/projects/{request.ProjectId}/architect-requests/{requestId}", $"architect-completed:{requestId}", now, inner).ConfigureAwait(false);
+            await AdminAudit.AppendAsync(context, architectUserId, "ARCHITECT_REQUEST_COMPLETED", "ARCHITECT_REQUEST", requestId.ToString("D"),
+                "architect completed review", new { requestId }, now, inner).ConfigureAwait(false);
+            return AdminResult<ArchitectRequestView>.Ok(request with { RequestStatus = nameof(ArchitectRequestStatus.Completed) });
+        }, token);
 
     public Task<AdminResult<FeedbackView>> AddFeedbackAsync(Guid architectUserId, Guid recipientId, Guid requestId, string kind, string body,
         CancellationToken token)

@@ -22,7 +22,7 @@ PY_PORT=8091 nohup bash tools/captain/run-api.sh 5180 > ~/bm-captain/logs/api.lo
 if [ "${RAG:-0}" = 1 ]; then
   # Second API instance whose generation policy uses the M7 constraint service (evidence mode rag-constraints).
   CaptainIntegration__GenerationPolicyFile="$PWD/docs/captain-development/samples/generation-policy.rag.json" \
-    PY_PORT=8091 nohup bash tools/captain/run-api.sh 5181 > ~/bm-captain/logs/api-rag.log 2>&1 &
+    CaptainIntegration__Architect__ConsentLifetimeMinutes=1 PY_PORT=8091 nohup bash tools/captain/run-api.sh 5181 > ~/bm-captain/logs/api-rag.log 2>&1 &
 fi
 for _ in $(seq 1 60); do
   curl -fsS http://127.0.0.1:5180/health >/dev/null 2>&1 && curl -fsS --cacert ~/bm-captain/secrets/pki/server-ca.crt --cert ~/bm-captain/secrets/pki/api-client.crt --key ~/bm-captain/secrets/pki/api-client.key https://127.0.0.1:8091/health >/dev/null 2>&1 && break

@@ -86,7 +86,10 @@ public static class CaptainIntegrationInfrastructure
         services.TryAddScoped<CaptainReportBoundary>();
         services.TryAddScoped<BuildMind.Application.Features.Reports.Services.IReportGenerationBoundaryCandidate>(p => p.GetRequiredService<CaptainReportBoundary>());
         services.TryAddScoped<BuildMind.Application.Features.Reports.Services.IReportReadBoundaryCandidate>(p => p.GetRequiredService<CaptainReportBoundary>());
-        services.TryAddSingleton<BuildMind.Application.Features.Reports.Services.IPreliminaryReportRenderer>(_ => new BuildMind.Infrastructure.Reports.PreliminaryPdfRenderer());
+        // M5 renderer (unchanged) + a Captain appendix of REAL regulation citations from the approved corpus (R-03).
+        services.TryAddSingleton<BuildMind.Application.Features.Reports.Services.IPreliminaryReportRenderer>(p => new EvidenceCitingReportRenderer(
+            new BuildMind.Infrastructure.Reports.PreliminaryPdfRenderer(), p.GetRequiredService<IServiceScopeFactory>(),
+            p.GetRequiredService<Microsoft.Extensions.Logging.ILogger<EvidenceCitingReportRenderer>>()));
         services.TryAddScoped<BuildMind.Application.Features.ArchitectRequests.Services.IArchitectWorkflowBoundaryCandidate, CaptainArchitectBoundary>();
 
         // Survey extraction: integrity-checked blob reads, durable lease-based queue, Python extraction client, reader.
@@ -111,8 +114,10 @@ public static class CaptainIntegrationInfrastructure
                 _ => new UnconfiguredAiEditProposalPort(),
             });
         services.TryAddScoped<AiProposalRejectionContext>();
+        services.TryAddScoped(p => new LandEdgeRoleService(p.GetRequiredService<BuildMind.Infrastructure.Persistence.BuildMindDbContext>(),
+            p.GetRequiredService<BuildMind.Infrastructure.Persistence.Transactions.TransactionRunner>(), p.GetService<TimeProvider>() ?? TimeProvider.System));
         services.TryAddScoped(p => new CaptainReadModels(p.GetRequiredService<BuildMind.Infrastructure.Persistence.BuildMindDbContext>(),
-            p.GetService<TimeProvider>() ?? TimeProvider.System));
+            p.GetService<TimeProvider>() ?? TimeProvider.System, new SurveyBlobReader(p.GetRequiredService<IConfiguration>())));
 
         // Administration: fresh principal reads, store with audit chain, proposal appliers, email.
         services.TryAddScoped<IPrincipalDirectory, MySqlPrincipalDirectory>();

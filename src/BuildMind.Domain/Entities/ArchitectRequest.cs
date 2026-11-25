@@ -1,7 +1,7 @@
 namespace BuildMind.Domain.Entities;
 
 // Provisional internal lifecycle. External acceptance/decline and withdrawal eligibility await G12.
-public enum ArchitectRequestStatus { Pending, Withdrawn }
+public enum ArchitectRequestStatus { Pending, Withdrawn, Completed }
 
 /// <summary>Immutable assistance request. Neither creation nor withdrawal dispatches any documents.</summary>
 public sealed class ArchitectRequest

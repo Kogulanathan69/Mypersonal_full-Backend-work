@@ -31,6 +31,24 @@ public sealed class CaptainCompletionEndpointModule : IApiEndpointModule
         project.MapGet("/surveys", (string projectId, HttpContext c, PlanningAccess a, CaptainReadModels r, CancellationToken t) =>
             Owned(projectId, c, a, t, async pid => Results.Ok(await r.SurveysAsync(pid, t))))
             .WithName("ListProjectSurveys").Produces<SurveyListDto>();
+        project.MapGet("/surveys/{surveyId}/file", (string projectId, string surveyId, HttpContext c, PlanningAccess a, CaptainReadModels r,
+            CancellationToken t) => Owned(projectId, c, a, t, async pid =>
+            {
+                if (!P.TryId(surveyId, out var id)) return P.Invalid("surveyId");
+                var file = await r.SurveyFileAsync(pid, id, t);
+                if (file is null) return NotFound();
+                if (file.Content is null)
+                    return Problem(file.FailureCode == "SURVEY_FILE_MISSING" ? 404 : 503, file.FailureCode ?? "SURVEY_FILE_UNAVAILABLE");
+                c.Response.Headers["X-Content-SHA256"] = file.Sha256Hash;
+                // Only the two accepted upload types are ever served; anything else is sent as opaque bytes.
+                var media = file.MediaType is "application/pdf" or "image/png" or "image/jpeg" ? file.MediaType : "application/octet-stream";
+                return Results.File(file.Content, media, SafeName(file.OriginalFileName, media));
+            }))
+            .WithName("DownloadSurveyFile").Produces(200, contentType: "application/octet-stream");
+        project.MapGet("/land/edges", (string projectId, HttpContext c, PlanningAccess a, LandEdgeRoleService roles, CancellationToken t) =>
+            Owned(projectId, c, a, t, async pid => await roles.GetAsync(pid, t) is { } v ? Results.Ok(v) : NotFound()))
+            .WithName("ListLandEdges").Produces<LandEdgeListDto>();
+        project.MapPut("/land/edges/{edgeId}/role", SetEdgeRoleAsync).WithName("SetLandEdgeRole").Produces<LandEdgeListDto>();
         project.MapGet("/land/revisions", (string projectId, HttpContext c, PlanningAccess a, CaptainReadModels r, CancellationToken t) =>
             Owned(projectId, c, a, t, async pid => Results.Ok(await r.LandRevisionsAsync(pid, t))))
             .WithName("ListLandRevisions").Produces<LandRevisionListDto>();
@@ -126,6 +144,28 @@ public sealed class CaptainCompletionEndpointModule : IApiEndpointModule
         return P.Map(result, P.Revision, created: true);
     }
 
+    /// <summary>Customer review of one boundary edge's role on the CURRENT land revision (UNASSIGNED clears it).</summary>
+    private static async Task<IResult> SetEdgeRoleAsync(string projectId, string edgeId, HttpContext context, PlanningAccess access,
+        LandEdgeRoleService roles, CancellationToken token)
+    {
+        NoStore(context);
+        if (!P.TryId(projectId, out var project) || !P.TryId(edgeId, out var edge)) return P.Invalid("id");
+        var body = await P.ReadAsync<EdgeRoleHttpRequest>(context, token);
+        if (body.Failure is not null) return body.Failure;
+        var request = body.Value!;
+        if (request.ExpectedLandRevisionId is not { } expected || string.IsNullOrWhiteSpace(request.Role)) return P.Invalid("request");
+        var (status, actor, version) = await access.AuthorizeAsync(project, token);
+        if (status != PlanningStatus.Success) return P.Map(new PlanningResult<object>(status), o => o);
+        return await roles.SetAsync(project, actor, version, expected, edge, request.Role, request.EvidenceNote, token) switch
+        {
+            EdgeRoleWriteStatus.Written => Results.Ok(await roles.GetAsync(project, token)),
+            EdgeRoleWriteStatus.InvalidRole => Problem(400, "EDGE_ROLE_INVALID"),
+            EdgeRoleWriteStatus.StaleLandRevision => Problem(409, "STALE_LAND_REVISION"),
+            EdgeRoleWriteStatus.Denied => NotFound(),
+            _ => NotFound(),
+        };
+    }
+
     private static async Task<IResult> Owned(string projectId, HttpContext context, PlanningAccess access, CancellationToken token,
         Func<Guid, Task<IResult>> action)
     {
@@ -137,6 +177,15 @@ public sealed class CaptainCompletionEndpointModule : IApiEndpointModule
 
     private static IResult NotFound() => Problem(404, "NOT_FOUND");
 
+    /// <summary>ASCII-safe attachment name (no path, quotes or control characters); falls back to a generic name.</summary>
+    internal static string SafeName(string original, string media)
+    {
+        var name = new string(Path.GetFileName(original ?? "").Where(ch => char.IsAsciiLetterOrDigit(ch) || ch is '.' or '-' or '_').ToArray());
+        if (name.Length is 0 or > 120 || name.StartsWith('.'))
+            name = "survey" + (media == "application/pdf" ? ".pdf" : media == "image/png" ? ".png" : media == "image/jpeg" ? ".jpg" : ".bin");
+        return name;
+    }
+
     private static void NoStore(HttpContext context) => context.Response.Headers.CacheControl = "no-store";
 
     private static IResult Problem(int status, string code) => Results.Problem(statusCode: status,
@@ -144,6 +193,7 @@ public sealed class CaptainCompletionEndpointModule : IApiEndpointModule
         extensions: new Dictionary<string, object?> { [ProblemDetailsDefaults.CodeExtension] = code });
 }
 
+public sealed record EdgeRoleHttpRequest(Guid? ExpectedLandRevisionId, string? Role, string? EvidenceNote);
 public sealed record RevertPlanHttpRequest(Guid? ExpectedBaseRevisionId, Guid? TargetRevisionId);
 public sealed record DependencyCheckDto(string Name, string Status, string? Description, double DurationMs);
 public sealed record DependencyReportDto(string Status, double TotalDurationMs, IReadOnlyList<DependencyCheckDto> Checks);

@@ -64,6 +64,8 @@ public sealed class BuildMindMigrationTests(ITestOutputHelper output)
         ("20261124190404_AddCatalogueAndArchitectPortal", ["architect_feedback", "architect_profiles", "architect_request_responses", "notification_preferences", "notifications", "outbox_messages", "requirement_catalogue_versions"],
             ["fk_architect_feedback_requests=RESTRICT", "fk_architect_feedback_users=RESTRICT", "fk_architect_profiles_users_user_id=RESTRICT", "fk_architect_profiles_users_verified_by=RESTRICT", "fk_architect_request_responses_requests=RESTRICT", "fk_architect_request_responses_users=RESTRICT", "fk_notification_preferences_users=RESTRICT", "fk_notifications_users_user_id=RESTRICT", "fk_outbox_messages_users_recipient=RESTRICT", "fk_requirement_catalogue_versions_created_by=RESTRICT", "fk_requirement_catalogue_versions_published_by=RESTRICT"]),
         ("20261125030045_AddLandCoordinateFrame", [], []),
+        ("20261125103924_AddLandEdgeRoles", ["land_edge_roles"],
+            ["fk_land_edge_roles_land_revisions=RESTRICT", "fk_land_edge_roles_projects_project_id=RESTRICT", "fk_land_edge_roles_users_reviewed_by=RESTRICT"]),
     ];
 
     private static readonly string[] ExpectedMigrations = [.. M4Migrations, .. CaptainMigrations.Select(m => m.Migration)];

@@ -85,6 +85,11 @@ public sealed class PortalEndpointModule : IApiEndpointModule
                 if (body.Failure is not null) return body.Failure;
                 return A.Map(await s.RespondAsync(p.UserId, profile.RecipientId, id, body.Value!.Decision ?? "", body.Value.Note, t), x => x);
             }));
+        portal.MapPost("/requests/{requestId}/complete", (string requestId, HttpContext c, ICurrentUser u, IPrincipalDirectory d, IArchitectPortalStore s,
+            CancellationToken t) => AsArchitect(c, u, d, s, t, async (p, profile) =>
+                !P.TryId(requestId, out var id) ? P.Invalid("requestId")
+                : A.Map(await s.CompleteAsync(p.UserId, profile.RecipientId, id, t), x => x)))
+            .WithName("CompleteArchitectRequest");
         portal.MapPost("/requests/{requestId}/feedback", (string requestId, HttpContext c, ICurrentUser u, IPrincipalDirectory d, IArchitectPortalStore s,
             CancellationToken t) => AsArchitect(c, u, d, s, t, async (p, profile) =>
             {

@@ -174,3 +174,30 @@ internal sealed class PlanValidationEvidenceRecordConfiguration : IEntityTypeCon
         builder.HasIndex(e => new { e.ProjectId, e.PlanId }).HasDatabaseName("ix_plan_validation_evidence_project_plan");
     }
 }
+
+internal sealed class LandEdgeRoleRecordConfiguration : IEntityTypeConfiguration<LandEdgeRoleRecord>
+{
+    public void Configure(EntityTypeBuilder<LandEdgeRoleRecord> builder)
+    {
+        builder.ToTable("land_edge_roles");
+        builder.HasKey(r => r.Id).HasName("pk_land_edge_roles");
+        builder.Property(r => r.Id).HasColumnName("id").ValueGeneratedNever();
+        builder.Property(r => r.ProjectId).HasColumnName("project_id").IsRequired();
+        builder.Property(r => r.LandRevisionId).HasColumnName("land_revision_id").IsRequired();
+        builder.Property(r => r.EdgeId).HasColumnName("edge_id").IsRequired();
+        builder.Property(r => r.Role).HasColumnName("role").HasMaxLength(16).IsRequired();
+        builder.Property(r => r.EvidenceSource).HasColumnName("evidence_source").HasMaxLength(32).IsRequired();
+        builder.Property(r => r.EvidenceNote).HasColumnName("evidence_note").HasMaxLength(500);
+        builder.Property(r => r.ReviewedBy).HasColumnName("reviewed_by").IsRequired();
+        builder.Property(r => r.ReviewedAtUtc).HasColumnName("reviewed_at_utc").IsRequired();
+        builder.HasOne<ProjectRecord>().WithMany().HasForeignKey(r => r.ProjectId)
+            .HasConstraintName("fk_land_edge_roles_projects_project_id").OnDelete(DeleteBehavior.Restrict);
+        builder.HasOne<LandRevisionRecord>().WithMany().HasForeignKey(r => r.LandRevisionId)
+            .HasConstraintName("fk_land_edge_roles_land_revisions").OnDelete(DeleteBehavior.Restrict);
+        builder.HasOne<UserRecord>().WithMany().HasForeignKey(r => r.ReviewedBy)
+            .HasConstraintName("fk_land_edge_roles_users_reviewed_by").OnDelete(DeleteBehavior.Restrict);
+        builder.HasIndex(r => new { r.LandRevisionId, r.EdgeId }).IsUnique().HasDatabaseName("ux_land_edge_roles_land_revision_id_edge_id");
+        builder.HasIndex(r => r.ProjectId).HasDatabaseName("ix_land_edge_roles_project_id");
+        builder.HasIndex(r => r.ReviewedBy).HasDatabaseName("ix_land_edge_roles_reviewed_by");
+    }
+}
