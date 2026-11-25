@@ -471,3 +471,19 @@ The Captain DB is intact (37 tables, never reset).
 3. Docker email fix;
 4. containers with RAG;
 5. final regression and documents.
+
+### Final full-backend order: closing state (2026-11-25)
+
+**Commits:**
+
+| Commit | Content |
+|---|---|
+| `08221ac` | RAG |
+| `babac7c` | operations + contracts |
+| `00cfbcb` | AI |
+| `9adfb97` | containers (last code commit) |
+| final | docs |
+
+**Final regression at `9adfb97`:** 3645 tests, all exit 0 (build, unit, python, RAG, real corpus, persistence with the stack running, mTLS ×2, RAG acceptance). The host stopped the run for memory pressure during smoke_admin, so the process-stack journey was not rerun at `9adfb97`. Rerun with `tools/captain/final-regression.sh` (copy it to WSL and run it).
+
+**Open actionable:** R-01…R-05; see FINAL-REMAINING-BLOCKERS-REGISTER.

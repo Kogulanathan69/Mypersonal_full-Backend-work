@@ -47,3 +47,19 @@
 | S-7 | `NU1903`-style advisories can appear later. Audits are point-in-time (2026-11-25). | Info | Re-run in CI |
 
 **Not performed:** independent security review, penetration testing, DAST/fuzzing, threat-model sign-off and dependency licence review (the G03 MySQL provider licence decision is pending).
+
+## Final full-backend order additions (2026-11-25, commit `9adfb97`)
+
+| Control | Verification |
+|---|---|
+| API → RAG internal **mTLS** (server CA only, hostname check, client certificate; uvicorn `--ssl-cert-reqs 2`) | `MTLS_TARGET=rag mtls_tests.py` 12/12; containers: no certificate → refused, with certificate → 200 |
+| Corpus integrity (identity pins, PDF/record SHA-256, tamper detection) | staging tool + verbatim loader; tampered record refused (rag_acceptance) |
+| Session revocation under the M1 lock order (users row first; M1 family-revocation SQL) | journey 11: the revoked session cannot refresh; another user cannot revoke it (404) |
+| Owner scoping of every new project route; admin routes re-read privileges | journey 11: cross-user 404, unauthenticated 401, customer → admin 403 |
+| AI: deterministic ambiguity guard; LLM never writes geometry; transparency without stored data | benchmark: 0 unsafe acceptances in 3 runs; LlmEditIntentTests 17/17 |
+| SMTP in containers: STARTTLS **required**, platform certificate validation (CA via `SSL_CERT_FILE`), policy unchanged | container journey 216/216 incl. email |
+| Container hardening: RAG and LLM run as the data owner (no widened host permissions), read-only roots, internal network | `docker inspect` / compose |
+| Live contract capture stores **structure only** (no values, tokens, ids or emails); the committed OpenAPI was scanned for emails/JWTs: 0 | `contract_capture.py`; scan |
+| Connection exhaustion (availability) | fixed; peak 14 connections under realistic concurrency |
+
+Finding added: **S-8**. Several new routes return 404 for both "not yours" and "does not exist", by design (no existence disclosure). Clients must not rely on distinguishing them.

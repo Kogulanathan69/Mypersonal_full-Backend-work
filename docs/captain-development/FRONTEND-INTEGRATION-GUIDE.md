@@ -2,7 +2,7 @@
 
 Audience: the Angular client team. Scope: the local Development stack only. **Production is NO-GO**; no production URL, origin or credential exists, and nothing here approves one.
 
-- **Contract source:** `openapi.captain-dev.json` in this folder, exported from the running Development API (`/swagger/v1/swagger.json`, 57 operations). Regenerate it after backend changes; do not hand-edit.
+- **Contract source:** `openapi.captain-dev.json` (142 operations, exported from the running API and enriched with live-observed response schemas) and the generated TypeScript declarations `contracts/buildmind-api.d.ts` (`ApiOperations["METHOD /path"]` gives path, query, body and response types; strict-tsc clean). Per-operation live evidence is in FINAL-API-ACCEPTANCE-MATRIX.md. Do not hand-edit; regenerate with `tools/captain/openapi_enrich.py` and `openapi_to_ts.py`.
 - **Route status:** see MASTER-API-ENDPOINT-MATRIX.md.
 
 ## 1. Base URL, transport and CORS
@@ -93,3 +93,73 @@ On 409, reload and show the user the newer state. Never silently overwrite.
 | Validation | When `regulatoryEvidenceStatus` is `SYNTHETIC_FIXTURE`, label it as synthetic development rules, not real regulations |
 | Vastu | Never displayed (internal and nonblocking) |
 | Cost / 3D | Not part of the MVP; do not show estimates |
+
+## 7. Final-order additions
+
+Each portal is listed with the routes the frontend must not guess.
+
+### Customer: history and recovery
+
+All are owner-scoped: another user's id returns 404.
+
+| Route | Response |
+|---|---|
+| `GET /projects/{projectId}/surveys` | `SurveyListDto` |
+| `GET /land/revisions`, `/land/revisions/{id}` | `LandRevisionListDto` / `LandRevisionDetailDto`; `isCurrent`, `georeferenced`, `geometryDigest` |
+| `GET /requirements/revisions`, `/requirements/revisions/{id}` | `RequirementRevisionListDto` / `RequirementRevisionDetailDto` |
+| `GET /generation-jobs` | `GenerationJobListDto` |
+| `GET /plans/{planId}/candidates`, `/candidates/{id}` | `EditCandidateListDto` / `EditCandidateDetailDto`; `status`, `expired`, `expiresAtUtc` |
+| `GET /plans/{planId}/confirmation` | `PlanConfirmationDto`; 404 when not confirmed |
+
+**Undo/redo:**
+- Call `POST /plans/{planId}/revert` with `{ expectedBaseRevisionId, targetRevisionId }`.
+- It returns 201 with the new head revision.
+- History is never rewritten: undo appends a revision equal to an earlier one, and redo appends the later one again.
+- If the head has moved, it returns 409: reload, then retry.
+
+### Sessions
+
+| Route | Behaviour |
+|---|---|
+| `GET /users/me/sessions` | `SessionListDto` (`sessionId`, `active`, start, last refresh, expiries; no token material) |
+| `DELETE /users/me/sessions/{sessionId}` | 204. That session's refresh token stops working at once. An access token it already issued stays valid until it expires (short-lived), so for immediate global revocation use `POST /auth/logout-all`. |
+
+### AI edits
+
+`POST /plans/{planId}/ai-edit/proposals` with `{ expectedBaseRevisionId, instruction }`.
+
+| Outcome | Response |
+|---|---|
+| Success | 201 `{ candidate, proposalSource ("LLM:<model>" or "RULE_BASED_LOCAL"), applied: false, proposedCommand: { commandType, targetId, payload } }` |
+| Model refused or instruction ambiguous | 422 with a specific `code`: `AMBIGUOUS_TARGET`, `MODEL_DECLINED_OR_INVALID`, `INSTRUCTION_NOT_SUPPORTED`, `MODEL_OUTPUT_INVALID` |
+| Server rejected the resulting geometry | 422 `VALIDATION_EVIDENCE_INVALID` with `proposedCommand`, so the UI can explain what was attempted |
+| Stale base revision | 409 |
+| Provider down or not configured | 503 `AI_PROVIDER_UNAVAILABLE` / `AI_PROVIDER_NOT_CONFIGURED` |
+
+- Nothing is applied until the customer calls `POST …/candidates/{candidateId}/apply`. Show warnings and require acknowledgement first.
+- With the local model, show progress while you wait: accepted proposals take about 6–50 s.
+
+### Regulation evidence
+
+`POST /regulations/retrieve` with `{ query, maxResults?, jurisdiction?, documentIds? }` returns:
+- `status`: `EVIDENCE_FOUND`, `AMBIGUOUS_EVIDENCE`, `NO_MATCHING_EVIDENCE`, `INSUFFICIENT_JURISDICTION_EVIDENCE` or `INSUFFICIENT_SOURCE_EVIDENCE`;
+- `passages[]`, each with `documentId`, `sourceTitle`, `jurisdiction`, `page`, `startChar`, `endChar`, `excerpt`, `evidenceStatus` and `warnings`;
+- `legalStatusVerified: false`, `answerGenerated: false`, and a `disclaimer` that must be shown.
+
+Never present passages as approval or as the applicable law for the parcel.
+
+### Admin
+
+The admin portal re-reads privileges on every request.
+
+| Route | Response |
+|---|---|
+| `GET /admin/projects/{projectId}` | `AdminProjectDetailDto` (workflow counts) |
+| `GET /admin/system/workers` | `WorkerStatusListDto` (heartbeats; `healthy`) |
+| `GET /admin/system/dependencies` | `DependencyReportDto` (mysql/python/rag status and duration) |
+
+A non-admin caller gets 403 `PERMISSION_DENIED`.
+
+### Large uploads
+
+Bodies over 1 MiB are refused with 413 `PAYLOAD_TOO_LARGE`. Browsers that do not send `Expect: 100-continue` may see a connection reset instead of a readable 413, so check the file size before uploading.
