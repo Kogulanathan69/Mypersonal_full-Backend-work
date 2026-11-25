@@ -11,8 +11,11 @@ import ssl
 import sys
 
 P = os.path.expanduser("~/bm-captain/secrets/pki")
-TOKEN = open(os.path.expanduser("~/bm-captain/secrets/python-internal.token")).read().strip()
-HOST, PORT = "127.0.0.1", 8091
+# MTLS_TARGET=rag runs the same suite against rag-service (8092); default python-services (8091).
+TARGET = os.environ.get("MTLS_TARGET", "python")
+TOKEN = open(os.path.expanduser(f"~/bm-captain/secrets/{'rag' if TARGET == 'rag' else 'python'}-internal.token")).read().strip()
+HOST, PORT = "127.0.0.1", (8092 if TARGET == "rag" else 8091)
+PROBE_PATH = "/internal/v1/regulations/search" if TARGET == "rag" else "/internal/v1/land/validate"
 results = []
 
 
@@ -78,7 +81,7 @@ check("plaintext HTTP to the TLS port gets no service response", plain_status in
 ctx = context()
 with socket.create_connection((HOST, PORT), timeout=10) as raw, ctx.wrap_socket(raw, server_hostname=HOST) as tls:
     check("negotiated TLS 1.2+ with the expected server identity",
-          tls.version() in ("TLSv1.2", "TLSv1.3") and ("DNS", "python-services") in tls.getpeercert()["subjectAltName"], tls.version())
+          tls.version() in ("TLSv1.2", "TLSv1.3") and ("DNS", ("rag-service" if TARGET == "rag" else "python-services")) in tls.getpeercert()["subjectAltName"], tls.version())
 
 
 def internal(token):
@@ -86,7 +89,7 @@ def internal(token):
     headers = {"Content-Type": "application/json"}
     if token:
         headers["X-BuildMind-Internal-Token"] = token
-    conn.request("POST", "/internal/v1/land/validate", body="{}", headers=headers)
+    conn.request("POST", PROBE_PATH, body="{}", headers=headers)
     status = conn.getresponse().status
     conn.close()
     return status
@@ -94,7 +97,8 @@ def internal(token):
 
 check("valid mTLS but missing internal token rejected (401)", internal(None) == 401)
 check("valid mTLS but wrong internal token rejected (401)", internal("x" * 40) == 401)
-check("valid mTLS + valid token reaches validation (422 for an empty body, not 401)", internal(TOKEN) == 422)
+status = internal(TOKEN)
+check(f"valid mTLS + valid token reaches request validation (4xx for an empty body, not 401): {status}", status in (400, 422), status)
 
 print(f"\nSUMMARY: {sum(results)} passed, {len(results) - sum(results)} failed")
 sys.exit(0 if all(results) else 1)

@@ -31,13 +31,14 @@ leaf() { # name subject ca eku san days
 issue_leaves() {
   leaf python-server "python-services" server-ca serverAuth "subjectAltName=DNS:localhost,DNS:python-services,IP:127.0.0.1"
   leaf api-client "buildmind-api" client-ca clientAuth "subjectAltName=DNS:buildmind-api"
+  leaf rag-server "rag-service" server-ca serverAuth "subjectAltName=DNS:localhost,DNS:rag-service,IP:127.0.0.1"
 }
 
 case "${1:-init}" in
   init)
     ca server-ca "BuildMind Captain internal server CA (local)"
     ca client-ca "BuildMind Captain internal client CA (local)"
-    [ -s python-server.crt ] && [ -s api-client.crt ] || issue_leaves
+    [ -s python-server.crt ] && [ -s api-client.crt ] && [ -s rag-server.crt ] || issue_leaves
     ;;
   rotate)
     issue_leaves

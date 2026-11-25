@@ -53,7 +53,12 @@ if [ -n "${PY_PORT:-}" ] && [ -s "$S/python-internal.token" ]; then
   export Services__Python__AuthToken="$(cat "$S/python-internal.token")" Services__Python__TimeoutSeconds=30
 fi
 if [ -n "${RAG_PORT:-}" ] && [ -s "$S/rag-internal.token" ]; then
-  export Services__Rag__Enabled=true Services__Rag__BaseUrl="http://127.0.0.1:$RAG_PORT"
+  if [ -s "$S/pki/rag-server.crt" ] && [ "${RAG_MTLS:-1}" = 1 ]; then
+    export Services__Rag__Enabled=true Services__Rag__BaseUrl="https://127.0.0.1:$RAG_PORT"
+    export CaptainIntegration__PythonMtls__ServerCaFile="$S/pki/server-ca.crt" CaptainIntegration__PythonMtls__ClientCertFile="$S/pki/api-client.crt" CaptainIntegration__PythonMtls__ClientKeyFile="$S/pki/api-client.key"
+  else
+    export Services__Rag__Enabled=true Services__Rag__BaseUrl="http://127.0.0.1:$RAG_PORT"
+  fi
   export Services__Rag__AuthToken="$(cat "$S/rag-internal.token")"
   export Regulations__Retrieval__Enabled=true
 fi

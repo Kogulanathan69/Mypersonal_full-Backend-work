@@ -3,6 +3,7 @@
 Synthetic users and data only; tokens/passwords are never printed. Exit code 0 only when every check passes.
 Usage: python3 smoke_journey.py [base_url] [--phases 2,3,4,5,6]
 """
+import contract_capture
 import json
 import secrets
 import sys
@@ -25,6 +26,12 @@ def call(method, path, body=None, token=None, raw=None, content_type=None, heade
     if token:
         hdrs["Authorization"] = "Bearer " + token
     request = urllib.request.Request(BASE + path, data=data, method=method, headers=hdrs)
+    result = _send(request)
+    contract_capture.record(method, path, result[0], body, result[1], result[2].get("Content-Type", "") if result[2] else "")
+    return result
+
+
+def _send(request):
     try:
         with urllib.request.urlopen(request, timeout=90) as response:
             payload = response.read()
@@ -277,12 +284,42 @@ def phase5():
     status, body, _ = call("GET", "/health/ready")
     rag = {c["name"]: c for c in body.get("checks", [])}.get("rag", {}) if isinstance(body, dict) else {}
     print(f"     rag readiness entry: {rag}")
-    check("readiness reports rag truthfully (not Healthy without a corpus)", rag.get("status") in ("Degraded", "Unhealthy"), rag)
+    import os
+    corpus = os.path.exists(os.path.expanduser("~/bm-captain/rag-corpus/STAGING-RECEIPT.json")) and os.environ.get("RAG_CORPUS", "1") == "1"
     status, _, _ = call("POST", "/api/v1/regulations/retrieve", {"query": "rear setback"})
     check("regulation retrieval requires authentication (401)", status == 401, status)
-    status, body, _ = call("POST", "/api/v1/regulations/retrieve", {"query": "rear setback", "maxResults": 3}, token=a)
-    check("retrieval fails closed without a verified corpus (503, no passages)",
-          status == 503 and not (isinstance(body, dict) and body.get("passages")), body)
+    if not corpus:
+        check("readiness reports rag truthfully (not Healthy without a corpus)", rag.get("status") in ("Degraded", "Unhealthy"), rag)
+        status, body, _ = call("POST", "/api/v1/regulations/retrieve", {"query": "rear setback", "maxResults": 3}, token=a)
+        check("retrieval fails closed without a verified corpus (503, no passages)",
+              status == 503 and not (isinstance(body, dict) and body.get("passages")), body)
+    else:
+        approved = {"14e829328be1d1caf0767c04532d8ad3aaccdfb30cad9d3a83501d83c87ef0f7",
+                    "e480ad2ffcf4ff08635a322e800703cc0fc191757b0fbe9cde12c0c7313a55f3",
+                    "eee5bb470d14649f626af2ff2958026f51843065272856015c1fea66d7d834c7"}
+        check("readiness: rag Healthy over mTLS with the verified approved corpus", rag.get("status") == "Healthy", rag)
+        status, body, _ = call("POST", "/api/v1/regulations/retrieve",
+                               {"query": "minimum rear setback for residential buildings", "maxResults": 3}, token=a)
+        passages = body.get("passages", []) if isinstance(body, dict) else []
+        check("real retrieval returns cited evidence from the approved corpus (EVIDENCE_FOUND)",
+              status == 200 and body.get("status") == "EVIDENCE_FOUND" and passages
+              and all(p["documentId"] in approved and isinstance(p["page"], int) and p["page"] >= 1
+                      and p["excerpt"] and p["endChar"] > p["startChar"] for p in passages), body)
+        check("retrieval never claims legal status or generates answers",
+              body.get("legalStatusVerified") is False and body.get("answerGenerated") is False, body)
+        status, body, _ = call("POST", "/api/v1/regulations/retrieve",
+                               {"query": "maximum plot coverage", "maxResults": 2,
+                                "jurisdiction": "Colombo Municipal Council planning area"}, token=a)
+        check("jurisdiction filter returns only that authority's source",
+              status == 200 and body.get("passages")
+              and {p["jurisdiction"] for p in body["passages"]} == {"Colombo Municipal Council planning area"}, body)
+        status, body, _ = call("POST", "/api/v1/regulations/retrieve", {"query": "weather forecast for tomorrow", "maxResults": 2}, token=a)
+        check("unsupported query rejected without passages (NO_MATCHING_EVIDENCE)",
+              status == 200 and body.get("status") == "NO_MATCHING_EVIDENCE" and not body.get("passages"), body)
+        status, body, _ = call("POST", "/api/v1/regulations/retrieve",
+                               {"query": "building height", "jurisdiction": "Atlantis", "maxResults": 2}, token=a)
+        check("unknown jurisdiction is reported, never guessed (INSUFFICIENT_JURISDICTION_EVIDENCE)",
+              status == 200 and body.get("status") == "INSUFFICIENT_JURISDICTION_EVIDENCE" and not body.get("passages"), body)
 
     # Second API instance: generation policy evidence mode "rag-constraints".
     saved_base, BASE = BASE, "http://127.0.0.1:5181"
@@ -302,7 +339,7 @@ def phase5():
         status, body, _ = call("POST", f"/api/v1/projects/{pid}/generation-jobs", {
             "idempotencyKey": key, "expectedLandRevisionId": land["landRevisionId"],
             "expectedRequirementsRevisionId": req["revisionId"]}, token=t)
-        check("rag-constraints generation fails closed when the constraint service is unavailable (503)",
+        check("rag-constraints generation fails closed without a reviewed constraint table (503)",
               status == 503 and code_of(body) == "DEPENDENCY_UNAVAILABLE", body)
         status, again, _ = call("POST", f"/api/v1/projects/{pid}/generation-jobs", {
             "idempotencyKey": key, "expectedLandRevisionId": land["landRevisionId"],

@@ -74,6 +74,14 @@ internal sealed partial class DisposableMySqlDatabase : IAsyncDisposable
 
     public async ValueTask DisposeAsync()
     {
+        // Each disposable database has its own connection string, hence its own provider pool. Without clearing it,
+        // idle pooled server connections to the dropped database stay open until the provider's idle timeout and
+        // accumulate across the suite (observed: max_connections 151 exhausted -> connection-gate timeouts).
+        await using (var pooled = new MySqlConnection(ConnectionString))
+        {
+            MySqlConnection.ClearPool(pooled);
+        }
+
         await ExecuteAsync(_serverConnectionString, $"DROP DATABASE IF EXISTS `{RequireDisposableName(Name)}`;");
     }
 

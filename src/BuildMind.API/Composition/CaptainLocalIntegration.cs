@@ -120,6 +120,13 @@ public static class CaptainLocalIntegration
         if (InternalMtls.IsConfigured(builder.Configuration))
             services.AddHttpClient<BuildMind.Infrastructure.Integration.PythonServiceClient>()
                 .ConfigurePrimaryHttpMessageHandler(provider => InternalMtls.CreatePythonHandler(provider.GetRequiredService<IConfiguration>()));
+        // API -> rag-service over the same internal mTLS trust (server CA only, hostname check, client certificate) when
+        // the RAG base address is https. A plain-http RAG address keeps the token-only transport (no silent downgrade:
+        // an https address always gets this handler).
+        if (InternalMtls.IsConfigured(builder.Configuration)
+            && (builder.Configuration["Services:Rag:BaseUrl"] ?? "").StartsWith("https://", StringComparison.OrdinalIgnoreCase))
+            services.AddHttpClient<BuildMind.Infrastructure.Integration.RagServiceClient>()
+                .ConfigurePrimaryHttpMessageHandler(provider => InternalMtls.CreatePythonHandler(provider.GetRequiredService<IConfiguration>()));
 
         // LLM provider transport (OpenAI-compatible; local llama.cpp in Development). No proxy, no redirects, no logging.
         services.AddHttpClient(OpenAiCompatibleEditProposalPort.ClientName)
