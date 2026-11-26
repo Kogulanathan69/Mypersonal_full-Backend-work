@@ -16,7 +16,7 @@ internal sealed class PlanningComputeClient(PythonServiceClient python) : IPlann
 {
     private const string LandSchema = "captain-land-validation/1";
     private const string RunSchema = "captain-generation-run/1";
-    private const string PlanSchema = "captain-plan-validation/1";
+    private const string PlanSchema = "captain-plan-validation/2";
 
     public async Task<LandCheckResult> ValidateLandAsync(Guid projectId, Guid landRevisionId, MetricLandDto land, CancellationToken token)
     {
@@ -78,18 +78,106 @@ internal sealed class PlanningComputeClient(PythonServiceClient python) : IPlann
 
     public async Task<PlanCheckResult> ValidatePlanAsync(PlanCheckRequest request, CancellationToken token)
     {
-        var wire = await python.PostJsonAsync<object, PlanWire>("internal/v1/plans/validate",
+        if (string.IsNullOrWhiteSpace(request.GeometryJson)
+            || string.IsNullOrWhiteSpace(request.GeometryHash))
+            throw new DependencyFailureException(PythonServiceClient.DependencyName, DependencyFailureKind.MalformedResponse);
+
+        var utf8 = new System.Text.UTF8Encoding(false, true);
+        string computedHash;
+
+        try
+        {
+            var bytes = utf8.GetBytes(request.GeometryJson);
+            if (bytes.Length > 1048576)
+                throw new DependencyFailureException(PythonServiceClient.DependencyName, DependencyFailureKind.MalformedResponse);
+
+            computedHash = "sha256:" + Convert.ToHexStringLower(
+                System.Security.Cryptography.SHA256.HashData(bytes));
+        }
+        catch (System.Text.EncoderFallbackException)
+        {
+            throw new DependencyFailureException(PythonServiceClient.DependencyName, DependencyFailureKind.MalformedResponse);
+        }
+
+        if (!string.Equals(computedHash, request.GeometryHash, StringComparison.Ordinal))
+            throw new DependencyFailureException(PythonServiceClient.DependencyName, DependencyFailureKind.MalformedResponse);
+
+        try
+        {
+            var options = BuildMind.Application.Features.PlanEditor.Contracts.PlanEditorJson.StrictOptions;
+
+            var exactGeometry = JsonSerializer.Deserialize<
+                BuildMind.Application.Features.PlanEditor.Contracts.PlanGeometryDto>(
+                    request.GeometryJson, options);
+
+            if (exactGeometry is null
+                || request.Geometry is null
+                || exactGeometry.ProjectId != request.ProjectId
+                || exactGeometry.LandRevisionId != request.LandRevisionId
+                || !JsonSerializer.SerializeToUtf8Bytes(exactGeometry, options)
+                    .AsSpan().SequenceEqual(
+                        JsonSerializer.SerializeToUtf8Bytes(request.Geometry, options)))
+            {
+                throw new DependencyFailureException(
+                    PythonServiceClient.DependencyName,
+                    DependencyFailureKind.MalformedResponse);
+            }
+        }
+        catch (JsonException)
+        {
+            throw new DependencyFailureException(
+                PythonServiceClient.DependencyName,
+                DependencyFailureKind.MalformedResponse);
+        }
+        catch (ArgumentException)
+        {
+            throw new DependencyFailureException(
+                PythonServiceClient.DependencyName,
+                DependencyFailureKind.MalformedResponse);
+        }
+
+        var wire = await python.PostJsonVerifiedAsync<object, PlanWire>("internal/v2/plans/validate",
             new
             {
                 schemaVersion = PlanSchema, projectId = request.ProjectId, landRevisionId = request.LandRevisionId,
                 land = request.Land, setbackDistancesM = request.SetbackDistancesM,
-                expectedRoomCounts = request.ExpectedRoomCounts, geometry = request.Geometry,
+                expectedRoomCounts = request.ExpectedRoomCounts,
+                geometryJson = request.GeometryJson, geometryHash = computedHash,
             },
-            r => r.SchemaVersion == PlanSchema && !string.IsNullOrWhiteSpace(r.ValidatorVersion)
-                 && (r.GeometryValid || r.Diagnostics.Any(d => d.Severity == DiagnosticSeverities.Critical)),
+            (r, raw) => HasRequiredPlanResponseFields(raw)
+                 && r.SchemaVersion == PlanSchema
+                 && r.ValidatorVersion == PlanSchema
+                 && string.Equals(r.GeometryHash, computedHash, StringComparison.Ordinal)
+                 && r.Diagnostics is not null
+                 && r.Diagnostics.All(d =>
+                     d is not null
+                     && !string.IsNullOrWhiteSpace(d.Code)
+                     && !string.IsNullOrWhiteSpace(d.Message)
+                     && d.Severity is (DiagnosticSeverities.Critical or DiagnosticSeverities.Warning)
+                     && d.RelatedEntityIds is not null
+                     && d.SourceReferenceIds is not null
+                     && d.SourceReferenceIds.All(id => !string.IsNullOrWhiteSpace(id)))
+                 && (r.GeometryValid
+                     ? !r.Diagnostics.Any(d => d.Severity == DiagnosticSeverities.Critical)
+                     : r.Diagnostics.Any(d => d.Severity == DiagnosticSeverities.Critical)),
             token).ConfigureAwait(false);
         return new PlanCheckResult(wire.GeometryValid, wire.RequirementsMatch, wire.ValidatorVersion, wire.Diagnostics);
     }
+
+    private static bool HasRequiredPlanResponseFields(JsonElement raw) =>
+        raw.ValueKind == JsonValueKind.Object
+        && raw.TryGetProperty("schemaVersion", out var schema)
+        && schema.ValueKind == JsonValueKind.String
+        && raw.TryGetProperty("validatorVersion", out var validator)
+        && validator.ValueKind == JsonValueKind.String
+        && raw.TryGetProperty("geometryValid", out var valid)
+        && valid.ValueKind is (JsonValueKind.True or JsonValueKind.False)
+        && raw.TryGetProperty("requirementsMatch", out var requirements)
+        && requirements.ValueKind is (JsonValueKind.True or JsonValueKind.False or JsonValueKind.Null)
+        && raw.TryGetProperty("geometryHash", out var hash)
+        && hash.ValueKind == JsonValueKind.String
+        && raw.TryGetProperty("diagnostics", out var diagnostics)
+        && diagnostics.ValueKind == JsonValueKind.Array;
 
     private sealed record LandWire(string SchemaVersion, bool Valid, string Code, double? AreaM2, int? EdgeCount);
 

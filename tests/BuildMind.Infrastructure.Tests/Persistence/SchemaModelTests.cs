@@ -94,7 +94,6 @@ public sealed class SchemaModelTests
                 "fk_project_requirement_heads_requirement_revisions_current",
                 "fk_projects_users_owner_id",
                 "fk_refresh_tokens_users_user_id",
-                "fk_requirement_mutation_receipts_revision",
                 "fk_requirement_revisions_projects_project_id",
             }.Concat(PersistenceRegistrationTests.CaptainMigrations.SelectMany(m => m.ForeignKeys)).Order(StringComparer.Ordinal),
             foreignKeys.Select(fk => fk.GetConstraintName()).OrderBy(n => n, StringComparer.Ordinal));

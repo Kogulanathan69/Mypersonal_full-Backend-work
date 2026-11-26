@@ -1921,6 +1921,50 @@ namespace BuildMind.Infrastructure.Persistence.Migrations
                     b.ToTable("requirement_revisions", (string)null);
                 });
 
+            modelBuilder.Entity("BuildMind.Infrastructure.Persistence.Records.Requirements.RequirementMutationReceiptRecord", b =>
+                {
+                    b.Property<Guid>("ProjectId")
+                        .HasColumnType("char(36)")
+                        .HasColumnName("project_id");
+
+                    b.Property<Guid>("ActorId")
+                        .HasColumnType("char(36)")
+                        .HasColumnName("actor_id");
+
+                    b.Property<Guid>("OperationId")
+                        .HasColumnType("char(36)")
+                        .HasColumnName("operation_id");
+
+                    b.Property<long>("AuthorizationVersion")
+                        .HasColumnType("bigint")
+                        .HasColumnName("authorization_version");
+
+                    b.Property<byte>("Category")
+                        .HasColumnType("tinyint unsigned")
+                        .HasColumnName("category");
+
+                    b.Property<byte[]>("Digest")
+                        .IsRequired()
+                        .HasColumnType("binary(32)")
+                        .HasColumnName("digest");
+
+                    b.Property<byte>("FormatVersion")
+                        .HasColumnType("tinyint unsigned")
+                        .HasColumnName("format_version");
+
+                    b.Property<Guid>("SavedRevisionId")
+                        .HasColumnType("char(36)")
+                        .HasColumnName("saved_revision_id");
+
+                    b.HasKey("ProjectId", "ActorId", "OperationId")
+                        .HasName("pk_requirement_mutation_receipts");
+
+                    b.HasIndex("ProjectId", "SavedRevisionId")
+                        .HasDatabaseName("ix_requirement_mutation_receipts_revision");
+
+                    b.ToTable("requirement_mutation_receipts", (string)null);
+                });
+
             modelBuilder.Entity("BuildMind.Infrastructure.Persistence.Records.Survey.SurveyExtractionRecord", b =>
                 {
                     b.Property<Guid>("ExtractionId")
@@ -2678,6 +2722,17 @@ namespace BuildMind.Infrastructure.Persistence.Migrations
                         .OnDelete(DeleteBehavior.Restrict)
                         .IsRequired()
                         .HasConstraintName("fk_requirement_revisions_projects_project_id");
+                });
+
+            modelBuilder.Entity("BuildMind.Infrastructure.Persistence.Records.Requirements.RequirementMutationReceiptRecord", b =>
+                {
+                    b.HasOne("BuildMind.Infrastructure.Persistence.Records.RequirementRevisionRecord", null)
+                        .WithMany()
+                        .HasForeignKey("ProjectId", "SavedRevisionId")
+                        .HasPrincipalKey("ProjectId", "Id")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired()
+                        .HasConstraintName("fk_requirement_mutation_receipts_revision");
                 });
 
             modelBuilder.Entity("BuildMind.Infrastructure.Persistence.Records.Survey.SurveyExtractionRecord", b =>

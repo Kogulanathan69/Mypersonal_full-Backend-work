@@ -32,6 +32,8 @@ COVER_TOLERANCE_M = 1e-6
 _MESSAGES = {
     "PLAN_SCHEMA_INVALID": "The plan geometry violates the draft schema.",
     "LAND_INVALID": "The confirmed land boundary failed validation.",
+    "COORDINATE_FRAME_MISMATCH": "Plan and land coordinate systems differ.",
+    "GEOMETRY_PROCESSING_FAILED": "Geometry validation could not be completed safely.",
     "FLOOR_SCOPE_UNSUPPORTED": "Only a single ground floor (level 0) is supported.",
     "ROOM_POLYGON_INVALID": "A room polygon is not a valid simple polygon with positive area.",
     "ROOM_OUTSIDE_PARCEL": "A room lies outside the confirmed land boundary.",
@@ -97,6 +99,18 @@ def _result(valid: bool, requirements_match: bool | None, codes: list[str], geom
 
 def validate_plan(request: PlanValidationRequest) -> dict:
     try:
+        from shapely.errors import ShapelyError
+    except ImportError:
+        raise DependencyUnavailable() from None
+
+    try:
+        return _validate_plan(request)
+    except (ShapelyError, ArithmeticError, ValueError, TypeError):
+        return _result(False, None, ["GEOMETRY_PROCESSING_FAILED"], None)
+
+
+def _validate_plan(request: PlanValidationRequest) -> dict:
+    try:
         from shapely.geometry import Polygon
     except ImportError:
         raise DependencyUnavailable() from None
@@ -116,6 +130,9 @@ def validate_plan(request: PlanValidationRequest) -> dict:
             request.projectId, request.landRevisionId)
     except (ParcelError, ValueError):
         return _result(False, None, ["LAND_INVALID"], geometry_hash)
+
+    if geometry.coordinateSystem.model_dump(mode="json") != request.land.coordinateSystem.model_dump(mode="json"):
+        return _result(False, None, ["COORDINATE_FRAME_MISMATCH"], geometry_hash)
 
     codes: list[str] = []
     buildable = None

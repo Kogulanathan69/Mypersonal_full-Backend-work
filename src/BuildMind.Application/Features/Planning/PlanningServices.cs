@@ -462,7 +462,7 @@ public sealed class PolicyRegulatoryEvidenceProvider : IRegulatoryEvidenceProvid
 /// <item>synthetic constraint packs never count as reviewed (<c>allowSynthetic: false</c>);</item>
 /// <item>even fully verified kinds are passed to generation as UNVERIFIED with the gap
 /// <c>PARCEL_EDGE_ROLE_MAPPING_UNAPPROVED</c>: mapping front/rear/side rules to parcel edges is an open M6 decision
-/// (doc 29 §11), so no setback value is placed on an edge and generation truthfully answers NEEDS_REVIEW.</item>
+/// (doc 29 Â§11), so no setback value is placed on an edge and generation truthfully answers NEEDS_REVIEW.</item>
 /// </list>
 /// The evidence pack id is returned for traceability on the generation job.
 /// </summary>
@@ -531,6 +531,20 @@ public sealed class PlanSaveService(
             .SingleOrDefault(c => c.Id == candidateId);
         if (candidate is null) return new(PlanningStatus.NotFound);
 
+        if (job.Id != jobId
+            || job.ProjectId != projectId
+            || candidate.Id != candidateId
+            || candidate.JobId != jobId
+            || candidate.ProjectId != projectId
+            || candidate.Geometry.ProjectId != projectId
+            || candidate.Geometry.PlanId != candidateId
+            || candidate.Geometry.LandRevisionId != job.LandRevisionId
+            || candidate.Geometry.RequirementsRevisionId != job.RequirementsRevisionId)
+        {
+            return new(PlanningStatus.ValidationFailed,
+                Code: "CANDIDATE_IDENTITY_MISMATCH");
+        }
+
         var land = await lands.GetCurrentAsync(projectId, token).ConfigureAwait(false);
         var requirement = await requirements.GetCurrentAsync(projectId, token).ConfigureAwait(false);
         if (land?.Id != job.LandRevisionId || requirement?.Id != job.RequirementsRevisionId)
@@ -541,6 +555,7 @@ public sealed class PlanSaveService(
         if (synthetic && policy?.SyntheticSetbackM is null)
             return new(PlanningStatus.PolicyUnavailable, Code: "GENERATION_POLICY_UNAVAILABLE");
         var check = await ValidateAsync(compute, land, requirement, candidate.Geometry,
+            candidate.GeometryJson, candidate.GeometryHash,
             synthetic ? policy!.SyntheticSetbackM : null, token).ConfigureAwait(false);
         if (check.Status != PlanningStatus.Success) return new(check.Status, Code: check.Code);
         if (!check.Value!.GeometryValid || check.Value.RequirementsMatch != true)
@@ -562,7 +577,8 @@ public sealed class PlanSaveService(
     }
 
     internal static async Task<PlanningResult<PlanCheckResult>> ValidateAsync(IPlanningComputeClient compute, LandRevision land,
-        RequirementRevision requirement, PlanGeometryDto geometry, double? setbackM, CancellationToken token)
+        RequirementRevision requirement, PlanGeometryDto geometry, string geometryJson, string geometryHash,
+        double? setbackM, CancellationToken token)
     {
         try
         {
@@ -570,7 +586,7 @@ public sealed class PlanSaveService(
                 .ToDictionary(r => r.RoomType, r => r.Count, StringComparer.Ordinal);
             var setbacks = setbackM is { } distance ? Enumerable.Repeat(distance, land.EdgeCount).ToArray() : null;
             return PlanningResult<PlanCheckResult>.Ok(await compute.ValidatePlanAsync(
-                new PlanCheckRequest(land.ProjectId, land.Id, land.Land, setbacks, counts, geometry), token).ConfigureAwait(false));
+                new PlanCheckRequest(land.ProjectId, land.Id, land.Land, setbacks, counts, geometry, geometryJson, geometryHash), token).ConfigureAwait(false));
         }
         catch (DependencyFailureException failure)
         {

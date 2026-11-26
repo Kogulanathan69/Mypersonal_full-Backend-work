@@ -51,6 +51,48 @@ public sealed class RequirementMutationCoordinatorTests
         Assert.Equal(0, setup.Catalogues.Calls);
     }
 
+    [Theory]
+    [InlineData(RequirementMutationStatus.Committed)]
+    [InlineData(RequirementMutationStatus.Reused)]
+    [InlineData(RequirementMutationStatus.Denied)]
+    [InlineData(RequirementMutationStatus.Unknown)]
+    [InlineData(RequirementMutationStatus.Absent)]
+    public async Task Validation_failure_reobserves_receipt_before_returning(
+        RequirementMutationStatus secondDecision)
+    {
+        var setup = new RequirementsApplicationServiceTests.Setup();
+        var store = new Store(RequirementMutationStatus.Absent, secondDecision);
+        var coordinator = new RequirementMutationCoordinator(
+            setup.User, new Authorization(true),
+            new(setup.Store), setup.Catalogues, store, TimeProvider.System);
+
+        var result = await coordinator.ExecuteAsync(
+            setup.Project.Id, Guid.NewGuid(),
+            new(RequirementMutationCategory.Full,
+                F.Request(version: "synthetic-client-version")), default);
+
+        Assert.Equal(2, store.Lookups);
+        Assert.Equal(1, setup.Catalogues.Calls);
+        Assert.Equal(1, setup.Store.Reads);
+        Assert.Equal(0, setup.Store.Writes);
+
+        if (secondDecision == RequirementMutationStatus.Absent)
+        {
+            Assert.Equal(RequirementMutationStatus.Failed, result.Status);
+            Assert.NotNull(result.Failure);
+            Assert.Equal(RequirementsOperationStatus.CatalogueConflict,
+                result.Failure!.Status);
+            Assert.NotEmpty(result.Failure.Issues);
+            Assert.All(result.Failure.Issues,
+                issue => Assert.Equal("CATALOGUE_VERSION_MISMATCH", issue.Code));
+        }
+        else
+        {
+            Assert.Equal(secondDecision, result.Status);
+            Assert.Null(result.Failure);
+        }
+    }
+
     private sealed class Authorization(bool allowed) : IProjectAuthorizationPort
     {
         public Task<ProjectAuthorizationResult> AuthorizeOwnerAsync(Guid projectId, Guid actorId, CancellationToken token) =>

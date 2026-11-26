@@ -157,7 +157,7 @@ public sealed class MySqlReadinessCheck : IHealthCheck
         }
 
         // Dispose the scope and release the gate only when the probe has really finished (even if abandoned).
-        _ = probing.ContinueWith(
+        var cleanup = probing.ContinueWith(
             async finished =>
             {
                 _ = finished.Exception; // observe; the message is never logged or returned
@@ -167,9 +167,19 @@ public sealed class MySqlReadinessCheck : IHealthCheck
             TaskContinuationOptions.ExecuteSynchronously,
             TaskScheduler.Default).Unwrap();
 
+        // A completed readiness result must not race its own scope cleanup.
+        // Keep a single bounded wait for both the probe and cleanup.
+        var completion = Task.WhenAll(probing, cleanup);
+        _ = completion.ContinueWith(
+            static finished => { _ = finished.Exception; },
+            CancellationToken.None,
+            TaskContinuationOptions.OnlyOnFaulted | TaskContinuationOptions.ExecuteSynchronously,
+            TaskScheduler.Default);
+
         try
         {
-            var reachable = await probing.WaitAsync(probeTimeout, cancellationToken).ConfigureAwait(false);
+            await completion.WaitAsync(probeTimeout, cancellationToken).ConfigureAwait(false);
+            var reachable = await probing.ConfigureAwait(false);
             return Readiness.Result(
                 reachable ? HealthStatus.Healthy : HealthStatus.Unhealthy,
                 reachable ? Readiness.Reasons.Reachable : Readiness.Reasons.Unreachable);

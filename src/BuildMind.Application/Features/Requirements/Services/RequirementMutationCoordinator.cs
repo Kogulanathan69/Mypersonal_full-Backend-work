@@ -43,7 +43,12 @@ public sealed class RequirementMutationCoordinator(ICurrentUser user, IProjectAu
         token.ThrowIfCancellationRequested();
         var validation = RequirementContractValidator.Validate(request, catalogue);
         if (RequirementsApplicationService.ValidationFailure(validation) is { } failure)
-            return new(RequirementMutationStatus.Failed, Failure: failure);
+        {
+            observed = await store.ObserveAsync(scope, mutation, token);
+            return observed.Status == RequirementMutationStatus.Absent
+                ? new(RequirementMutationStatus.Failed, Failure: failure)
+                : observed;
+        }
         var proposed = validation.CreateRevision(Guid.NewGuid(), projectId, checked((current?.RevisionNumber ?? 0) + 1), clock.GetUtcNow());
         return await store.CommitAsync(scope, mutation, proposed, token);
     }
