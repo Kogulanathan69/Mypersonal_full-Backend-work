@@ -49,7 +49,7 @@ public sealed class V3RouteCompletionEndpointModule : IApiEndpointModule
             {
                 review = x, notice = "Reviewed values are your own evidence. They do not confirm the land boundary; confirm the boundary separately.",
             }, created: true);
-        }).WithName("ReviewSurveyExtraction");
+        }).WithName("ReviewSurveyExtraction").Accepts<SurveyReviewHttpRequest>("application/json").Produces(201);
         project.MapGet("/surveys/{surveyId}/extraction/reviews", async (string projectId, string surveyId, HttpContext c, PlanningAccess access,
             ISurveyReviewStore store, CancellationToken t) =>
         {
@@ -78,7 +78,7 @@ public sealed class V3RouteCompletionEndpointModule : IApiEndpointModule
             if (land?.FrameJson is not { } frame) return Results.NoContent();
             return Results.Ok(new { landRevisionId = land.Id, land.RevisionNumber, land.GeometryDigest, frameDocument = JsonDocument.Parse(frame).RootElement,
                 notice = "Coordinate frame and edges are computed with PROJ from your explicitly stated source CRS; they are not a cadastral survey." });
-        }).WithName("GetLandFrame");
+        }).WithName("GetLandFrame").Produces(200).Produces(204);
         project.MapPost("/land/transform-preview", async (string projectId, HttpContext c, LandService lands, CancellationToken t) =>
         {
             NoStore(c);
@@ -90,16 +90,16 @@ public sealed class V3RouteCompletionEndpointModule : IApiEndpointModule
                 f.Crs, f.Anchor, localExterior = f.LocalExterior, f.GeometryDigest, f.Edges,
                 frame = JsonDocument.Parse(f.FrameJson!).RootElement, persisted = false,
             });
-        }).WithName("PreviewLandTransformation");
-        project.MapPost("/land/validate", ValidateLandAsync).WithName("ValidateProjectLand");
-        project.MapPost("/land/confirm", P.PutLandAsync).WithName("ConfirmProjectLand");
+        }).WithName("PreviewLandTransformation").Accepts<GeoreferenceHttpInput>("application/json").Produces(200);
+        project.MapPost("/land/validate", ValidateLandAsync).WithName("ValidateProjectLand").Accepts<PutLandHttpRequest>("application/json").Produces(200);
+        project.MapPost("/land/confirm", P.PutLandAsync).WithName("ConfirmProjectLand").Accepts<PutLandHttpRequest>("application/json").Produces(201);
         project.MapGet("/generation-jobs/{jobId}/alternatives", AlternativesAsync).WithName("GetGenerationAlternatives");
-        project.MapPost("/generation-jobs/{jobId}/select", SelectAsync).WithName("SelectGenerationAlternative");
-        project.MapPost("/plans", CreatePlanAsync).WithName("CreatePlanFromAlternative");
-        project.MapPost("/plans/{planId}/edits/validate", ValidateEditAsync).WithName("ValidatePlanEdit");
-        project.MapPost("/plans/{planId}/ai-edit/proposals", AiProposalAsync).WithName("ProposeAiPlanEdit").RequireExpensiveOperationLimit();
-        project.MapPost("/plans/{planId}/versions", SaveVersionAsync).WithName("SavePlanVersion");
-        project.MapPost("/plans/{planId}/confirm", PlanLifecycleEndpointModule.ConfirmAsync).WithName("ConfirmPlanV3");
+        project.MapPost("/generation-jobs/{jobId}/select", SelectAsync).WithName("SelectGenerationAlternative").Accepts<SelectAlternativeHttpRequest>("application/json").Produces(201);
+        project.MapPost("/plans", CreatePlanAsync).WithName("CreatePlanFromAlternative").Accepts<SelectAlternativeHttpRequest>("application/json").Produces(201);
+        project.MapPost("/plans/{planId}/edits/validate", ValidateEditAsync).WithName("ValidatePlanEdit").Accepts<PlanEditRequestDto>("application/json").Produces(200);
+        project.MapPost("/plans/{planId}/ai-edit/proposals", AiProposalAsync).WithName("ProposeAiPlanEdit").RequireExpensiveOperationLimit().Accepts<AiProposalHttpRequest>("application/json").Produces(201);
+        project.MapPost("/plans/{planId}/versions", SaveVersionAsync).WithName("SavePlanVersion").Accepts<SaveVersionHttpRequest>("application/json").Produces(201);
+        project.MapPost("/plans/{planId}/confirm", PlanLifecycleEndpointModule.ConfirmAsync).WithName("ConfirmPlanV3").Accepts<ConfirmPlanHttpRequest>("application/json").Produces(201);
         project.MapGet("/reports", ListReportsAsync).WithName("ListReports");
     }
 

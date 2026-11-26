@@ -16,7 +16,7 @@ public sealed class AuthenticationEndpointModule
 
         auth.MapPost("/register", RegisterAsync)
             .AllowAnonymous()
-            .RequireRateLimiting(RateLimitingConfiguration.AuthStrictPolicy);
+            .RequireRateLimiting(RateLimitingConfiguration.AuthStrictPolicy).Produces(201);
 
         auth.MapPost("/login", LoginAsync)
             .AllowAnonymous()

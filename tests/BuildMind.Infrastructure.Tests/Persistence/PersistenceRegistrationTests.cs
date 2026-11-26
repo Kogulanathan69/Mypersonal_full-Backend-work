@@ -59,6 +59,8 @@ public sealed class PersistenceRegistrationTests
         ("20261125030045_AddLandCoordinateFrame", [], []),
         ("20261125103924_AddLandEdgeRoles", ["land_edge_roles"],
             ["fk_land_edge_roles_land_revisions", "fk_land_edge_roles_projects_project_id", "fk_land_edge_roles_users_reviewed_by"]),
+        ("20261126173737_AddRequirementMutationReceipts", ["requirement_mutation_receipts"],
+            ["fk_requirement_mutation_receipts_revision"]),
     ];
 
     internal static readonly string[] ApprovedTables =

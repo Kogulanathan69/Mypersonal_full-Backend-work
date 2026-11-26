@@ -49,6 +49,8 @@ public sealed class AuthenticationStartupTests
         AssertStatus(login, HttpStatusCode.OK);
         var session = Assert.IsType<AuthResponse>(await login.Content.ReadFromJsonAsync<AuthResponse>());
         Assert.Equal(user.Id, session.User.Id);
+        Assert.Null(session.RefreshToken);
+        Assert.Null(session.RefreshTokenExpiresAtUtc);
         Assert.Equal("Bearer", session.TokenType);
         var handler = new JwtSecurityTokenHandler { MapInboundClaims = false };
         var principal = handler.ValidateToken(

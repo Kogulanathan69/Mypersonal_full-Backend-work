@@ -32,9 +32,9 @@ public sealed class PlanEditorEndpointModule : IApiEndpointModule
 
         var plans = MapRevisionHistoryEndpoints(apiV1);
         plans.MapPost("/candidates", CreateCandidateAsync)
-            .WithName("CreatePlanEditCandidate");
+            .WithName("CreatePlanEditCandidate").Accepts<PlanEditRequestDto>("application/json").Produces(201);
         plans.MapPost("/candidates/{candidateId}/apply", ApplyCandidateAsync)
-            .WithName("ApplyPlanEditCandidate");
+            .WithName("ApplyPlanEditCandidate").Accepts<ApplyCandidateHttpRequest>("application/json").Produces(200);
         plans.MapPost("/candidates/{candidateId}/reject", RejectCandidateAsync)
             .WithName("RejectPlanEditCandidate");
     }

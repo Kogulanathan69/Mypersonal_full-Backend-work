@@ -180,7 +180,7 @@ public sealed class CaptainReadModels
         var owned = await _context.Set<RefreshTokenRecord>().AsNoTracking()
             .AnyAsync(t => t.UserId == userId && t.FamilyId == sessionId, token).ConfigureAwait(false);
         if (!owned) return false;
-        await BuildMind.Infrastructure.Persistence.Repositories.Identity.SessionSql.RevokeFamilyAsync(_context, sessionId, _time.GetUtcNow(),
+        await BuildMind.Infrastructure.Persistence.Repositories.Identity.SessionSql.RevokeFamilyAsync(_context, userId, sessionId, _time.GetUtcNow(),
             "SESSION_REVOKED_BY_USER", token).ConfigureAwait(false);
         await transaction.CommitAsync(token).ConfigureAwait(false);
         return true;

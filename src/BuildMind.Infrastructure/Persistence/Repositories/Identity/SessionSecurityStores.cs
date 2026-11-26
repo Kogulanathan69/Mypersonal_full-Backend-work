@@ -54,17 +54,24 @@ internal sealed class RefreshTokenStore(BuildMindDbContext context, TransactionR
     public async Task CreateAsync(NewRefreshToken token, CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(token);
-        context.Set<RefreshTokenRecord>().Add(new RefreshTokenRecord
+        await transactions.ExecuteAsync(async ct =>
         {
-            Id = token.Id,
-            UserId = token.UserId,
-            FamilyId = token.FamilyId,
-            TokenHash = token.TokenHash,
-            CreatedAtUtc = token.CreatedAtUtc,
-            ExpiresAtUtc = token.ExpiresAtUtc,
-            AbsoluteExpiresAtUtc = token.AbsoluteExpiresAtUtc,
-        });
-        await context.SaveChangesAsync(cancellationToken);
+            var account = await SessionSql.LockAccountAsync(context, token.UserId, ct);
+            if (account is not { IsActive: true } || account.TokenVersion != token.ExpectedTokenVersion)
+                throw new RefreshSessionRejectedException();
+
+            context.Set<RefreshTokenRecord>().Add(new RefreshTokenRecord
+            {
+                Id = token.Id,
+                UserId = token.UserId,
+                FamilyId = token.FamilyId,
+                TokenHash = token.TokenHash,
+                CreatedAtUtc = token.CreatedAtUtc,
+                ExpiresAtUtc = token.ExpiresAtUtc,
+                AbsoluteExpiresAtUtc = token.AbsoluteExpiresAtUtc,
+            });
+            return await context.SaveChangesAsync(ct);
+        }, cancellationToken);
     }
 
     public Task<RefreshRotationResult> RotateAsync(
@@ -76,8 +83,7 @@ internal sealed class RefreshTokenStore(BuildMindDbContext context, TransactionR
         CancellationToken cancellationToken) =>
         transactions.ExecuteAsync(async token =>
         {
-            // LOCK ORDER (all session writers): users row FIRST, then refresh-token rows. logout-all, disable and
-            // password reset already start with an UPDATE of the users row; rotation and logout now lock it explicitly.
+            // Discover the owner without a write lock, then lock the user before the token.
             // History: the original rotation took token/family locks before the users row (FK check on insert, replay
             // token_version bump) and intermittently deadlocked (SessionSecurityLiveTests.S03, Captain run 2026-11-24);
             // a token-row-first fix removed same-token races but still ran opposite to logout-all.
@@ -85,7 +91,9 @@ internal sealed class RefreshTokenStore(BuildMindDbContext context, TransactionR
                 .Where(t => t.TokenHash == presentedTokenHash).Select(t => (Guid?)t.UserId).SingleOrDefaultAsync(token);
             if (owner is not Guid ownerId)
                 return new RefreshRotationResult(RefreshRotationStatus.Invalid);
-            await SessionSql.LockUserAsync(context, ownerId, token);
+            var account = await SessionSql.LockAccountAsync(context, ownerId, token);
+            if (account is not { IsActive: true })
+                return new RefreshRotationResult(RefreshRotationStatus.Invalid);
 
             // Then serialize presenters of this exact token on its row. The claim below is a current read, so a loser
             // whose snapshot predates the winner's commit still finds nothing to claim and takes the replay path.
@@ -99,7 +107,7 @@ internal sealed class RefreshTokenStore(BuildMindDbContext context, TransactionR
                 .Select(t => new { t.Id, t.UserId, t.FamilyId, t.ExpiresAtUtc, t.AbsoluteExpiresAtUtc, t.ConsumedAtUtc, t.RevokedAtUtc })
                 .SingleOrDefaultAsync(token);
 
-            if (current is null || current.RevokedAtUtc is not null)
+            if (current is null || current.UserId != ownerId || current.RevokedAtUtc is not null)
                 return new RefreshRotationResult(RefreshRotationStatus.Invalid);
 
             if (current.ConsumedAtUtc is not null)
@@ -134,7 +142,7 @@ internal sealed class RefreshTokenStore(BuildMindDbContext context, TransactionR
             });
             await context.SaveChangesAsync(token);
 
-            return new RefreshRotationResult(RefreshRotationStatus.Rotated, current.UserId, expiresAt);
+            return new RefreshRotationResult(RefreshRotationStatus.Rotated, current.UserId, expiresAt, account.TokenVersion);
         }, cancellationToken);
 
     public Task<bool> RevokeFamilyAsync(
@@ -150,14 +158,14 @@ internal sealed class RefreshTokenStore(BuildMindDbContext context, TransactionR
             if (family is not Guid familyId)
                 return false;
 
-            await SessionSql.RevokeFamilyAsync(context, familyId, nowUtc, reason, token);
+            await SessionSql.RevokeFamilyAsync(context, userId, familyId, nowUtc, reason, token);
             return true;
         }, cancellationToken);
 
     private async Task<RefreshRotationResult> ReplayAsync(Guid userId, Guid familyId, DateTimeOffset nowUtc, CancellationToken token)
     {
         // A consumed token was presented again: assume theft. Revoke the family and every issued access token.
-        await SessionSql.RevokeFamilyAsync(context, familyId, nowUtc, "replay_detected", token);
+        await SessionSql.RevokeFamilyAsync(context, userId, familyId, nowUtc, "replay_detected", token);
         await context.Set<UserRecord>()
             .Where(u => u.Id == userId)
             .ExecuteUpdateAsync(s => s.SetProperty(u => u.TokenVersion, u => u.TokenVersion + 1), token);
@@ -173,6 +181,8 @@ internal sealed class PasswordResetRepository(BuildMindDbContext context, Transa
         ArgumentNullException.ThrowIfNull(token);
         return transactions.ExecuteAsync(async ct =>
         {
+            if (await SessionSql.LockAccountAsync(context, token.UserId, ct) is not { IsActive: true })
+                return false;
             await context.Set<PasswordResetRecord>().Where(r => r.UserId == token.UserId).ExecuteDeleteAsync(ct);
             context.Set<PasswordResetRecord>().Add(new PasswordResetRecord
             {
@@ -193,6 +203,9 @@ internal sealed class PasswordResetRepository(BuildMindDbContext context, Transa
         {
             return await transactions.ExecuteAsync(async ct =>
             {
+                if (await SessionSql.LockAccountAsync(context, userId, ct) is not { IsActive: true })
+                    return false;
+
                 // Single-use: exactly one request can consume an unexpired, unconsumed token.
                 var consumed = await context.Set<PasswordResetRecord>()
                     .Where(r => r.UserId == userId && r.TokenHash == tokenHash
@@ -228,6 +241,14 @@ internal static class SessionSql
     public static Task<List<int>> LockUserAsync(BuildMindDbContext context, Guid userId, CancellationToken token) =>
         context.Database.SqlQuery<int>($"SELECT 1 AS Value FROM users WHERE id = {userId} FOR UPDATE").ToListAsync(token);
 
+    public static async Task<UserSecurityState?> LockAccountAsync(BuildMindDbContext context, Guid userId, CancellationToken token)
+    {
+        var accounts = await context.Database.SqlQuery<UserSecurityState>(
+            $"SELECT is_active AS IsActive, token_version AS TokenVersion FROM users WHERE id = {userId} FOR UPDATE")
+            .ToListAsync(token);
+        return accounts.SingleOrDefault();
+    }
+
     public static Task<int> RevokeUserRefreshTokensAsync(
         BuildMindDbContext context, Guid userId, DateTimeOffset nowUtc, string reason, CancellationToken token) =>
         context.Set<RefreshTokenRecord>()
@@ -237,9 +258,9 @@ internal static class SessionSql
                 .SetProperty(t => t.RevocationReason, reason), token);
 
     public static Task<int> RevokeFamilyAsync(
-        BuildMindDbContext context, Guid familyId, DateTimeOffset nowUtc, string reason, CancellationToken token) =>
+        BuildMindDbContext context, Guid userId, Guid familyId, DateTimeOffset nowUtc, string reason, CancellationToken token) =>
         context.Set<RefreshTokenRecord>()
-            .Where(t => t.FamilyId == familyId && t.RevokedAtUtc == null)
+            .Where(t => t.UserId == userId && t.FamilyId == familyId && t.RevokedAtUtc == null)
             .ExecuteUpdateAsync(s => s
                 .SetProperty(t => t.RevokedAtUtc, nowUtc)
                 .SetProperty(t => t.RevocationReason, reason), token);

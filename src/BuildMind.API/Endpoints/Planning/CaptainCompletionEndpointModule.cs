@@ -48,7 +48,7 @@ public sealed class CaptainCompletionEndpointModule : IApiEndpointModule
         project.MapGet("/land/edges", (string projectId, HttpContext c, PlanningAccess a, LandEdgeRoleService roles, CancellationToken t) =>
             Owned(projectId, c, a, t, async pid => await roles.GetAsync(pid, t) is { } v ? Results.Ok(v) : NotFound()))
             .WithName("ListLandEdges").Produces<LandEdgeListDto>();
-        project.MapPut("/land/edges/{edgeId}/role", SetEdgeRoleAsync).WithName("SetLandEdgeRole").Produces<LandEdgeListDto>();
+        project.MapPut("/land/edges/{edgeId}/role", SetEdgeRoleAsync).WithName("SetLandEdgeRole").Accepts<EdgeRoleHttpRequest>("application/json").Produces<LandEdgeListDto>();
         project.MapGet("/land/revisions", (string projectId, HttpContext c, PlanningAccess a, CaptainReadModels r, CancellationToken t) =>
             Owned(projectId, c, a, t, async pid => Results.Ok(await r.LandRevisionsAsync(pid, t))))
             .WithName("ListLandRevisions").Produces<LandRevisionListDto>();
@@ -82,7 +82,7 @@ public sealed class CaptainCompletionEndpointModule : IApiEndpointModule
                 !P.TryId(planId, out var plan) ? P.Invalid("planId")
                 : await r.ConfirmationAsync(pid, plan, t) is { } v ? Results.Ok(v) : NotFound()))
             .WithName("GetPlanConfirmation").Produces<PlanConfirmationDto>();
-        project.MapPost("/plans/{planId}/revert", RevertAsync).WithName("RevertPlanToRevision");
+        project.MapPost("/plans/{planId}/revert", RevertAsync).WithName("RevertPlanToRevision").Accepts<RevertPlanHttpRequest>("application/json").Produces(201);
 
         var me = apiV1.MapGroup("/users/me/sessions").WithTags("Profile").RequireAuthorization();
         me.MapGet("", async (HttpContext c, ICurrentUser u, CaptainReadModels r, CancellationToken t) =>
@@ -96,7 +96,7 @@ public sealed class CaptainCompletionEndpointModule : IApiEndpointModule
             if (u.UserId is not { } id) return Problem(401, "UNAUTHENTICATED");
             if (!P.TryId(sessionId, out var session)) return P.Invalid("sessionId");
             return await r.RevokeSessionAsync(id, session, t) ? Results.NoContent() : NotFound();
-        }).WithName("RevokeMySession");
+        }).WithName("RevokeMySession").Produces(StatusCodes.Status204NoContent);
 
         var admin = apiV1.MapGroup("/admin").WithTags("Admin").RequireAuthorization();
         admin.MapGet("/projects/{projectId}", (string projectId, HttpContext c, ICurrentUser u, IPrincipalDirectory d, CaptainReadModels r,

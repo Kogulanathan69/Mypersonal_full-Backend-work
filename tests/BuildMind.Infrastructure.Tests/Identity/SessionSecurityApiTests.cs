@@ -4,6 +4,10 @@ using System.Net.Http.Headers;
 using System.Net.Http.Json;
 using System.Security.Claims;
 using System.Text.Json;
+using BuildMind.Application.Features.Auth.Abstractions;
+using BuildMind.Domain.Entities;
+using BuildMind.Infrastructure.Identity;
+using Microsoft.Extensions.DependencyInjection;
 using BuildMind.Infrastructure.Tests.Support;
 using Microsoft.IdentityModel.Tokens;
 using Xunit;
@@ -18,6 +22,79 @@ namespace BuildMind.Infrastructure.Tests.Identity;
 public sealed class SessionSecurityApiTests
 {
     private const string Email = "carol@example.invalid";
+
+    [Fact]
+    public async Task AUTH_G02_Disable_after_password_verification_rejects_login()
+    {
+        var store = new InMemoryM1Store();
+        await using var factory = CreateFactory(store, s => s["Authentication:RefreshTokens:Enabled"] = "true");
+        using var client = factory.CreateClient();
+        using var registration = await client.PostAsJsonAsync("/api/v1/auth/register", new { email = Email, password = Password });
+        Assert.Equal(HttpStatusCode.Created, registration.StatusCode);
+        var id = await UserIdAsync(store);
+        var attempts = 0;
+        store.BeforeCreateRefresh = token =>
+        {
+            Assert.Equal(id, token.UserId);
+            attempts++;
+            store.SetActive(id, false);
+        };
+        using var login = await client.PostAsJsonAsync("/api/v1/auth/login", new { email = Email, password = Password });
+        Assert.Equal(1, attempts);
+        Assert.Equal(HttpStatusCode.Unauthorized, login.StatusCode);
+        var body = await login.Content.ReadAsStringAsync();
+        Assert.DoesNotContain("accessToken", body);
+        Assert.DoesNotContain("refreshToken", body);
+        Assert.Empty(store.RefreshTokens);
+    }
+
+    [Fact]
+    public async Task AUTH_G05_Revocation_before_signing_rejects_rotated_bearer_at_profile()
+    {
+        var store = new InMemoryM1Store();
+        Action<User>? beforeSigning = null;
+        await using var factory = CreateFactory(store, s => s["Authentication:RefreshTokens:Enabled"] = "true",
+            services => services.AddScoped<IAccessTokenIssuer>(sp => new HookedIssuer(
+                ActivatorUtilities.CreateInstance<JwtAccessTokenIssuer>(sp), user => beforeSigning?.Invoke(user))));
+        using var client = factory.CreateClient();
+        using var registration = await client.PostAsJsonAsync("/api/v1/auth/register", new { email = Email, password = Password });
+        Assert.Equal(HttpStatusCode.Created, registration.StatusCode);
+        var first = await LoginBodyAsync(client);
+        var id = await UserIdAsync(store);
+        var version = (await store.GetAsync(id, default))!.TokenVersion;
+        var calls = 0;
+        beforeSigning = user =>
+        {
+            calls++;
+            Assert.Equal(id, user.Id);
+            Assert.Equal(version, user.TokenVersion);
+            Assert.Equal(2, store.RefreshTokens.Count);
+            Assert.True(store.RevokeAllSessionsAsync(id, DateTimeOffset.UtcNow, "test", default).GetAwaiter().GetResult());
+        };
+        using var rotated = await client.PostAsJsonAsync("/api/v1/auth/refresh",
+            new { refreshToken = first.GetProperty("refreshToken").GetString() });
+        beforeSigning = null;
+        Assert.Equal(1, calls);
+        Assert.Equal(HttpStatusCode.OK, rotated.StatusCode);
+        Assert.Equal(version + 1, (await store.GetAsync(id, default))!.TokenVersion);
+        var body = await rotated.Content.ReadFromJsonAsync<JsonElement>();
+        var jwt = body.GetProperty("accessToken").GetString()!;
+        var claim = new JwtSecurityTokenHandler().ReadJwtToken(jwt).Claims.Single(c => c.Type == "tv");
+        Assert.Equal(version.ToString(System.Globalization.CultureInfo.InvariantCulture), claim.Value);
+        Authorize(client, jwt);
+        Assert.Equal(HttpStatusCode.Unauthorized, (await client.GetAsync("/api/v1/profile")).StatusCode);
+        Authorize(client, await LoginAsync(client, Email));
+        Assert.Equal(HttpStatusCode.OK, (await client.GetAsync("/api/v1/profile")).StatusCode);
+    }
+
+    private sealed class HookedIssuer(JwtAccessTokenIssuer issuer, Action<User> beforeSigning) : IAccessTokenIssuer
+    {
+        public AccessTokenResult Issue(User user)
+        {
+            beforeSigning(user);
+            return issuer.Issue(user);
+        }
+    }
 
     [Fact]
     public async Task A_disabled_account_loses_access_immediately_with_an_unexpired_token()

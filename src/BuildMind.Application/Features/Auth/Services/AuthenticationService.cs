@@ -6,6 +6,8 @@ using BuildMind.Domain.Entities;
 
 namespace BuildMind.Application.Features.Auth.Services;
 
+internal sealed record AuthenticatedLogin(AuthResponse Response, long TokenVersion);
+
 public sealed class AuthenticationService
 {
     private readonly IUserRepository _users;
@@ -63,7 +65,10 @@ public sealed class AuthenticationService
 
     public async Task<AuthResponse?> LoginAsync(
         LoginRequest request,
-        CancellationToken cancellationToken)
+        CancellationToken cancellationToken) =>
+        (await AuthenticateAsync(request, cancellationToken))?.Response;
+
+    internal async Task<AuthenticatedLogin?> AuthenticateAsync(LoginRequest request, CancellationToken cancellationToken)
     {
         var validation =
             new LoginRequestValidator().Validate(request);
@@ -93,13 +98,13 @@ public sealed class AuthenticationService
 
         var token = _tokens.Issue(user);
 
-        return new AuthResponse
+        return new AuthenticatedLogin(new AuthResponse
         {
             AccessToken = token.AccessToken,
             TokenType = "Bearer",
             ExpiresAtUtc = token.ExpiresAtUtc,
             User = MapUser(user)
-        };
+        }, user.TokenVersion);
     }
 
     private static UserResponse MapUser(User user)

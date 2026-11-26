@@ -13,7 +13,7 @@ public sealed class ProjectEndpointModule : IApiEndpointModule
             .WithTags("Projects")
             .RequireAuthorization();
 
-        projects.MapPost("", CreateAsync);
+        projects.MapPost("", CreateAsync).Produces(201);
         projects.MapGet("", ListAsync);
         projects.MapGet("/{id:guid}", GetAsync);
         projects.MapPatch("/{id:guid}", UpdateAsync);

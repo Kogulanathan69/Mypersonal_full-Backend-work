@@ -143,6 +143,7 @@ services:
   # unchanged. UI/API published on loopback 8026 for the journeys (MAILPIT_API).
   mailpit:
     image: axllent/mailpit:v1.21.8
+    user: "${BM_UID:?}:${BM_GID:?}"
     networks: [internal, edge]
     ports: ["127.0.0.1:8026:8025"]
     command: ["--smtp-tls-cert", "/run/bm/mail/mailpit.crt", "--smtp-tls-key", "/run/bm/mail/mailpit.key", "--smtp-require-starttls"]

@@ -13,12 +13,80 @@ using BuildMind.Infrastructure.Tests.Identity;
 using BuildMind.Infrastructure.Tests.Support;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.DependencyInjection.Extensions;
+using Microsoft.AspNetCore.Hosting;
+using BuildMind.Application.Features.Requirements.Services;
+using BuildMind.Application.Features.Requirements.Contracts;
 
 namespace BuildMind.Infrastructure.Tests.CaptainIntegration;
 
 public sealed class CaptainLocalIntegrationTests
 {
     private const string Flag = CaptainLocalIntegration.EnabledKey;
+
+    [Fact]
+    public async Task REQ_G14_Captain_scope_checks_the_version_before_and_after_read()
+    {
+        var actor = Guid.NewGuid();
+        var project = Guid.NewGuid();
+        var store = new RequirementsEndpointTests.FlowStore();
+        var auth = new ReadAuthorization("bump", store);
+        using var factory = M1ApiIntegrationTests.CreateFactory(new InMemoryM1Store(), s => s[Flag] = "true", services =>
+        {
+            services.AddSingleton<ICurrentUser>(new FixedUser(actor));
+            services.AddSingleton<IProjectAuthorizationPort>(auth);
+            services.AddSingleton<IRequirementRevisionRepository>(store);
+        });
+        using var scope = factory.Services.CreateScope();
+        var service = scope.ServiceProvider.GetRequiredService<IRequirementsApplicationService>();
+        Assert.IsType<RequirementsApplicationService>(service);
+        var result = await service.GetAsync(project, default);
+        Assert.Equal(RequirementsOperationStatus.NotFound, result.Status);
+        Assert.Null(result.Revision);
+        Assert.Equal(new[] { (project, actor, 0), (project, actor, 1) }, auth.Calls);
+    }
+
+    [Fact]
+    public void REQ_G14_Captain_scope_resolves_owner_protected_repository()
+    {
+        using var factory = M1ApiIntegrationTests.CreateFactory(new InMemoryM1Store(), s => s[Flag] = "true");
+        using var scope = factory.Services.CreateScope();
+        Assert.IsType<OwnerProtectedRequirementRevisionRepository>(scope.ServiceProvider.GetRequiredService<IRequirementRevisionRepository>());
+        Assert.IsType<RequirementsApplicationService>(scope.ServiceProvider.GetRequiredService<IRequirementsApplicationService>());
+    }
+
+    [Fact]
+    public void REQ_G14_Missing_Captain_authorization_fails_at_service_resolution()
+    {
+        using var original = M1ApiIntegrationTests.CreateFactory(new InMemoryM1Store(), s => s[Flag] = "true", services =>
+        {
+            services.RemoveAll<IProjectAuthorizationPort>();
+            // Keep all five isolated-constructor dependencies resolvable.
+            services.AddSingleton<IRequirementRevisionRepository>(new RequirementsEndpointTests.FlowStore());
+        });
+        using var factory = original.WithWebHostBuilder(b => b.UseDefaultServiceProvider(options =>
+        {
+            options.ValidateScopes = true;
+            options.ValidateOnBuild = false; // exercise resolution in this intentionally incomplete provider
+        }));
+        using var scope = factory.Services.CreateScope();
+        var failure = Assert.Throws<InvalidOperationException>(() => scope.ServiceProvider.GetRequiredService<IRequirementsApplicationService>());
+        Assert.Contains(typeof(IProjectAuthorizationPort).FullName!, failure.Message);
+    }
+
+    internal sealed class ReadAuthorization(string change, RequirementsEndpointTests.FlowStore store) : IProjectAuthorizationPort
+    {
+        public List<(Guid Project, Guid Actor, int Reads)> Calls { get; } = [];
+        public Task<ProjectAuthorizationResult> AuthorizeOwnerAsync(Guid projectId, Guid actorId, CancellationToken ct)
+        {
+            Calls.Add((projectId, actorId, store.Reads));
+            var result = store.Reads > 0 && change == "deny"
+                ? new ProjectAuthorizationResult(ProjectAuthorizationStatus.Denied)
+                : new ProjectAuthorizationResult(ProjectAuthorizationStatus.Authorized,
+                    new(projectId, actorId, new(store.Reads > 0 && change == "bump" ? 2 : 1)));
+            return Task.FromResult(result);
+        }
+    }
 
     [Fact]
     public async Task Profile_is_off_by_default_even_with_authentication()

@@ -63,6 +63,7 @@ public sealed class SessionServiceTests
         var stored = Assert.Single(fx.Refresh.Created);
         Assert.Equal(RefreshTokenCodec.Hash(response!.RefreshToken!), stored.TokenHash);
         Assert.Equal(fx.User.Id, stored.UserId);
+        Assert.Equal(fx.User.TokenVersion, stored.ExpectedTokenVersion);
         Assert.Equal(Now.AddDays(7), stored.ExpiresAtUtc);
         Assert.Equal(Now.AddDays(30), stored.AbsoluteExpiresAtUtc);
         Assert.Equal(stored.ExpiresAtUtc, response.RefreshTokenExpiresAtUtc);
@@ -91,13 +92,13 @@ public sealed class SessionServiceTests
     }
 
     [Fact]
-    public async Task Rotation_for_an_inactive_account_revokes_every_session_and_fails()
+    public async Task Rotation_for_an_inactive_account_fails_without_revoking_newer_sessions()
     {
         var fx = new Fixture(enabled: true, active: false);
-        fx.Refresh.NextResult = new RefreshRotationResult(RefreshRotationStatus.Rotated, fx.User.Id, Now.AddDays(7));
+        fx.Refresh.NextResult = new RefreshRotationResult(RefreshRotationStatus.Rotated, fx.User.Id, Now.AddDays(7), fx.User.TokenVersion);
 
         Assert.Null(await fx.Service.RefreshAsync(RefreshTokenCodec.Generate(), default));
-        Assert.Equal([(fx.User.Id, SessionService.ReasonInactive)], fx.Sessions.Revocations);
+        Assert.Empty(fx.Sessions.Revocations);
         Assert.Equal(0, fx.Tokens.Issued);
     }
 
@@ -105,7 +106,7 @@ public sealed class SessionServiceTests
     public async Task Successful_rotation_returns_a_new_refresh_token_and_access_token()
     {
         var fx = new Fixture(enabled: true);
-        fx.Refresh.NextResult = new RefreshRotationResult(RefreshRotationStatus.Rotated, fx.User.Id, Now.AddDays(7));
+        fx.Refresh.NextResult = new RefreshRotationResult(RefreshRotationStatus.Rotated, fx.User.Id, Now.AddDays(7), fx.User.TokenVersion);
         var presented = RefreshTokenCodec.Generate();
 
         var response = await fx.Service.RefreshAsync(presented, default);
@@ -136,12 +137,83 @@ public sealed class SessionServiceTests
         new RefreshTokenOptions().Validate();
     }
 
+    [Theory]
+    [InlineData(null, 60)]
+    [InlineData(0L, 60)]
+    [InlineData(-1L, 60)]
+    [InlineData(8L, 60)]
+    [InlineData(7L, null)]
+    [InlineData(7L, 0)]
+    [InlineData(7L, -1)]
+    public async Task Invalid_rotation_evidence_prevents_issuance(long? version, int? seconds)
+    {
+        var fx = new Fixture(enabled: true);
+        fx.Refresh.NextResult = new(RefreshRotationStatus.Rotated, fx.User.Id,
+            seconds.HasValue ? Now.AddSeconds(seconds.Value) : null, version);
+
+        Assert.Null(await fx.Service.RefreshAsync(RefreshTokenCodec.Generate(), default));
+        Assert.Equal(0, fx.Tokens.Issued);
+        Assert.Empty(fx.Sessions.Revocations);
+    }
+
+    [Theory]
+    [InlineData(true)]
+    [InlineData(false)]
+    public async Task Login_handles_only_the_expected_security_rejection(bool securityRejection)
+    {
+        var fx = new Fixture(enabled: true);
+        var request = new LoginRequest { Email = fx.User.Email, Password = Password };
+        fx.Refresh.CreateFailure = securityRejection ? new RefreshSessionRejectedException() : new InvalidOperationException();
+        if (securityRejection)
+            Assert.Null(await fx.Service.LoginAsync(request, default));
+        else
+            Assert.Same(fx.Refresh.CreateFailure, await Assert.ThrowsAsync<InvalidOperationException>(() => fx.Service.LoginAsync(request, default)));
+        Assert.Empty(fx.Refresh.Created);
+    }
+
+    [Theory]
+    [InlineData(true)]
+    [InlineData(false)]
+    public async Task Revocation_before_or_after_lookup_never_issues_the_new_version(bool beforeLookup)
+    {
+        var fx = new Fixture(enabled: true);
+        var original = fx.User;
+        var newer = User.Restore(original.Id, original.Email, original.NormalizedEmail, original.PasswordHash,
+            null, null, true, Now, original.TokenVersion + 1);
+        fx.Refresh.NextResult = new(RefreshRotationStatus.Rotated, original.Id, Now.AddDays(7), original.TokenVersion);
+        if (beforeLookup)
+            fx.Users.Current = newer;
+        else
+            fx.Tokens.BeforeIssue = () => fx.Users.Current = newer;
+
+        var result = await fx.Service.RefreshAsync(RefreshTokenCodec.Generate(), default);
+        Assert.Equal(beforeLookup, result is null);
+        Assert.Equal(beforeLookup ? null : (long?)original.TokenVersion, fx.Tokens.IssuedVersion);
+        Assert.Empty(fx.Sessions.Revocations);
+    }
+
+    [Fact]
+    public async Task AUTH_G03_Empty_rotation_identity_rejects_without_lookup_issuance_or_revocation()
+    {
+        var fx = new Fixture(enabled: true);
+        fx.Refresh.NextResult = new(RefreshRotationStatus.Rotated, Guid.Empty, Now.AddMinutes(5), fx.User.TokenVersion);
+        Assert.Null(await fx.Service.RefreshAsync(RefreshTokenCodec.Generate(), default));
+        Assert.Equal(0, fx.Users.IdLookups);
+        Assert.Equal(0, fx.Tokens.Issued);
+        Assert.Empty(fx.Sessions.Revocations);
+        Assert.Equal(0, fx.Refresh.FamilyRevocations);
+
+        fx.Refresh.NextResult = fx.Refresh.NextResult with { UserId = fx.User.Id };
+        Assert.NotNull(await fx.Service.RefreshAsync(RefreshTokenCodec.Generate(), default));
+        Assert.Equal(fx.User.TokenVersion, fx.Tokens.IssuedVersion);
+    }
+
     private sealed class Fixture
     {
         public Fixture(bool enabled, bool active = true)
         {
             User = global::BuildMind.Domain.Entities.User.Restore(Guid.NewGuid(), "dana@example.invalid", "DANA@EXAMPLE.INVALID",
-                "hash:" + Password, null, null, active, Now);
+                "hash:" + Password, null, null, active, Now, 7);
             Users = new Users(User);
             Service = new SessionService(
                 new AuthenticationService(Users, new Passwords(), Tokens),
@@ -163,9 +235,15 @@ public sealed class SessionServiceTests
 
     private sealed class Users(User user) : IUserRepository
     {
-        public Task<User?> GetByIdAsync(Guid id, CancellationToken ct) => Task.FromResult(id == user.Id ? user : null);
-        public Task<User?> GetByEmailAsync(string e, CancellationToken ct) => Task.FromResult(e == user.NormalizedEmail ? user : null);
-        public Task<bool> ExistsByEmailAsync(string e, CancellationToken ct) => Task.FromResult(e == user.NormalizedEmail);
+        public User Current { get; set; } = user;
+        public int IdLookups { get; private set; }
+        public Task<User?> GetByIdAsync(Guid id, CancellationToken ct)
+        {
+            IdLookups++;
+            return Task.FromResult(id == Current.Id ? Current : null);
+        }
+        public Task<User?> GetByEmailAsync(string e, CancellationToken ct) => Task.FromResult(e == Current.NormalizedEmail ? Current : null);
+        public Task<bool> ExistsByEmailAsync(string e, CancellationToken ct) => Task.FromResult(e == Current.NormalizedEmail);
         public Task AddAsync(User u, CancellationToken ct) => throw new NotSupportedException();
         public Task UpdateAsync(User u, CancellationToken ct) => throw new NotSupportedException();
     }
@@ -178,9 +256,13 @@ public sealed class SessionServiceTests
 
     private sealed class Tokens : IAccessTokenIssuer
     {
+        public Action? BeforeIssue { get; set; }
+        public long? IssuedVersion { get; private set; }
         public int Issued { get; private set; }
         public AccessTokenResult Issue(User user)
         {
+            BeforeIssue?.Invoke();
+            IssuedVersion = user.TokenVersion;
             Issued++;
             return new AccessTokenResult("access-" + Issued, Now.AddMinutes(15));
         }
@@ -188,6 +270,7 @@ public sealed class SessionServiceTests
 
     private sealed class RefreshStore : IRefreshTokenStore
     {
+        public Exception? CreateFailure { get; set; }
         public List<NewRefreshToken> Created { get; } = [];
         public RefreshRotationResult NextResult { get; set; } = new(RefreshRotationStatus.Invalid);
         public int Rotations { get; private set; }
@@ -196,6 +279,7 @@ public sealed class SessionServiceTests
 
         public Task CreateAsync(NewRefreshToken token, CancellationToken ct)
         {
+            if (CreateFailure is not null) throw CreateFailure;
             Created.Add(token);
             return Task.CompletedTask;
         }
@@ -208,8 +292,12 @@ public sealed class SessionServiceTests
             return Task.FromResult(NextResult);
         }
 
-        public Task<bool> RevokeFamilyAsync(string presented, Guid userId, DateTimeOffset now, string reason, CancellationToken ct) =>
-            Task.FromResult(true);
+        public int FamilyRevocations { get; private set; }
+        public Task<bool> RevokeFamilyAsync(string presented, Guid userId, DateTimeOffset now, string reason, CancellationToken ct)
+        {
+            FamilyRevocations++;
+            return Task.FromResult(true);
+        }
     }
 
     private sealed class SessionStore : IUserSessionStore

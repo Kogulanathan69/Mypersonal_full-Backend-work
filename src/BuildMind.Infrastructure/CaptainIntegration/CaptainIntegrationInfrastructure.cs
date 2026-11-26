@@ -38,6 +38,7 @@ public static class CaptainIntegrationInfrastructure
 
         // Requirements: every write uses the protected atomic path; the policy comes from an operator-supplied file.
         services.TryAddScoped<RequirementRevisionRepository>();
+        services.TryAddScoped<IRequirementMutationStore, RequirementMutationStore>();
         services.Replace(ServiceDescriptor.Scoped<IRequirementRevisionRepository, OwnerProtectedRequirementRevisionRepository>());
         services.TryAddSingleton<ConfiguredRequirementCatalogueProvider>();
         services.TryAddScoped<RequirementCatalogueStore>();

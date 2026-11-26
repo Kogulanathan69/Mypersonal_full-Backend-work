@@ -111,10 +111,15 @@ public sealed class InMemoryM1Store
 
     public List<StoredRefreshToken> RefreshTokens { get; } = [];
 
+    public Action<NewRefreshToken>? BeforeCreateRefresh { get; set; }
+
     public Task CreateAsync(NewRefreshToken token, CancellationToken cancellationToken)
     {
+        BeforeCreateRefresh?.Invoke(token);
         lock (_gate)
         {
+            if (!_users.TryGetValue(token.UserId, out var account) || !account.IsActive || account.TokenVersion != token.ExpectedTokenVersion)
+                throw new RefreshSessionRejectedException();
             RefreshTokens.Add(new StoredRefreshToken { Token = token, ExpiresAtUtc = token.ExpiresAtUtc });
         }
 
@@ -127,11 +132,11 @@ public sealed class InMemoryM1Store
         lock (_gate)
         {
             var current = RefreshTokens.SingleOrDefault(t => t.Token.TokenHash == presentedTokenHash);
-            if (current is null || current.RevokedAtUtc is not null)
+            if (current is null || current.RevokedAtUtc is not null || !_users.TryGetValue(current.UserId, out var account) || !account.IsActive)
                 return Task.FromResult(new RefreshRotationResult(RefreshRotationStatus.Invalid));
             if (current.ConsumedAtUtc is not null)
             {
-                RevokeWhere(t => t.Token.FamilyId == current.Token.FamilyId, nowUtc, "replay_detected");
+                RevokeWhere(t => t.UserId == current.UserId && t.Token.FamilyId == current.Token.FamilyId, nowUtc, "replay_detected");
                 Replace(current.UserId, null, _users[current.UserId].TokenVersion + 1);
                 return Task.FromResult(new RefreshRotationResult(RefreshRotationStatus.ReplayDetected, current.UserId));
             }
@@ -148,7 +153,7 @@ public sealed class InMemoryM1Store
                 Token = current.Token with { Id = replacementId, TokenHash = replacementTokenHash, CreatedAtUtc = nowUtc, ExpiresAtUtc = expires },
                 ExpiresAtUtc = expires,
             });
-            return Task.FromResult(new RefreshRotationResult(RefreshRotationStatus.Rotated, current.UserId, expires));
+            return Task.FromResult(new RefreshRotationResult(RefreshRotationStatus.Rotated, current.UserId, expires, account.TokenVersion));
         }
     }
 
@@ -159,7 +164,7 @@ public sealed class InMemoryM1Store
             var current = RefreshTokens.SingleOrDefault(t => t.Token.TokenHash == presentedTokenHash && t.UserId == userId);
             if (current is null)
                 return Task.FromResult(false);
-            RevokeWhere(t => t.Token.FamilyId == current.Token.FamilyId, nowUtc, reason);
+            RevokeWhere(t => t.UserId == current.UserId && t.Token.FamilyId == current.Token.FamilyId, nowUtc, reason);
             return Task.FromResult(true);
         }
     }

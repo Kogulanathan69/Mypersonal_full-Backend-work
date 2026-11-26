@@ -13,7 +13,8 @@ public sealed class LogoutAllEndpointModule : IApiEndpointModule
     {
         apiV1.MapPost("/auth/logout-all", LogoutAllAsync)
             .WithTags("Authentication")
-            .RequireAuthorization();
+            .RequireAuthorization()
+            .Produces(StatusCodes.Status204NoContent);
     }
 
     private static async Task<IResult> LogoutAllAsync(
@@ -46,7 +47,8 @@ public sealed class RefreshTokenEndpointModule : IApiEndpointModule
             .AllowAnonymous();
 
         auth.MapPost("/logout", LogoutAsync)
-            .RequireAuthorization();
+            .RequireAuthorization()
+            .Produces(StatusCodes.Status204NoContent);
     }
 
     private static async Task<IResult> RefreshAsync(

@@ -59,3 +59,28 @@ Pins, manifest, records and engine are byte-identical to the approved sources.
 - **Edge roles** (road frontage, side, rear) are not inferred from regulations (see FINAL-SURVEY-OCR-CRS-REPORT).
 - **Corpus versioning, re-ingestion and admin management:** re-staging is idempotent and hash-checked (a changed source is refused, not overwritten). Approving a new source version requires new M7 pins (E-6). There is no admin upload endpoint, by design: unapproved documents must not enter the corpus.
 - Legal currency and amendments of the three sources are unverified (`legal_status = not_verified`).
+
+## STEP 8B: authorization basis and exact changes (for review)
+
+**Authorization basis.** The Team Captain's "FINAL FULL BACKEND IMPLEMENTATION AND INTEGRATION EXECUTION ORDER" §3 states:
+- "Regulation RAG STEP 8B development | GO";
+- "The previous Regulation RAG STEP 8B development hold is explicitly lifted by the Team Captain for this Captain development workspace. This authorization supersedes the earlier STEP 8B development restriction."
+
+The authorization is scoped to this Captain workspace. It does **not** authorize changes on shared branches; M7 review is still required before any merge.
+
+**Exact changes made under it** (all in this branch):
+
+| Change | Where | Nature |
+|---|---|---|
+| Approved-corpus staging tool | `rag-service/tools/stage_approved_corpus.py` (new; outside the verbatim engine) | copies approved PDFs/records after SHA-256 verification against the pins; runs the verbatim loader + assessor |
+| rag-service runtime: staged corpus + TLS with required client certificate | `tools/captain/run-rag.sh`, `tools/captain/pki.sh` (rag-server leaf) | configuration only |
+| API → RAG mutual TLS | `src/BuildMind.API/Composition/CaptainLocalIntegration.cs` (attaches the internal mTLS handler to `RagServiceClient` when the RAG URL is https) | composition only; **`RagServiceClient` code unchanged** |
+| Container image / compose service for rag-service | `deploy/captain/rag.Dockerfile`, `rag.constraints.txt`, `compose.verify.yml` | packaging |
+| Report evidence appendix | `src/BuildMind.Infrastructure/CaptainIntegration/EvidenceCitingReportRenderer.cs` (consumes `IRegulationEvidenceSource`) | consumer of the existing port |
+
+**Unchanged:**
+- `rag-service/app/*`;
+- `rag-service/regulation_retrieval/*` (verbatim engine; the provenance test passes: rag-service suite 238 passed);
+- approved-source pins, manifest, records and index;
+- the M7 registration guard;
+- the evidence contract v1.

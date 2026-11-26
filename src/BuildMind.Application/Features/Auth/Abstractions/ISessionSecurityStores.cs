@@ -29,7 +29,10 @@ public sealed record NewRefreshToken(
     string TokenHash,
     DateTimeOffset CreatedAtUtc,
     DateTimeOffset ExpiresAtUtc,
-    DateTimeOffset AbsoluteExpiresAtUtc);
+    DateTimeOffset AbsoluteExpiresAtUtc,
+    long ExpectedTokenVersion);
+
+public sealed class RefreshSessionRejectedException : Exception;
 
 public enum RefreshRotationStatus
 {
@@ -39,7 +42,7 @@ public enum RefreshRotationStatus
     ReplayDetected
 }
 
-public sealed record RefreshRotationResult(RefreshRotationStatus Status, Guid? UserId = null, DateTimeOffset? ExpiresAtUtc = null);
+public sealed record RefreshRotationResult(RefreshRotationStatus Status, Guid? UserId = null, DateTimeOffset? ExpiresAtUtc = null, long? TokenVersion = null);
 
 /// <summary>Refresh-token persistence (STEP 05 decision 3). Only SHA-256 hashes of tokens are ever stored.</summary>
 public interface IRefreshTokenStore

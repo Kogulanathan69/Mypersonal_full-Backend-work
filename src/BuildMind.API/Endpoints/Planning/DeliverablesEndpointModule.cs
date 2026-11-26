@@ -26,13 +26,13 @@ public sealed class DeliverablesEndpointModule : IApiEndpointModule
     {
         ArgumentNullException.ThrowIfNull(apiV1);
         var project = apiV1.MapGroup("/projects/{projectId}").WithTags("Reports and Architect Requests").RequireAuthorization();
-        project.MapPost("/reports", GenerateAsync).WithName("GenerateReport").RequireExpensiveOperationLimit();
+        project.MapPost("/reports", GenerateAsync).WithName("GenerateReport").RequireExpensiveOperationLimit().Accepts<GenerateReportHttpRequest>("application/json").Produces(200).Produces(201);
         project.MapGet("/reports/{reportId}", StatusAsync).WithName("GetReportStatus");
         project.MapGet("/reports/{reportId}/download", DownloadAsync).WithName("DownloadReport");
-        project.MapPost("/architect-requests", CreateRequestAsync).WithName("CreateArchitectRequest");
+        project.MapPost("/architect-requests", CreateRequestAsync).WithName("CreateArchitectRequest").Accepts<CreateArchitectRequestHttpRequest>("application/json").Produces(201);
         project.MapGet("/architect-requests", ListRequestsAsync).WithName("ListArchitectRequests");
         project.MapGet("/architect-requests/{requestId}", GetRequestAsync).WithName("GetArchitectRequest");
-        project.MapPost("/architect-requests/{requestId}/withdraw", WithdrawAsync).WithName("WithdrawArchitectRequest");
+        project.MapPost("/architect-requests/{requestId}/withdraw", WithdrawAsync).WithName("WithdrawArchitectRequest").Accepts<WithdrawArchitectRequestHttpRequest>("application/json").Produces(200);
     }
 
     private static async Task<IResult> GenerateAsync(string projectId, HttpContext context, ICurrentUser user,

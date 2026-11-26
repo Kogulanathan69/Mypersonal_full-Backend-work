@@ -30,11 +30,11 @@ public sealed class PlanningEndpointModule : IApiEndpointModule
     {
         ArgumentNullException.ThrowIfNull(apiV1);
         var project = apiV1.MapGroup("/projects/{projectId}").WithTags("Planning").RequireAuthorization();
-        project.MapGet("/land", GetLandAsync).WithName("GetProjectLand");
-        project.MapPut("/land", PutLandAsync).WithName("ReplaceProjectLand");
-        project.MapPost("/generation-jobs", StartGenerationAsync).WithName("StartGeneration").RequireExpensiveOperationLimit();
+        project.MapGet("/land", GetLandAsync).WithName("GetProjectLand").Produces(200).Produces(204);
+        project.MapPut("/land", PutLandAsync).WithName("ReplaceProjectLand").Accepts<PutLandHttpRequest>("application/json").Produces(201);
+        project.MapPost("/generation-jobs", StartGenerationAsync).WithName("StartGeneration").Accepts<StartGenerationHttpRequest>("application/json").Produces(201).RequireExpensiveOperationLimit();
         project.MapGet("/generation-jobs/{jobId}", GetGenerationAsync).WithName("GetGenerationJob");
-        project.MapPost("/generation-jobs/{jobId}/candidates/{candidateId}/save", SaveCandidateAsync).WithName("SaveGeneratedCandidate");
+        project.MapPost("/generation-jobs/{jobId}/candidates/{candidateId}/save", SaveCandidateAsync).WithName("SaveGeneratedCandidate").Accepts<SaveCandidateHttpRequest>(true, "application/json").Produces(201);
     }
 
     private static async Task<IResult> GetLandAsync(string projectId, HttpContext context, LandService service, CancellationToken token)

@@ -103,6 +103,18 @@ public sealed class SchemaModelTests
     }
 
     [Fact]
+    public void Receipt_restricts_deletion_of_the_same_project_revision()
+    {
+        var fk = Entity<BuildMind.Infrastructure.Persistence.Records.Requirements.RequirementMutationReceiptRecord>()
+            .GetForeignKeys().Single();
+        Assert.Equal(typeof(RequirementRevisionRecord), fk.PrincipalEntityType.ClrType);
+        Assert.Equal(new[] { "project_id", "saved_revision_id" }, fk.Properties.Select(p => p.GetColumnName()));
+        Assert.Equal("ak_requirement_revisions_project_id_id", fk.PrincipalKey.GetName());
+        Assert.Equal(new[] { "project_id", "id" }, fk.PrincipalKey.Properties.Select(p => p.GetColumnName()));
+        Assert.Equal(DeleteBehavior.Restrict, fk.DeleteBehavior);
+    }
+
+    [Fact]
     public void Head_pointer_can_only_reference_a_revision_of_the_same_project()
     {
         var fk = Entity<RequirementHeadRecord>().GetForeignKeys()

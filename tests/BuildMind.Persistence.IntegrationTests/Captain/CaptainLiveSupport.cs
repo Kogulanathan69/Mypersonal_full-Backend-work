@@ -13,13 +13,14 @@ internal static class CaptainLiveSupport
 {
     public static readonly DateTimeOffset Now = new(2026, 11, 24, 10, 0, 0, TimeSpan.Zero);
 
-    public static BuildMindDbContext Context(DisposableMySqlDatabase db)
+    public static BuildMindDbContext Context(DisposableMySqlDatabase db, params Microsoft.EntityFrameworkCore.Diagnostics.IInterceptor[] interceptors)
     {
         // Unpooled: every disposable database would otherwise keep its own idle pool open after it is dropped, and the
         // full live suite then exhausts the server's max_connections (observed: 152/151). TLS settings are unchanged.
         var unpooled = new MySql.Data.MySqlClient.MySqlConnectionStringBuilder(db.ConnectionString) { Pooling = false };
         var builder = new DbContextOptionsBuilder<BuildMindDbContext>();
         MySqlContextOptions.Apply(builder, unpooled.ConnectionString, 30);
+        builder.AddInterceptors(interceptors);
         return new BuildMindDbContext(builder.Options);
     }
 

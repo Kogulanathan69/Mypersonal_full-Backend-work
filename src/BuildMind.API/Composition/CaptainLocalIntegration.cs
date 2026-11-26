@@ -54,10 +54,12 @@ public static class CaptainLocalIntegration
         var services = builder.Services;
         services.AddCaptainIntegrationInfrastructure();
 
-        // Requirements (M5 services, unchanged) over the protected repository adapter.
+        // Require the fresh authorization port for Captain reads and the protected repository for writes.
         services.AddScoped<RequirementRevisionReader>();
+        services.AddScoped<IRequirementMutationCoordinator, RequirementMutationCoordinator>();
         services.AddScoped<ValidatedRequirementRevisionWriter>();
-        services.AddScoped<IRequirementsApplicationService, RequirementsApplicationService>();
+        services.AddScoped<IRequirementsApplicationService>(sp => ActivatorUtilities.CreateInstance<RequirementsApplicationService>(
+            sp, sp.GetRequiredService<IProjectAuthorizationPort>()));
         services.AddScoped<IRequirementsSectionApplicationService, RequirementsSectionApplicationService>();
         services.AddSingleton<IApiEndpointModule, RequirementsEndpointModule>();
         services.AddSingleton<IApiEndpointModule, RequirementsSectionsEndpointModule>();

@@ -154,10 +154,19 @@ internal sealed class CaptainAuthorizedRequirementPort(IProjectAuthorizationPort
 /// </summary>
 internal sealed class EditGeometryHandoff
 {
-    private readonly ConcurrentDictionary<string, PlanGeometryDto> geometries = new(StringComparer.Ordinal);
-    public void Record(PlanGeometryDto geometry) =>
-        geometries[PlanRevisionService.ComputeGeometryHash(JsonSerializer.Serialize(geometry, PlanEditorJson.StrictOptions))] = geometry;
-    public PlanGeometryDto? Find(string hash) => geometries.TryGetValue(hash, out var geometry) ? geometry : null;
+    internal sealed record Snapshot(PlanGeometryDto Geometry, string GeometryJson);
+
+    private readonly ConcurrentDictionary<string, Snapshot> geometries = new(StringComparer.Ordinal);
+
+    public void Record(PlanGeometryDto geometry)
+    {
+        var json = JsonSerializer.Serialize(geometry, PlanEditorJson.StrictOptions);
+        var hash = PlanRevisionService.ComputeGeometryHash(json);
+        geometries[hash] = new Snapshot(geometry, json);
+    }
+
+    public Snapshot? Find(string hash) =>
+        geometries.TryGetValue(hash, out var snapshot) ? snapshot : null;
 }
 
 internal sealed class PlanEditorComputeClient(PythonServiceClient python, EditGeometryHandoff handoff, IPlanRevisionStore revisions)
@@ -221,8 +230,11 @@ internal sealed class LedgerValidationEvidenceSource(
 {
     public async Task<PlanValidationReferenceDto?> GetAsync(Guid projectId, Guid planId, string exactGeometryHash, CancellationToken token)
     {
-        if (handoff.Find(exactGeometryHash) is not { } geometry || user.UserId is not { } actor
-            || geometry.ProjectId != projectId || geometry.PlanId != planId)
+        if (handoff.Find(exactGeometryHash) is not { } snapshot || user.UserId is not { } actor)
+            return null;
+        var geometry = snapshot.Geometry;
+        if (geometry.ProjectId != projectId || geometry.PlanId != planId
+            || PlanRevisionService.ComputeGeometryHash(snapshot.GeometryJson) != exactGeometryHash)
             return null;
         var land = await lands.GetAsync(projectId, geometry.LandRevisionId, token).ConfigureAwait(false);
         var requirement = await requirements.GetAsync(projectId, geometry.RequirementsRevisionId, token).ConfigureAwait(false);
@@ -235,7 +247,8 @@ internal sealed class LedgerValidationEvidenceSource(
         {
             var counts = requirement.Content.GroundFloorRooms.Where(r => r.Count > 0).ToDictionary(r => r.RoomType, r => r.Count, StringComparer.Ordinal);
             check = await compute.ValidatePlanAsync(new PlanCheckRequest(projectId, land.Id, land.Land,
-                synthetic ? Enumerable.Repeat(policy!.SyntheticSetbackM!.Value, land.EdgeCount).ToArray() : null, counts, geometry), token).ConfigureAwait(false);
+                synthetic ? Enumerable.Repeat(policy!.SyntheticSetbackM!.Value, land.EdgeCount).ToArray() : null, counts, geometry,
+                snapshot.GeometryJson, exactGeometryHash), token).ConfigureAwait(false);
         }
         catch (DependencyFailureException failure) when (failure.Kind == DependencyFailureKind.Timeout)
         {

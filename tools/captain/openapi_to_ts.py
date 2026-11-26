@@ -15,7 +15,7 @@ PRIMITIVES = {"string": "string", "integer": "number", "number": "number", "bool
 def ts_type(schema, schemas):
     if not schema:
         return "unknown"
-    if schema.get("x-binary"):
+    if schema.get("x-binary") or schema.get("format") == "binary":
         return "Blob"
     if "$ref" in schema:
         return schema["$ref"].rsplit("/", 1)[-1]
@@ -42,7 +42,7 @@ def ts_type(schema, schemas):
 
 def json_body(container):
     content = (container or {}).get("content", {})
-    for media in ("application/json", "text/json", "application/problem+json"):
+    for media in ("application/json", "text/json", "application/problem+json", "multipart/form-data"):
         if media in content:
             return content[media].get("schema")
     for media, entry in content.items():  # binary downloads (e.g. application/pdf)
@@ -73,17 +73,30 @@ def main(src, out):
             path_params = [p for p in params if p.get("in") == "path"]
             query = [p for p in params if p.get("in") == "query"]
             req = json_body(op.get("requestBody"))
-            ok = next((json_body(r) for code, r in sorted(op.get("responses", {}).items())
-                       if code.startswith("2") and json_body(r) is not None), None)
-            no_content = ok is None and any(code == "204" for code in op.get("responses", {}))
+            success_responses = {
+                code: response for code, response in op.get("responses", {}).items()
+                if code.startswith("2")
+            }
+            success_types = []
+            typed_success = False
+            for code, response in sorted(success_responses.items()):
+                schema = json_body(response)
+                if schema is not None:
+                    success_types.append(ts_type(schema, schemas))
+                    typed_success = True
+                elif code == "204" or (code == "202" and not response.get("content")):
+                    success_types.append("void")
+                else:
+                    success_types.append("unknown")
+            response_type = " | ".join(dict.fromkeys(success_types)) or "unknown"
             typed_req += req is not None
-            typed_res += ok is not None
+            typed_res += typed_success
             pp = "{ " + "; ".join(f"{json.dumps(p['name'])}: string" for p in path_params) + " }" if path_params else "{}"
             qp = "{ " + "; ".join(f"{json.dumps(p['name'])}{'' if p.get('required') else '?'}: {ts_type(p.get('schema'), schemas)}"
                                   for p in query) + " }" if query else "{}"
-            body = ts_type(req, schemas) if req is not None else ("unknown" if op.get("requestBody") else "never")
+            body = (ts_type(req, schemas) + (" | undefined" if not op["requestBody"].get("required", False) else "")) if req is not None else ("unknown" if op.get("requestBody") else "never")
             lines.append(f"  {json.dumps(method.upper() + ' ' + path)}: {{ path: {pp}; query: {qp}; body: {body}; "
-                         f"response: {ts_type(ok, schemas) if ok is not None else ('void' if no_content else 'unknown')} }};")
+                         f"response: {response_type} }};")
     lines += ["}", "", "export type OperationKey = keyof ApiOperations;", ""]
     open(out, "w", encoding="utf-8", newline="\n").write("\n".join(lines))
     print(f"operations={total} schemas={len(schemas)} declared_request_bodies={typed_req} declared_success_bodies={typed_res}")

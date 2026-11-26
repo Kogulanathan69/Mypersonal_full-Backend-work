@@ -47,7 +47,8 @@ public sealed partial class RegulationRetrievalEndpointModule : IApiEndpointModu
             .WithTags("Regulations")
             .WithName("RetrieveRegulationEvidence")
             .RequireAuthorization()
-            .RequireExpensiveOperationLimit();
+            .RequireExpensiveOperationLimit()
+            .Accepts<RetrieveRegulationsHttpRequest>("application/json").Produces(200);
     }
 
     private static async Task<IResult> RetrieveAsync(HttpContext context, IRegulationEvidenceSource source, CancellationToken cancellationToken)

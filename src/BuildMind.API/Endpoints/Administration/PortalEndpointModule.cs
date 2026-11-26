@@ -28,7 +28,7 @@ public sealed class PortalEndpointModule : IApiEndpointModule
                 if (body.Failure is not null) return body.Failure;
                 if (body.Value!.UserId is not { } userId) return P.Invalid("userId");
                 return A.Map(await s.CreateProfileAsync(p.UserId, userId, body.Value.DisplayName ?? "", body.Value.RegistrationNumber, t), x => x, created: true);
-            }));
+            })).Accepts<CreateArchitectRequest>("application/json").Produces(201);
         admin.MapPost("/{recipientId}/verification", (string recipientId, HttpContext c, ICurrentUser u, IPrincipalDirectory d, IArchitectPortalStore s,
             CancellationToken t) => A.AsAdmin(c, u, d, t, async p =>
             {
@@ -37,7 +37,7 @@ public sealed class PortalEndpointModule : IApiEndpointModule
                 if (body.Failure is not null) return body.Failure;
                 if (body.Value!.ExpectedRowVersion is not { } v) return P.Invalid("expectedRowVersion");
                 return A.Map(await s.SetVerificationAsync(p.UserId, id, body.Value.Status ?? "", body.Value.Reference, v, t), x => x);
-            }));
+            })).Accepts<VerificationRequest>("application/json").Produces(200);
         admin.MapPut("/{recipientId}/listing", (string recipientId, HttpContext c, ICurrentUser u, IPrincipalDirectory d, IArchitectPortalStore s,
             CancellationToken t) => A.AsAdmin(c, u, d, t, async p =>
             {
@@ -47,7 +47,7 @@ public sealed class PortalEndpointModule : IApiEndpointModule
                 var r = body.Value!;
                 if (r.IsListed is not { } listed || r.AcceptingRequests is not { } accepting || r.ExpectedRowVersion is not { } v) return P.Invalid("request");
                 return A.Map(await s.SetListingAsync(p.UserId, id, listed, accepting, v, t), x => x);
-            }));
+            })).Accepts<ListingRequest>("application/json").Produces(200);
 
         apiV1.MapGet("/architects", async (HttpContext c, IArchitectPortalStore s, CancellationToken t) =>
         {
@@ -84,7 +84,7 @@ public sealed class PortalEndpointModule : IApiEndpointModule
                 var body = await P.ReadAsync<RespondRequest>(c, t);
                 if (body.Failure is not null) return body.Failure;
                 return A.Map(await s.RespondAsync(p.UserId, profile.RecipientId, id, body.Value!.Decision ?? "", body.Value.Note, t), x => x);
-            }));
+            })).Accepts<RespondRequest>("application/json").Produces(200);
         portal.MapPost("/requests/{requestId}/complete", (string requestId, HttpContext c, ICurrentUser u, IPrincipalDirectory d, IArchitectPortalStore s,
             CancellationToken t) => AsArchitect(c, u, d, s, t, async (p, profile) =>
                 !P.TryId(requestId, out var id) ? P.Invalid("requestId")
@@ -98,7 +98,7 @@ public sealed class PortalEndpointModule : IApiEndpointModule
                 if (body.Failure is not null) return body.Failure;
                 return A.Map(await s.AddFeedbackAsync(p.UserId, profile.RecipientId, id, body.Value!.Kind ?? "", body.Value.Body ?? "", t), x => x,
                     created: true);
-            }));
+            })).Accepts<FeedbackRequest>("application/json").Produces(201);
 
         apiV1.MapGet("/projects/{projectId}/architect-requests/{requestId}/conversation", async (string projectId, string requestId, HttpContext c,
             PlanningAccess access, IArchitectPortalStore s, CancellationToken t) =>
@@ -124,7 +124,8 @@ public sealed class PortalEndpointModule : IApiEndpointModule
         notifications.MapPost("/{notificationId}/read", async (string notificationId, ICurrentUser u, INotificationStore s, CancellationToken t) =>
             u.UserId is not { } id ? A.Problem(401, "UNAUTHENTICATED")
             : !P.TryId(notificationId, out var nid) ? P.Invalid("notificationId")
-            : await s.MarkReadAsync(id, nid, t) ? Results.NoContent() : A.Problem(404, "NOT_FOUND"));
+            : await s.MarkReadAsync(id, nid, t) ? Results.NoContent() : A.Problem(404, "NOT_FOUND"))
+            .Produces(StatusCodes.Status204NoContent);
         notifications.MapPost("/read-all", async (ICurrentUser u, INotificationStore s, CancellationToken t) =>
             u.UserId is { } id ? Results.Ok(new { marked = await s.MarkAllReadAsync(id, t) }) : A.Problem(401, "UNAUTHENTICATED"));
 
@@ -139,7 +140,7 @@ public sealed class PortalEndpointModule : IApiEndpointModule
             if (body.Value!.EmailEnabled is not { } enabled) return P.Invalid("emailEnabled");
             await s.SetEmailEnabledAsync(id, enabled, t);
             return Results.Ok(new { emailEnabled = enabled });
-        });
+        }).Accepts<PreferencesRequest>("application/json").Produces(200);
     }
 
     private static async Task<IResult> AsArchitect(HttpContext c, ICurrentUser u, IPrincipalDirectory d, IArchitectPortalStore s, CancellationToken t,

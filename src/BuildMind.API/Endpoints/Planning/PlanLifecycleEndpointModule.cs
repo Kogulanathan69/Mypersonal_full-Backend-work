@@ -27,7 +27,7 @@ public sealed class PlanLifecycleEndpointModule : IApiEndpointModule
         var project = apiV1.MapGroup("/projects/{projectId}").WithTags("Plan Lifecycle").RequireAuthorization();
         project.MapGet("/plans", ListPlansAsync).WithName("ListProjectPlans");
         project.MapGet("/plans/{planId}", GetPlanAsync).WithName("GetCurrentPlan");
-        project.MapPost("/plans/{planId}/confirmation", ConfirmAsync).WithName("ConfirmPlan");
+        project.MapPost("/plans/{planId}/confirmation", ConfirmAsync).WithName("ConfirmPlan").Accepts<ConfirmPlanHttpRequest>("application/json").Produces(201);
     }
 
     private static async Task<IResult> ListPlansAsync(string projectId, HttpContext context, PlanningAccess access,

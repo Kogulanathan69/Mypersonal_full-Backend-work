@@ -5,6 +5,16 @@ using BuildMind.Infrastructure.Persistence.Repositories.Identity;
 using BuildMind.Infrastructure.Persistence.Transactions;
 using BuildMind.Persistence.IntegrationTests.Support;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.EntityFrameworkCore.Diagnostics;
+using Microsoft.AspNetCore.Http;
+using Microsoft.Extensions.Configuration;
+using BuildMind.API.Security;
+using BuildMind.Application.Features.Auth.Services;
+using BuildMind.Infrastructure.CaptainIntegration;
+using BuildMind.Infrastructure.Identity;
+using System.Data.Common;
+using System.Security.Claims;
+using MySql.Data.MySqlClient;
 
 namespace BuildMind.Persistence.IntegrationTests;
 
@@ -133,7 +143,9 @@ public sealed class SessionSecurityLiveTests
         await using (var context = Context(db))
         {
             await Resets(context).ReplaceTokenAsync(new PasswordResetTokenRecord(userId, Hash("expired"), Now.AddHours(-1), Now.AddSeconds(-1)), default);
-            await Resets(context).ReplaceTokenAsync(new PasswordResetTokenRecord(inactiveId, Hash("inactive"), Now, Now.AddMinutes(15)), default);
+            Assert.False(await Resets(context).ReplaceTokenAsync(new PasswordResetTokenRecord(inactiveId, Hash("inactive"), Now, Now.AddMinutes(15)), default));
+            context.Add(new PasswordResetRecord { UserId = inactiveId, TokenHash = Hash("inactive"), CreatedAtUtc = Now, ExpiresAtUtc = Now.AddMinutes(15) });
+            await context.SaveChangesAsync();
         }
 
         await using (var context = Context(db))
@@ -149,7 +161,7 @@ public sealed class SessionSecurityLiveTests
             Assert.Equal("synthetic-hash", u.PasswordHash);
             Assert.Equal(1L, u.TokenVersion);
         });
-        // The inactive user's token was not consumed: the transaction rolled back.
+        // A token issued before disable remains unconsumed.
         Assert.Null((await check.Set<PasswordResetRecord>().AsNoTracking().SingleAsync(r => r.UserId == inactiveId)).ConsumedAtUtc);
     }
 
@@ -230,6 +242,224 @@ public sealed class SessionSecurityLiveTests
         }
     }
 
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task S10_matching_family_ids_remain_isolated(bool replay)
+    {
+        await using var db = await SchemaAsync();
+        var alice = await SeedUserAsync(db);
+        var bob = await SeedUserAsync(db);
+        var first = await SeedRefreshAsync(db, alice, "first");
+        await using var c = Context(db);
+        await Refresh(c).CreateAsync(first with { Id = Guid.NewGuid(), UserId = bob, TokenHash = Hash("second") }, default);
+        if (replay)
+        {
+            var rotated = await Refresh(c).RotateAsync(first.TokenHash, Guid.NewGuid(), Hash("next"), Now, TimeSpan.FromDays(7), default);
+            Assert.Equal(RefreshRotationStatus.Rotated, rotated.Status);
+            var repeated = await Refresh(c).RotateAsync(first.TokenHash, Guid.NewGuid(), Hash("unused"), Now, TimeSpan.FromDays(7), default);
+            Assert.Equal(RefreshRotationStatus.ReplayDetected, repeated.Status);
+        }
+        else
+        {
+            Assert.True(await Refresh(c).RevokeFamilyAsync(first.TokenHash, alice, Now, "logout", default));
+        }
+        Assert.All(await c.Set<RefreshTokenRecord>().AsNoTracking().Where(t => t.UserId == alice).ToListAsync(), t => Assert.NotNull(t.RevokedAtUtc));
+        Assert.Null((await c.Set<RefreshTokenRecord>().AsNoTracking().SingleAsync(t => t.UserId == bob)).RevokedAtUtc);
+    }
+
+    [Fact]
+    public async Task S11_disabled_account_cannot_create_or_rotate()
+    {
+        await using var db = await SchemaAsync();
+        var id = await SeedUserAsync(db);
+        var existing = await SeedRefreshAsync(db, id, "existing");
+        await using var c = Context(db);
+        await c.Set<UserRecord>().Where(u => u.Id == id).ExecuteUpdateAsync(s => s.SetProperty(u => u.IsActive, false));
+        await Assert.ThrowsAsync<RefreshSessionRejectedException>(() => Refresh(c).CreateAsync(
+            existing with { Id = Guid.NewGuid(), TokenHash = Hash("disabled") }, default));
+        var rotation = await Refresh(c).RotateAsync(existing.TokenHash, Guid.NewGuid(), Hash("replacement"), Now, TimeSpan.FromDays(7), default);
+        Assert.Equal(RefreshRotationStatus.Invalid, rotation.Status);
+        Assert.Null((await c.Set<RefreshTokenRecord>().AsNoTracking().SingleAsync()).ConsumedAtUtc);
+    }
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task S12_stale_login_after_revocation_cannot_create_a_session(bool resetPassword)
+    {
+        await using var db = await SchemaAsync();
+        var id = await SeedUserAsync(db);
+        await using var c = Context(db);
+        var login = new NewRefreshToken(Guid.NewGuid(), id, Guid.NewGuid(), Hash("stale"), Now, Now.AddDays(7), Now.AddDays(30), 1);
+        if (resetPassword)
+        {
+            Assert.True(await Resets(c).ReplaceTokenAsync(new(id, Hash("reset"), Now, Now.AddMinutes(10)), default));
+            Assert.True(await Resets(c).ResetPasswordAtomicallyAsync(id, Hash("reset"), "changed", Now, default));
+        }
+        else
+        {
+            Assert.True(await Sessions(c).RevokeAllSessionsAsync(id, Now, "logout_all", default));
+        }
+        await Assert.ThrowsAsync<RefreshSessionRejectedException>(() => Refresh(c).CreateAsync(login, default));
+        Assert.False(await c.Set<RefreshTokenRecord>().AnyAsync());
+    }
+
+    [Fact]
+    public async Task S13_rotation_returns_locked_account_version()
+    {
+        await using var db = await SchemaAsync();
+        var id = await SeedUserAsync(db);
+        await using var c = Context(db);
+        Assert.True(await Sessions(c).RevokeAllSessionsAsync(id, Now, "logout_all", default));
+        await Refresh(c).CreateAsync(new(Guid.NewGuid(), id, Guid.NewGuid(), Hash("v2"), Now, Now.AddDays(7), Now.AddDays(30), 2), default);
+        var rotation = await Refresh(c).RotateAsync(Hash("v2"), Guid.NewGuid(), Hash("replacement"), Now, TimeSpan.FromDays(7), default);
+        Assert.Equal(RefreshRotationStatus.Rotated, rotation.Status);
+        Assert.Equal(2L, rotation.TokenVersion);
+    }
+
+    [Fact]
+    public async Task AUTH_G01_Password_change_rejects_previously_verified_login()
+    {
+        await using var db = await SchemaAsync();
+        var passwords = new PasswordHashService();
+        const string oldPassword = "Synthetic-old-password-26!";
+        const string newPassword = "Synthetic-new-password-26!";
+        var id = await SeedUserAsync(db, passwordHash: passwords.HashPassword(oldPassword));
+        var other = await SeedUserAsync(db);
+        var otherSession = await SeedRefreshAsync(db, other, "unrelated");
+        await using var c = Context(db);
+        var users = new UserRepository(c);
+        var auth = new AuthenticationService(users, passwords, new JwtAccessTokenIssuer(new JwtOptions
+        {
+            Issuer = "synthetic", Audience = "synthetic-api",
+            SigningKey = Convert.ToBase64String(System.Security.Cryptography.RandomNumberGenerator.GetBytes(32))
+        }, TimeProvider.System));
+        var account = (await users.GetByIdAsync(id, default))!;
+        var login = await auth.LoginAsync(new() { Email = account.Email, Password = oldPassword }, default);
+        Assert.NotNull(login);
+        var verifiedVersion = long.Parse(new System.IdentityModel.Tokens.Jwt.JwtSecurityTokenHandler()
+            .ReadJwtToken(login.AccessToken).Claims.Single(claim => claim.Type == "tv").Value,
+            System.Globalization.CultureInfo.InvariantCulture);
+        var security = new MySqlAccountSecurityStore(c, Runner(c));
+        Assert.True(await security.ChangePasswordAsync(id, account.PasswordHash, passwords.HashPassword(newPassword), Now, default));
+        Assert.Equal(new UserSecurityState(true, verifiedVersion + 1), await Sessions(c).GetAsync(id, default));
+        var stale = new NewRefreshToken(Guid.NewGuid(), id, Guid.NewGuid(), Hash("obsolete"), Now, Now.AddDays(1), Now.AddDays(7), verifiedVersion);
+        await Assert.ThrowsAsync<RefreshSessionRejectedException>(() => Refresh(c).CreateAsync(stale, default));
+        var only = await c.Set<RefreshTokenRecord>().AsNoTracking().SingleAsync();
+        Assert.Equal(otherSession.Id, only.Id);
+        Assert.Null(only.RevokedAtUtc);
+        var unaffected = (await users.GetByIdAsync(other, default))!;
+        Assert.True(unaffected.IsActive);
+        Assert.Equal(1L, unaffected.TokenVersion);
+        Assert.Equal("synthetic-hash", unaffected.PasswordHash);
+        Assert.Null(await auth.LoginAsync(new() { Email = account.Email, Password = oldPassword }, default));
+        Assert.NotNull(await auth.LoginAsync(new() { Email = account.Email, Password = newPassword }, default));
+    }
+
+    [Fact]
+    public async Task AUTH_G04_Captain_individual_revocation_is_owner_scoped()
+    {
+        await using var db = await SchemaAsync();
+        var alice = await SeedUserAsync(db);
+        var bob = await SeedUserAsync(db);
+        var shared = await SeedRefreshAsync(db, alice, "alice");
+        var bobOnly = await SeedRefreshAsync(db, bob, "private");
+        await using var c = Context(db);
+        var refresh = Refresh(c);
+        var matching = shared with { Id = Guid.NewGuid(), UserId = bob, TokenHash = Hash("bob") };
+        await refresh.CreateAsync(matching, default);
+        var captain = new CaptainReadModels(c, TimeProvider.System, new SurveyBlobReader(new ConfigurationBuilder().Build()));
+        Assert.False(await captain.RevokeSessionAsync(alice, bobOnly.FamilyId, default));
+        Assert.True(await captain.RevokeSessionAsync(alice, shared.FamilyId, default));
+        var rows = await c.Set<RefreshTokenRecord>().AsNoTracking().ToListAsync();
+        Assert.Equal("SESSION_REVOKED_BY_USER", rows.Single(t => t.Id == shared.Id).RevocationReason);
+        Assert.All(rows.Where(t => t.UserId == bob), t => Assert.Null(t.RevokedAtUtc));
+        foreach (var session in new[] { matching, bobOnly })
+        {
+            var rotation = await refresh.RotateAsync(session.TokenHash, Guid.NewGuid(), Hash(session.Id.ToString()), Now, TimeSpan.FromDays(7), default);
+            Assert.Equal(RefreshRotationStatus.Rotated, rotation.Status);
+            Assert.Equal(bob, rotation.UserId);
+        }
+        Assert.Equal(new UserSecurityState(true, 1), await Sessions(c).GetAsync(bob, default));
+    }
+
+    [Theory]
+    [InlineData(true)]
+    [InlineData(false)]
+    public async Task AUTH_G06_Create_and_revoke_respect_both_commit_orders(bool revokeFirst)
+    {
+        await using var db = await SchemaAsync();
+        var id = await SeedUserAsync(db);
+        using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(30));
+        var ct = timeout.Token;
+        var gate = new CommitGate(ct);
+        await using var first = Context(db, gate);
+        await using var second = Context(db);
+        var session = new NewRefreshToken(Guid.NewGuid(), id, Guid.NewGuid(), Hash("ordered"), Now, Now.AddDays(1), Now.AddDays(7), 1);
+        async Task Revoke(BuildMindDbContext c) =>
+            Assert.True(await Sessions(c).RevokeAllSessionsAsync(id, Now, "logout_all", ct));
+        async Task AttemptStaleCreate() =>
+            await Assert.ThrowsAsync<RefreshSessionRejectedException>(() => Refresh(second).CreateAsync(session, ct));
+        var winner = revokeFirst ? Revoke(first) : Refresh(first).CreateAsync(session, ct);
+        Task? follower = null;
+        try
+        {
+            await Task.WhenAny(winner, gate.Ready.Task).WaitAsync(ct);
+            if (winner.IsCompleted) await winner;
+            Assert.True(gate.Ready.Task.IsCompletedSuccessfully);
+            // NOWAIT proves another connection cannot acquire the user's row before this commit.
+            await using (var probe = Context(db))
+            await using (var transaction = await probe.Database.BeginTransactionAsync(ct))
+            {
+                var locked = await Assert.ThrowsAsync<MySqlException>(() => probe.Database.SqlQuery<int>(
+                    $"SELECT 1 AS Value FROM users WHERE id = {id} FOR UPDATE NOWAIT").ToListAsync(ct));
+                Assert.Equal(3572, locked.Number);
+            }
+            follower = revokeFirst ? AttemptStaleCreate() : Revoke(second);
+        }
+        finally
+        {
+            gate.Release.TrySetResult();
+            await winner;
+        }
+        await follower!;
+        await using var check = Context(db);
+        Assert.Equal(new UserSecurityState(true, 2), await Sessions(check).GetAsync(id, ct));
+        var rows = await check.Set<RefreshTokenRecord>().AsNoTracking().ToListAsync(ct);
+        if (revokeFirst) Assert.Empty(rows);
+        else
+        {
+            var row = Assert.Single(rows);
+            Assert.Equal(session.Id, row.Id);
+            Assert.NotNull(row.RevokedAtUtc);
+            var rotation = await Refresh(check).RotateAsync(session.TokenHash, Guid.NewGuid(), Hash("invalid"), Now, TimeSpan.FromDays(1), ct);
+            Assert.Equal(RefreshRotationStatus.Invalid, rotation.Status);
+        }
+        var http = new DefaultHttpContext();
+        http.User = new ClaimsPrincipal(new ClaimsIdentity([new Claim("sub", id.ToString()), new Claim("tv", "1")], "test"));
+        await new ActiveSessionMiddleware(ctx =>
+        {
+            ctx.Response.StatusCode = ctx.User.Identity?.IsAuthenticated == true ? 200 : 401;
+            return Task.CompletedTask;
+        }).InvokeAsync(http, Sessions(check));
+        Assert.Equal(401, http.Response.StatusCode);
+    }
+
+    private sealed class CommitGate(CancellationToken deadline) : DbTransactionInterceptor
+    {
+        public TaskCompletionSource Ready { get; } = new(TaskCreationOptions.RunContinuationsAsynchronously);
+        public TaskCompletionSource Release { get; } = new(TaskCreationOptions.RunContinuationsAsynchronously);
+
+        public override async ValueTask<InterceptionResult> TransactionCommittingAsync(DbTransaction transaction,
+            TransactionEventData eventData, InterceptionResult result, CancellationToken cancellationToken = default)
+        {
+            Ready.TrySetResult();
+            await Release.Task.WaitAsync(deadline);
+            return result;
+        }
+    }
+
     private static async Task WithContext<T>(DisposableMySqlDatabase db, Func<BuildMindDbContext, Task<T>> operation)
     {
         await using var context = Context(db);
@@ -244,10 +474,11 @@ public sealed class SessionSecurityLiveTests
     private static PasswordResetRepository Resets(BuildMindDbContext c) => new(c, Runner(c));
     private static TransactionRunner Runner(BuildMindDbContext c) => new(new DbContextTransactionSource(c));
 
-    private static BuildMindDbContext Context(DisposableMySqlDatabase db)
+    private static BuildMindDbContext Context(DisposableMySqlDatabase db, IInterceptor? interceptor = null)
     {
         var builder = new DbContextOptionsBuilder<BuildMindDbContext>();
         MySqlContextOptions.Apply(builder, db.ConnectionString, 30);
+        if (interceptor is not null) builder.AddInterceptors(interceptor);
         return new BuildMindDbContext(builder.Options);
     }
 
@@ -268,14 +499,14 @@ public sealed class SessionSecurityLiveTests
         }
     }
 
-    private static async Task<Guid> SeedUserAsync(DisposableMySqlDatabase db, bool isActive = true)
+    private static async Task<Guid> SeedUserAsync(DisposableMySqlDatabase db, bool isActive = true, string passwordHash = "synthetic-hash")
     {
         await using var context = Context(db);
         var id = Guid.NewGuid();
         var email = $"{id:N}@example.invalid";
         context.Add(new UserRecord
         {
-            Id = id, Email = email, NormalizedEmail = email.ToUpperInvariant(), PasswordHash = "synthetic-hash",
+            Id = id, Email = email, NormalizedEmail = email.ToUpperInvariant(), PasswordHash = passwordHash,
             IsActive = isActive, CreatedAtUtc = Now,
         });
         await context.SaveChangesAsync();
@@ -286,7 +517,7 @@ public sealed class SessionSecurityLiveTests
         DateTimeOffset? expiresAt = null, DateTimeOffset? absoluteExpiresAt = null)
     {
         var token = new NewRefreshToken(Guid.NewGuid(), userId, Guid.NewGuid(), Hash(seed), Now.AddMinutes(-5),
-            expiresAt ?? Now.AddDays(7), absoluteExpiresAt ?? Now.AddDays(30));
+            expiresAt ?? Now.AddDays(7), absoluteExpiresAt ?? Now.AddDays(30), 1);
         await using var context = Context(db);
         await Refresh(context).CreateAsync(token, default);
         return token;

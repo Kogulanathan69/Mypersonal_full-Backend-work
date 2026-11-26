@@ -66,6 +66,8 @@ public sealed class BuildMindMigrationTests(ITestOutputHelper output)
         ("20261125030045_AddLandCoordinateFrame", [], []),
         ("20261125103924_AddLandEdgeRoles", ["land_edge_roles"],
             ["fk_land_edge_roles_land_revisions=RESTRICT", "fk_land_edge_roles_projects_project_id=RESTRICT", "fk_land_edge_roles_users_reviewed_by=RESTRICT"]),
+        ("20261126173737_AddRequirementMutationReceipts", ["requirement_mutation_receipts"],
+            ["fk_requirement_mutation_receipts_revision=RESTRICT"]),
     ];
 
     private static readonly string[] ExpectedMigrations = [.. M4Migrations, .. CaptainMigrations.Select(m => m.Migration)];
@@ -260,6 +262,136 @@ public sealed class BuildMindMigrationTests(ITestOutputHelper output)
         Assert.Equal(M4Migrations, await context.Database.GetAppliedMigrationsAsync());
         // Existing users receive the column default (token_version = 1): no data fix is needed after the upgrade.
         Assert.Equal(new[] { "1" }, await ListAsync(database, $"SELECT token_version FROM users WHERE id = '{userId}';"));
+    }
+
+    [Fact]
+    public async Task M06_g12_migration_rolls_back_and_reapplies_independently()
+    {
+        const string previous = "20261125103924_AddLandEdgeRoles";
+        const string latest = "20261126173737_AddRequirementMutationReceipts";
+        const string receiptTable = "requirement_mutation_receipts";
+
+        await using var database = await DisposableMySqlDatabase.CreateAsync();
+        await using var context = CreateContext(database.ConnectionString);
+        var migrator = context.GetService<IMigrator>();
+
+        Assert.Equal(previous, ExpectedMigrations[^2]);
+        Assert.Equal(latest, ExpectedMigrations[^1]);
+        Assert.Equal(17, ExpectedMigrations.Length);
+
+        await migrator.MigrateAsync(latest);
+
+        Assert.Equal(ExpectedMigrations,
+            await context.Database.GetAppliedMigrationsAsync());
+        Assert.Equal(Tables, await FeatureTablesAsync(database));
+
+        var userId = Guid.NewGuid().ToString("D");
+
+        await ExecuteAsync(database,
+            $"INSERT INTO users (id, email, normalized_email, password_hash, is_active, created_at_utc, token_version) VALUES ('{userId}', 'g12-rollback@example.invalid', 'G12-ROLLBACK@EXAMPLE.INVALID', 'synthetic-hash', 1, UTC_TIMESTAMP(6), 1);");
+
+        var baselineTables = Tables
+            .Where(table => table != receiptTable)
+            .ToArray();
+
+        const string fkSql =
+            "SELECT CONCAT(constraint_name, '=', delete_rule) FROM information_schema.referential_constraints WHERE constraint_schema = DATABASE() ORDER BY constraint_name;";
+
+        const string columnSql =
+            "SELECT CONCAT(column_name, '=', column_type, '=', is_nullable) FROM information_schema.columns WHERE table_schema = DATABASE() AND table_name = 'requirement_mutation_receipts' ORDER BY ordinal_position;";
+
+        const string pkSql =
+            "SELECT column_name FROM information_schema.key_column_usage WHERE table_schema = DATABASE() AND table_name = 'requirement_mutation_receipts' AND constraint_name = 'PRIMARY' ORDER BY ordinal_position;";
+
+        const string indexSql =
+            "SELECT CONCAT(column_name, '=', non_unique) FROM information_schema.statistics WHERE table_schema = DATABASE() AND table_name = 'requirement_mutation_receipts' AND index_name = 'ix_requirement_mutation_receipts_revision' ORDER BY seq_in_index;";
+
+        const string fkColumnsSql =
+            "SELECT CONCAT(column_name, '=', referenced_table_name, '.', referenced_column_name) FROM information_schema.key_column_usage WHERE table_schema = DATABASE() AND table_name = 'requirement_mutation_receipts' AND constraint_name = 'fk_requirement_mutation_receipts_revision' ORDER BY ordinal_position;";
+
+        var originalForeignKeys = await ListAsync(database, fkSql);
+        var originalColumns = await ListAsync(database, columnSql);
+
+        Assert.Equal(8, originalColumns.Count);
+        Assert.Contains("digest=binary(32)=NO", originalColumns);
+
+        Assert.Equal(
+            new[] { "project_id", "actor_id", "operation_id" },
+            await ListAsync(database, pkSql));
+
+        Assert.Equal(
+            new[] { "project_id=1", "saved_revision_id=1" },
+            await ListAsync(database, indexSql));
+
+        Assert.Equal(
+            new[]
+            {
+                "project_id=requirement_revisions.project_id",
+                "saved_revision_id=requirement_revisions.id"
+            },
+            await ListAsync(database, fkColumnsSql));
+
+        Assert.Contains(
+            "fk_requirement_mutation_receipts_revision=RESTRICT",
+            originalForeignKeys);
+
+        await migrator.MigrateAsync(previous);
+
+        Assert.Equal(ExpectedMigrations[..^1],
+            await context.Database.GetAppliedMigrationsAsync());
+
+        Assert.Equal(baselineTables,
+            await FeatureTablesAsync(database));
+
+        Assert.Empty(await ListAsync(database, columnSql));
+
+        Assert.Equal(
+            originalForeignKeys.Where(key =>
+                key != "fk_requirement_mutation_receipts_revision=RESTRICT"),
+            await ListAsync(database, fkSql));
+
+        Assert.Equal(new[] { userId },
+            await ListAsync(database, "SELECT id FROM users;"));
+
+        await migrator.MigrateAsync(latest);
+
+        Assert.Equal(ExpectedMigrations,
+            await context.Database.GetAppliedMigrationsAsync());
+
+        Assert.Equal(Tables,
+            await FeatureTablesAsync(database));
+
+        Assert.Equal(originalColumns,
+            await ListAsync(database, columnSql));
+
+        Assert.Equal(originalForeignKeys,
+            await ListAsync(database, fkSql));
+
+        Assert.Equal(
+            new[] { "project_id", "actor_id", "operation_id" },
+            await ListAsync(database, pkSql));
+
+        Assert.Equal(
+            new[] { "project_id=1", "saved_revision_id=1" },
+            await ListAsync(database, indexSql));
+
+        Assert.Equal(
+            new[]
+            {
+                "project_id=requirement_revisions.project_id",
+                "saved_revision_id=requirement_revisions.id"
+            },
+            await ListAsync(database, fkColumnsSql));
+
+        Assert.Equal(new[] { userId },
+            await ListAsync(database, "SELECT id FROM users;"));
+
+        Assert.Equal(new[] { "0" },
+            await ListAsync(database,
+                "SELECT COUNT(*) FROM requirement_mutation_receipts;"));
+
+        Assert.Empty(await context.Database.GetPendingMigrationsAsync());
+        Assert.False(context.Database.HasPendingModelChanges());
     }
 
     internal static BuildMindDbContext CreateContext(string connectionString)

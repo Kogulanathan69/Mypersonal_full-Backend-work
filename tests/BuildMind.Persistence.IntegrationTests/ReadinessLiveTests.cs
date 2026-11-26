@@ -42,7 +42,11 @@ public sealed class ReadinessLiveTests(ITestOutputHelper output)
         for (var i = 0; i < 10; i++)
         {
             var check = ActivatorUtilities.CreateInstance<MySqlReadinessCheck>(provider);
-            Assert.Equal(HealthStatus.Healthy, (await check.CheckHealthAsync(new HealthCheckContext())).Status);
+            var result = await check.CheckHealthAsync(new HealthCheckContext());
+            var reason = result.Data.TryGetValue("reason", out var value) ? value : "missing";
+            output.WriteLine($"RD02 iteration {i + 1}/10: status={result.Status}; reason={reason}");
+            Assert.True(result.Status == HealthStatus.Healthy,
+                $"RD02 iteration {i + 1}/10: expected Healthy; actual={result.Status}; reason={reason}");
         }
 
         MySqlConnection.ClearAllPools();

@@ -44,19 +44,25 @@ public sealed class SessionService(
 
     public async Task<AuthResponse?> LoginAsync(LoginRequest request, CancellationToken cancellationToken)
     {
-        var response = await authentication.LoginAsync(request, cancellationToken);
-        if (response is null || !options.Enabled)
-            return response;
+        var login = await authentication.AuthenticateAsync(request, cancellationToken);
+        if (login is null || !options.Enabled)
+            return login?.Response;
 
         var now = timeProvider.GetUtcNow();
         var token = RefreshTokenCodec.Generate();
         var expiresAt = now.Add(options.SlidingLifetime);
-        await refreshTokens.CreateAsync(
-            new NewRefreshToken(Guid.NewGuid(), response.User.Id, Guid.NewGuid(), RefreshTokenCodec.Hash(token),
-                now, expiresAt, now.Add(options.AbsoluteLifetime)),
-            cancellationToken);
+        try
+        {
+            await refreshTokens.CreateAsync(
+                new NewRefreshToken(Guid.NewGuid(), login.Response.User.Id, Guid.NewGuid(), RefreshTokenCodec.Hash(token),
+                    now, expiresAt, now.Add(options.AbsoluteLifetime), login.TokenVersion), cancellationToken);
+        }
+        catch (RefreshSessionRejectedException)
+        {
+            return null;
+        }
 
-        return WithRefresh(response, token, expiresAt);
+        return WithRefresh(login.Response, token, expiresAt);
     }
 
     public async Task<AuthResponse?> RefreshAsync(string? refreshToken, CancellationToken cancellationToken)
@@ -70,15 +76,14 @@ public sealed class SessionService(
             RefreshTokenCodec.Hash(refreshToken!), Guid.NewGuid(), RefreshTokenCodec.Hash(replacement),
             now, options.SlidingLifetime, cancellationToken);
 
-        if (rotation.Status != RefreshRotationStatus.Rotated || rotation.UserId is not Guid userId)
+        if (rotation.Status != RefreshRotationStatus.Rotated || rotation.UserId is not Guid userId || userId == Guid.Empty ||
+            rotation.TokenVersion is not long version || version <= 0 ||
+            rotation.ExpiresAtUtc is not DateTimeOffset expiry || expiry <= timeProvider.GetUtcNow() || expiry > now.Add(options.SlidingLifetime))
             return null;
 
         var user = await users.GetByIdAsync(userId, cancellationToken);
-        if (user is null || !user.IsActive)
-        {
-            await sessions.RevokeAllSessionsAsync(userId, now, ReasonInactive, cancellationToken);
+        if (user is null || user.Id != userId || !user.IsActive || user.TokenVersion != version || expiry <= timeProvider.GetUtcNow())
             return null;
-        }
 
         var access = accessTokens.Issue(user);
         return WithRefresh(new AuthResponse
@@ -87,7 +92,7 @@ public sealed class SessionService(
             TokenType = "Bearer",
             ExpiresAtUtc = access.ExpiresAtUtc,
             User = new UserResponse { Id = user.Id, Email = user.Email, IsActive = user.IsActive, CreatedAtUtc = user.CreatedAtUtc }
-        }, replacement, rotation.ExpiresAtUtc ?? now.Add(options.SlidingLifetime));
+        }, replacement, expiry);
     }
 
     /// <summary>Ends one login session (its refresh-token family). Already issued access tokens expire naturally.</summary>

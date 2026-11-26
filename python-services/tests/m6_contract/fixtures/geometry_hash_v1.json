@@ -1,0 +1,30 @@
+{
+  "contract": "m3-exact-utf8-geometry-sha256/v1",
+  "vectors": [
+    {
+      "name": "empty-object",
+      "geometryJson": "{}",
+      "geometryHash": "sha256:44136fa355b3678a1146ad16f7e8649e94fb4fc21fe77e8310c060f61caaff8a"
+    },
+    {
+      "name": "whitespace-significant",
+      "geometryJson": "{ \"n\": 1 }",
+      "geometryHash": "sha256:107a74c7a418c31039cf605a03ce82170909e890d5036702927d69223ee771bb"
+    },
+    {
+      "name": "numeric-spelling-significant",
+      "geometryJson": "{\"n\":1.0}",
+      "geometryHash": "sha256:3b6b06ecd1c968c8e738e0f11c4bb361fca80a9a694de22fe66a05286afbd081"
+    },
+    {
+      "name": "unicode-utf8",
+      "geometryJson": "{\"name\":\"නිවස\"}",
+      "geometryHash": "sha256:2308bddcead773ed6413663397abc451eec3e230d071d214e9d2b7955fbb9d83"
+    },
+    {
+      "name": "line-breaks-significant",
+      "geometryJson": "{\n  \"rooms\": []\n}",
+      "geometryHash": "sha256:cdac80eb67d480604fe31ef779676accb42c0f1842ec384b8d9efae92732725c"
+    }
+  ]
+}

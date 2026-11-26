@@ -47,12 +47,13 @@ public sealed class PlanVersionService(
         if (computed.CandidateGeometry is null)
             return PlanningResult<EditValidationResult>.Ok(new(computed.Status, null, null, null, computed.Diagnostics ?? []));
 
-        var check = await PlanSaveService.ValidateAsync(compute, land, requirement, computed.CandidateGeometry, SyntheticSetback(), token)
-            .ConfigureAwait(false);
-        if (check.Status != PlanningStatus.Success) return new(check.Status, Code: check.Code);
         var json = JsonSerializer.Serialize(computed.CandidateGeometry, PlanEditorJson.StrictOptions);
+        var hash = PlanRevisionService.ComputeGeometryHash(json);
+        var check = await PlanSaveService.ValidateAsync(compute, land, requirement, computed.CandidateGeometry,
+            json, hash, SyntheticSetback(), token).ConfigureAwait(false);
+        if (check.Status != PlanningStatus.Success) return new(check.Status, Code: check.Code);
         return PlanningResult<EditValidationResult>.Ok(new(computed.Status, computed.CandidateGeometry,
-            PlanRevisionService.ComputeGeometryHash(json), check.Value, computed.Diagnostics ?? []));
+            hash, check.Value, computed.Diagnostics ?? []));
     }
 
     public async Task<PlanningResult<PlanRevisionSnapshot>> SaveVersionAsync(Guid projectId, Guid planId, SaveVersionCommand command,
@@ -72,13 +73,13 @@ public sealed class PlanVersionService(
             return new(PlanningStatus.ValidationFailed, Code: "GEOMETRY_BINDING_MISMATCH");
 
         var setback = SyntheticSetback();
-        var check = await PlanSaveService.ValidateAsync(compute, land, requirement, geometry, setback, token).ConfigureAwait(false);
+        var json = JsonSerializer.Serialize(geometry, PlanEditorJson.StrictOptions);
+        var hash = PlanRevisionService.ComputeGeometryHash(json);
+        var check = await PlanSaveService.ValidateAsync(compute, land, requirement, geometry,
+            json, hash, setback, token).ConfigureAwait(false);
         if (check.Status != PlanningStatus.Success) return new(check.Status, Code: check.Code);
         if (!check.Value!.GeometryValid || check.Value.Diagnostics.Any(d => d.Severity == "CRITICAL"))
             return new(PlanningStatus.ValidationFailed, Code: "GEOMETRY_VALIDATION_FAILED", Diagnostics: check.Value.Diagnostics);
-
-        var json = JsonSerializer.Serialize(geometry, PlanEditorJson.StrictOptions);
-        var hash = PlanRevisionService.ComputeGeometryHash(json);
         var now = PlanningClock.Now(time);
         var evidence = PlanSaveService.IssueEvidence(projectId, planId, hash, check.Value,
             setback is null ? PlanningSchemas.UnverifiedEvidenceStatus : PlanningSchemas.SyntheticEvidenceStatus, now);

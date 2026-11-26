@@ -39,6 +39,8 @@ public static class SwaggerConfiguration
                     + "not legally certified plans or construction approval.",
             });
 
+            options.OperationFilter<SurveyUploadOperationFilter>();
+
             if (bearerAuthenticationEnabled)
             {
                 options.AddSecurityDefinition(BearerSchemeId, new OpenApiSecurityScheme
@@ -73,6 +75,45 @@ public static class SwaggerConfiguration
         });
 
         return app;
+    }
+
+
+    internal sealed class SurveyUploadOperationFilter : IOperationFilter
+    {
+        public void Apply(OpenApiOperation operation, OperationFilterContext context)
+        {
+            var path = context.ApiDescription.RelativePath?.Trim('/');
+
+            if (context.ApiDescription.HttpMethod != "POST"
+                || path != "api/v1/projects/{id}/surveys")
+            {
+                return;
+            }
+
+            operation.RequestBody = new OpenApiRequestBody
+            {
+                Required = true,
+                Content = new Dictionary<string, IOpenApiMediaType>
+                {
+                    ["multipart/form-data"] = new OpenApiMediaType
+                    {
+                        Schema = new OpenApiSchema
+                        {
+                            Type = JsonSchemaType.Object,
+                            Required = new HashSet<string> { "file" },
+                            Properties = new Dictionary<string, IOpenApiSchema>
+                            {
+                                ["file"] = new OpenApiSchema
+                                {
+                                    Type = JsonSchemaType.String,
+                                    Format = "binary"
+                                }
+                            }
+                        }
+                    }
+                }
+            };
+        }
     }
 
     /// <summary>Adds the bearer requirement only to operations whose endpoint requires authorization.</summary>

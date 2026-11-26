@@ -35,28 +35,28 @@ public sealed class AdministrationEndpointModule : IApiEndpointModule
         admin.MapGet("/accounts", ListAccountsAsync);
         admin.MapGet("/accounts/{userId}", GetAccountAsync);
         admin.MapPost("/accounts/{userId}/suspend", (string userId, HttpContext c, ICurrentUser u, IPrincipalDirectory d, IAdministrationStore s,
-            CancellationToken t) => SetActiveAsync(userId, false, c, u, d, s, t));
+            CancellationToken t) => SetActiveAsync(userId, false, c, u, d, s, t)).Accepts<ReasonRequest>("application/json").Produces(200);
         admin.MapPost("/accounts/{userId}/activate", (string userId, HttpContext c, ICurrentUser u, IPrincipalDirectory d, IAdministrationStore s,
-            CancellationToken t) => SetActiveAsync(userId, true, c, u, d, s, t));
-        admin.MapPost("/accounts/{userId}/roles", SetRoleAsync);
+            CancellationToken t) => SetActiveAsync(userId, true, c, u, d, s, t)).Accepts<ReasonRequest>("application/json").Produces(200);
+        admin.MapPost("/accounts/{userId}/roles", SetRoleAsync).Accepts<RoleRequest>("application/json").Produces(200);
         admin.MapPost("/accounts/{userId}/invitation", ResendInvitationAsync);
         admin.MapGet("/staff", ListStaffAsync);
-        admin.MapPost("/staff", InviteStaffAsync);
-        admin.MapPut("/staff/{userId}/modules", SetModulesAsync);
+        admin.MapPost("/staff", InviteStaffAsync).Accepts<InviteStaffRequest>("application/json").Produces(201);
+        admin.MapPut("/staff/{userId}/modules", SetModulesAsync).Accepts<ModulesRequest>("application/json").Produces(200);
         admin.MapGet("/proposals", AdminProposalsAsync);
         admin.MapPost("/proposals/{proposalId}/approve", (string proposalId, HttpContext c, ICurrentUser u, IPrincipalDirectory d,
-            IAdministrationStore s, CancellationToken t) => ReviewAsync(proposalId, true, c, u, d, s, t));
+            IAdministrationStore s, CancellationToken t) => ReviewAsync(proposalId, true, c, u, d, s, t)).Accepts<ReviewRequest>("application/json").Produces(200);
         admin.MapPost("/proposals/{proposalId}/reject", (string proposalId, HttpContext c, ICurrentUser u, IPrincipalDirectory d,
-            IAdministrationStore s, CancellationToken t) => ReviewAsync(proposalId, false, c, u, d, s, t));
+            IAdministrationStore s, CancellationToken t) => ReviewAsync(proposalId, false, c, u, d, s, t)).Accepts<ReviewRequest>("application/json").Produces(200);
         admin.MapGet("/tasks", AdminTasksAsync);
-        admin.MapPost("/tasks", CreateTaskAsync);
+        admin.MapPost("/tasks", CreateTaskAsync).Accepts<CreateTaskRequest>("application/json").Produces(201);
         admin.MapGet("/tasks/{taskId}", (string taskId, HttpContext c, ICurrentUser u, IPrincipalDirectory d, IAdministrationStore s,
             CancellationToken t) => TaskDetailAsync(taskId, true, c, u, d, s, t));
         admin.MapPost("/tasks/{taskId}/status", (string taskId, HttpContext c, ICurrentUser u, IPrincipalDirectory d, IAdministrationStore s,
-            CancellationToken t) => MoveTaskAsync(taskId, true, c, u, d, s, t));
+            CancellationToken t) => MoveTaskAsync(taskId, true, c, u, d, s, t)).Accepts<MoveTaskRequest>("application/json").Produces(200);
         admin.MapGet("/policies", (HttpContext c, ICurrentUser u, IPrincipalDirectory d, IAdministrationStore s, CancellationToken t) =>
             AsAdmin(c, u, d, t, async _ => Results.Ok(new { policies = await s.ListPoliciesAsync(t) })));
-        admin.MapPut("/policies/{key}", SetPolicyAsync);
+        admin.MapPut("/policies/{key}", SetPolicyAsync).Accepts<PolicyRequest>("application/json").Produces(200);
         admin.MapGet("/monitoring/{kind}", (string kind, HttpContext c, ICurrentUser u, IPrincipalDirectory d, IAdministrationStore s,
             int? page, int? pageSize, string? status, string? sort, CancellationToken t) =>
             AsAdmin(c, u, d, t, _ => MonitoringAsync(kind, s, page, pageSize, status, sort, t)));
@@ -79,11 +79,11 @@ public sealed class AdministrationEndpointModule : IApiEndpointModule
                 var r = body.Value!;
                 if (r.Version is null || r.Document is not { ValueKind: JsonValueKind.Object } document) return P.Invalid("document");
                 return Map(await s.CreateDraftAsync(p.UserId, r.Version, r.Provenance ?? "", document.GetRawText(), t), x => x, created: true);
-            }));
+            })).Accepts<CatalogueImportRequest>("application/json").Produces(201);
         admin.MapPost("/catalogues/{version}/publish", (string version, HttpContext c, ICurrentUser u, IPrincipalDirectory d,
-            IRequirementCatalogueAdministration s, CancellationToken t) => CatalogueTransitionAsync(version, "PUBLISHED", c, u, d, s, t));
+            IRequirementCatalogueAdministration s, CancellationToken t) => CatalogueTransitionAsync(version, "PUBLISHED", c, u, d, s, t)).Accepts<CatalogueTransitionRequest>("application/json").Produces(200);
         admin.MapPost("/catalogues/{version}/retire", (string version, HttpContext c, ICurrentUser u, IPrincipalDirectory d,
-            IRequirementCatalogueAdministration s, CancellationToken t) => CatalogueTransitionAsync(version, "RETIRED", c, u, d, s, t));
+            IRequirementCatalogueAdministration s, CancellationToken t) => CatalogueTransitionAsync(version, "RETIRED", c, u, d, s, t)).Accepts<CatalogueTransitionRequest>("application/json").Produces(200);
 
         var staff = apiV1.MapGroup("/staff").WithTags("Staff").RequireAuthorization();
         staff.MapGet("/dashboard", StaffDashboardAsync);
@@ -94,16 +94,16 @@ public sealed class AdministrationEndpointModule : IApiEndpointModule
         staff.MapGet("/policies", (HttpContext c, ICurrentUser u, IPrincipalDirectory d, IAdministrationStore s, CancellationToken t) =>
             AsStaff(c, u, d, t, async p => p.CanView(AdminModules.SystemPolicies)
                 ? Results.Ok(new { policies = await s.ListPoliciesAsync(t) }) : Denied()));
-        staff.MapPost("/proposals", SubmitProposalAsync);
+        staff.MapPost("/proposals", SubmitProposalAsync).Accepts<ProposalRequest>("application/json").Produces(201);
         staff.MapGet("/proposals", StaffProposalsAsync);
-        staff.MapPost("/proposals/{proposalId}/withdraw", WithdrawAsync);
+        staff.MapPost("/proposals/{proposalId}/withdraw", WithdrawAsync).Accepts<ReviewRequest>("application/json").Produces(200);
         staff.MapGet("/tasks", StaffTasksAsync);
         staff.MapGet("/tasks/{taskId}", (string taskId, HttpContext c, ICurrentUser u, IPrincipalDirectory d, IAdministrationStore s,
             CancellationToken t) => TaskDetailAsync(taskId, false, c, u, d, s, t));
         staff.MapPost("/tasks/{taskId}/status", (string taskId, HttpContext c, ICurrentUser u, IPrincipalDirectory d, IAdministrationStore s,
-            CancellationToken t) => MoveTaskAsync(taskId, false, c, u, d, s, t));
-        staff.MapPost("/tasks/{taskId}/notes", AddNoteAsync);
-        staff.MapPost("/tasks/{taskId}/project-review", ProjectReviewAsync);
+            CancellationToken t) => MoveTaskAsync(taskId, false, c, u, d, s, t)).Accepts<MoveTaskRequest>("application/json").Produces(200);
+        staff.MapPost("/tasks/{taskId}/notes", AddNoteAsync).Accepts<NoteRequest>("application/json").Produces(201);
+        staff.MapPost("/tasks/{taskId}/project-review", ProjectReviewAsync).Accepts<PurposeRequest>("application/json").Produces(200);
     }
 
     // ---------------------------------------------------------------- authorization helpers

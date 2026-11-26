@@ -20,6 +20,7 @@ from app.internal.plan_validation import DependencyUnavailable as PlanDependency
 from app.internal.plan_edit import parse_request as parse_edit_preview
 from app.internal.plan_edit import preview as edit_preview
 from app.internal.plan_validation import PlanValidationRequest, validate_plan
+from app.internal.exact_plan_validation import ExactPlanValidationRequest, GeometryBindingError, validate_exact_plan
 from app.internal.land_frame import LandFrameRequest, frame_from_request
 from app.geometry.land.validation import LandGeometryError
 from app.internal.survey_extract import IntegrityRejected, SurveyExtractRequest
@@ -33,8 +34,19 @@ SURVEY_EXTRACT_PATH = "/internal/v1/survey/extract"
 SURVEY_MAX_BODY_BYTES = 9 * 1024 * 1024
 
 
+# Exact geometry is limited to 1 MiB of UTF-8.
+# Outer JSON escaping can expand it by up to six times.
+# Reserve an additional 2 MiB for request metadata.
+EXACT_PLAN_VALIDATE_PATH = "/internal/v2/plans/validate"
+EXACT_PLAN_MAX_BODY_BYTES = 8 * 1024 * 1024
+
+
 def _limit(path: str) -> int:
-    return SURVEY_MAX_BODY_BYTES if path == SURVEY_EXTRACT_PATH else MAX_BODY_BYTES
+    if path == SURVEY_EXTRACT_PATH:
+        return SURVEY_MAX_BODY_BYTES
+    if path == EXACT_PLAN_VALIDATE_PATH:
+        return EXACT_PLAN_MAX_BODY_BYTES
+    return MAX_BODY_BYTES
 
 
 def _json_preflight(raw: bytes) -> None:
@@ -74,9 +86,15 @@ def create_app(auth: InternalAuth = REQUIRED_WITHOUT_TOKENS) -> FastAPI:
         return await call_next(request)
 
     async def raw_json(request: Request) -> bytes:
-        raw = await request.body()
-        if len(raw) > _limit(request.url.path):
-            raise _Rejected(413, "PAYLOAD_TOO_LARGE")
+        limit = _limit(request.url.path)
+        buffer = bytearray()
+
+        async for chunk in request.stream():
+            if len(chunk) > limit - len(buffer):
+                raise _Rejected(413, "PAYLOAD_TOO_LARGE")
+            buffer.extend(chunk)
+
+        raw = bytes(buffer)
         if request.headers.get("content-type", "").split(";")[0].strip().lower() != "application/json":
             raise _Rejected(415, "UNSUPPORTED_MEDIA_TYPE")
         return raw
@@ -127,6 +145,14 @@ def create_app(auth: InternalAuth = REQUIRED_WITHOUT_TOKENS) -> FastAPI:
     @application.post("/internal/v1/plans/validate")
     async def plan_validate(request: Request):
         return validate_plan(await body(request, PlanValidationRequest))
+
+    @application.post(EXACT_PLAN_VALIDATE_PATH)
+    async def exact_plan_validate(request: Request):
+        parsed = await body(request, ExactPlanValidationRequest)
+        try:
+            return await run_in_threadpool(validate_exact_plan, parsed)
+        except GeometryBindingError:
+            raise _Rejected(422, "VALIDATION_FAILED") from None
 
     @application.post(SURVEY_EXTRACT_PATH)
     async def survey_extract_handler(request: Request):

@@ -14,8 +14,10 @@ public sealed class RequirementsEndpointModule : IApiEndpointModule
     {
         ArgumentNullException.ThrowIfNull(apiV1);
         var group = apiV1.MapGroup("/projects/{id}/requirements").WithTags("Requirements").RequireAuthorization();
-        group.MapGet("", GetAsync).WithName("GetProjectRequirements");
-        group.MapPut("", PutAsync).WithName("ReplaceProjectRequirements");
+        group.MapGet("", GetAsync).WithName("GetProjectRequirements").Produces(200).Produces(204);
+        group.MapGet("/operations/{operationId}", RequirementMutationHttp.ObserveAsync)
+            .WithName("ObserveRequirementMutation").Produces(200).ProducesProblem(404).ProducesProblem(503);
+        group.MapPut("", PutAsync).WithName("ReplaceProjectRequirements").Accepts<PutRequirementsHttpRequest>("application/json").Produces(200);
     }
 
     private static async Task<IResult> GetAsync(string id, HttpContext context, IRequirementsApplicationService service, CancellationToken cancellationToken)
@@ -30,6 +32,8 @@ public sealed class RequirementsEndpointModule : IApiEndpointModule
         context.Response.Headers.CacheControl = "no-store";
         if (!Guid.TryParse(id, out var project) || project == Guid.Empty) return InvalidProject();
         if (!context.Request.HasJsonContentType()) return Problem(415);
+        if (context.Request.Headers.ContainsKey("Idempotency-Key"))
+            return await RequirementMutationHttp.PutAsync<PutRequirementsHttpRequest>(project, context, cancellationToken);
         PutRequirementsHttpRequest? request;
         try { request = await context.Request.ReadFromJsonAsync<PutRequirementsHttpRequest>(cancellationToken); }
         catch (JsonException) { return ApiProblems.ValidationFailed(new Dictionary<string, string[]> { ["request"] = ["A complete valid JSON snapshot is required."] }); }

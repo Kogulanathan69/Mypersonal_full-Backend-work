@@ -102,54 +102,7 @@ internal sealed class RequirementRevisionRepository(BuildMindDbContext context, 
                         throw new SaveRejected(RequirementSaveStatus.ProjectNotFound);
                     }
 
-                    var head = await context.Set<RequirementHeadRecord>().AsNoTracking()
-                        .Where(h => h.ProjectId == projectId)
-                        .Select(h => new { h.CurrentRevisionId, h.CurrentRevisionNumber })
-                        .SingleOrDefaultAsync(token)
-                        .ConfigureAwait(false);
-
-                    if (expectedRevisionId is null ? head is not null : head is null || head.CurrentRevisionId != expectedRevisionId)
-                    {
-                        throw new SaveRejected(RequirementSaveStatus.RevisionConflict);
-                    }
-
-                    if (head is not null && proposedRevision.RevisionNumber != checked(head.CurrentRevisionNumber + 1))
-                    {
-                        throw new ArgumentException("Revision numbers must be consecutive.", nameof(proposedRevision));
-                    }
-
-                    context.Add(record);
-                    await context.SaveChangesAsync(token).ConfigureAwait(false);
-
-                    if (head is null)
-                    {
-                        // A concurrent first save collides on the head primary key (duplicate → conflict).
-                        context.Add(new RequirementHeadRecord
-                        {
-                            ProjectId = projectId,
-                            CurrentRevisionId = proposedRevision.Id,
-                            CurrentRevisionNumber = proposedRevision.RevisionNumber,
-                        });
-                        await context.SaveChangesAsync(token).ConfigureAwait(false);
-                    }
-                    else
-                    {
-                        var moved = await context.Set<RequirementHeadRecord>()
-                            .Where(h => h.ProjectId == projectId && h.CurrentRevisionId == expectedRevisionId)
-                            .ExecuteUpdateAsync(
-                                setters => setters
-                                    .SetProperty(h => h.CurrentRevisionId, proposedRevision.Id)
-                                    .SetProperty(h => h.CurrentRevisionNumber, proposedRevision.RevisionNumber),
-                                token)
-                            .ConfigureAwait(false);
-                        if (moved != 1)
-                        {
-                            throw new SaveRejected(RequirementSaveStatus.RevisionConflict);
-                        }
-                    }
-
-                    context.ChangeTracker.Clear();
-                    return new RequirementSaveResult(RequirementSaveStatus.Saved, proposedRevision);
+                    return await WriteRevisionAsync(expectedRevisionId, proposedRevision, record, token).ConfigureAwait(false);
                 },
                 cancellationToken)
                 .ConfigureAwait(false);
@@ -179,6 +132,60 @@ internal sealed class RequirementRevisionRepository(BuildMindDbContext context, 
                 _ => throw exception.Rethrow(),
             };
         }
+    }
+
+    internal async Task<RequirementSaveResult> WriteRevisionAsync(Guid? expectedRevisionId, RequirementRevision proposedRevision,
+        RequirementRevisionRecord record, CancellationToken token)
+    {
+        var projectId = proposedRevision.ProjectId;
+        var head = await context.Set<RequirementHeadRecord>().AsNoTracking()
+            .Where(h => h.ProjectId == projectId)
+            .Select(h => new { h.CurrentRevisionId, h.CurrentRevisionNumber })
+            .SingleOrDefaultAsync(token)
+            .ConfigureAwait(false);
+
+        if (expectedRevisionId is null ? head is not null : head is null || head.CurrentRevisionId != expectedRevisionId)
+        {
+            throw new SaveRejected(RequirementSaveStatus.RevisionConflict);
+        }
+
+        if (head is not null && proposedRevision.RevisionNumber != checked(head.CurrentRevisionNumber + 1))
+        {
+            throw new ArgumentException("Revision numbers must be consecutive.", nameof(proposedRevision));
+        }
+
+        context.Add(record);
+        await context.SaveChangesAsync(token).ConfigureAwait(false);
+
+        if (head is null)
+        {
+            // A concurrent first save collides on the head primary key (duplicate → conflict).
+            context.Add(new RequirementHeadRecord
+            {
+                ProjectId = projectId,
+                CurrentRevisionId = proposedRevision.Id,
+                CurrentRevisionNumber = proposedRevision.RevisionNumber,
+            });
+            await context.SaveChangesAsync(token).ConfigureAwait(false);
+        }
+        else
+        {
+            var moved = await context.Set<RequirementHeadRecord>()
+                .Where(h => h.ProjectId == projectId && h.CurrentRevisionId == expectedRevisionId)
+                .ExecuteUpdateAsync(
+                    setters => setters
+                        .SetProperty(h => h.CurrentRevisionId, proposedRevision.Id)
+                        .SetProperty(h => h.CurrentRevisionNumber, proposedRevision.RevisionNumber),
+                    token)
+                .ConfigureAwait(false);
+            if (moved != 1)
+            {
+                throw new SaveRejected(RequirementSaveStatus.RevisionConflict);
+            }
+        }
+
+        context.ChangeTracker.Clear();
+        return new RequirementSaveResult(RequirementSaveStatus.Saved, proposedRevision);
     }
 
     /// <summary>
@@ -236,7 +243,7 @@ internal sealed class RequirementRevisionRepository(BuildMindDbContext context, 
     }
 
     /// <summary>Internal control flow: abort the transaction (rolled back) and report a port status.</summary>
-    private sealed class SaveRejected(RequirementSaveStatus status) : Exception
+    internal sealed class SaveRejected(RequirementSaveStatus status) : Exception
     {
         public RequirementSaveStatus Status { get; } = status;
     }

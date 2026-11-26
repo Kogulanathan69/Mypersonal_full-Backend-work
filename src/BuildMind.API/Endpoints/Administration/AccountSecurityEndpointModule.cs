@@ -17,14 +17,17 @@ public sealed class AccountSecurityEndpointModule : IApiEndpointModule
     {
         ArgumentNullException.ThrowIfNull(apiV1);
         var me = apiV1.MapGroup("/users/me").WithTags("Account security").RequireAuthorization();
-        me.MapPost("/password", ChangePasswordAsync).RequireRateLimiting(RateLimitingConfiguration.AuthStrictPolicy);
+        me.MapPost("/password", ChangePasswordAsync).RequireRateLimiting(RateLimitingConfiguration.AuthStrictPolicy)
+            .Produces(StatusCodes.Status204NoContent).Accepts<ChangePasswordRequest>("application/json");
         me.MapGet("/security", async (HttpContext c, ICurrentUser u, IAccountSecurityStore s, CancellationToken t) =>
         {
             c.Response.Headers.CacheControl = "no-store";
             return u.UserId is { } id ? Results.Ok(await s.GetStatusAsync(id, t)) : A.Problem(401, "UNAUTHENTICATED");
         });
-        me.MapPost("/email-verification", RequestVerificationAsync).RequireRateLimiting(RateLimitingConfiguration.AuthStrictPolicy);
-        me.MapPost("/email-verification/confirm", ConfirmVerificationAsync).RequireRateLimiting(RateLimitingConfiguration.AuthStrictPolicy);
+        me.MapPost("/email-verification", RequestVerificationAsync).RequireRateLimiting(RateLimitingConfiguration.AuthStrictPolicy)
+            .Produces(StatusCodes.Status202Accepted);
+        me.MapPost("/email-verification/confirm", ConfirmVerificationAsync).RequireRateLimiting(RateLimitingConfiguration.AuthStrictPolicy)
+            .Produces(StatusCodes.Status204NoContent).Accepts<VerificationCodeRequest>("application/json");
         me.MapGet("/security-events", async (HttpContext c, ICurrentUser u, IAccountSecurityStore s, int? page, int? pageSize, CancellationToken t) =>
         {
             c.Response.Headers.CacheControl = "no-store";

@@ -1,4 +1,9 @@
 using System.Net;
+using BuildMind.API.Composition;
+using BuildMind.Application.Features.PlanEditor.Integration;
+using BuildMind.Infrastructure.Tests.CaptainIntegration;
+using BuildMind.Infrastructure.Tests.Identity;
+using BuildMind.Infrastructure.Tests.Support;
 using System.Net.Http.Json;
 using System.Security.Claims;
 using System.Text;
@@ -189,14 +194,20 @@ public sealed class RequirementsEndpointTests
         await AssertProblem(response, 415); Assert.Equal(0, service.Calls);
     }
 
-    [Fact]
-    public async Task UnknownTransactionOutcome_IsGeneric500WithoutDetails()
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task UnknownTransactionOutcome_IsGeneric500WithoutDetails(bool rollbackUncertain)
     {
-        var service = new StubService { Failure = new SyntheticUnknownOutcome("SYNTHETIC_PRIVATE_EXCEPTION") };
+        var cause = new IOException("SYNTHETIC_PRIVATE_EXCEPTION");
+        var service = new StubService { Failure = rollbackUncertain
+            ? new BuildMind.Infrastructure.Persistence.Transactions.TransactionRollbackUncertainException(cause, new IOException("PRIVATE_ROLLBACK"))
+            : new BuildMind.Infrastructure.Persistence.Transactions.TransactionOutcomeUnknownException(cause) };
         await using var app = await Host(service); using var client = AuthenticatedClient(app);
         using var response = await client.PutAsJsonAsync(Route, Body());
         await AssertProblem(response, 500, "INTERNAL_ERROR");
         Assert.DoesNotContain("SYNTHETIC_PRIVATE_EXCEPTION", await response.Content.ReadAsStringAsync());
+        Assert.DoesNotContain("PRIVATE_ROLLBACK", await response.Content.ReadAsStringAsync());
         Assert.Equal(1, service.Calls);
     }
 
@@ -315,6 +326,68 @@ public sealed class RequirementsEndpointTests
         Assert.DoesNotContain(services, item => item.ServiceType == typeof(IRequirementRevisionRepository));
     }
 
+    [Fact]
+    public async Task REQ_G14_Isolated_testing_read_works_without_versioned_port()
+    {
+        var flow = new FlowDependencies();
+        await using var app = await Host(null, flow);
+        using var scope = app.Services.CreateScope();
+        Assert.Null(scope.ServiceProvider.GetService<IProjectAuthorizationPort>());
+        using var client = AuthenticatedClient(app);
+        using var response = await client.GetAsync($"/api/v1/projects/{flow.Project.Id}/requirements");
+        Assert.Equal(HttpStatusCode.NoContent, response.StatusCode);
+        Assert.Equal(1, flow.Store.Reads);
+    }
+
+    [Theory]
+    [InlineData("", "deny")]
+    [InlineData("", "bump")]
+    [InlineData("", "unchanged")]
+    [InlineData("/spaces", "deny")]
+    [InlineData("/spaces", "unchanged")]
+    [InlineData("/relationships", "bump")]
+    [InlineData("/relationships", "unchanged")]
+    [InlineData("/summary", "deny")]
+    [InlineData("/summary", "unchanged")]
+    public async Task REQ_G14_Captain_authenticated_GET_checks_final_authority(string suffix, string change)
+    {
+        var users = new InMemoryM1Store();
+        var store = new FlowStore();
+        var authorization = new CaptainLocalIntegrationTests.ReadAuthorization(change, store);
+        using var factory = M1ApiIntegrationTests.CreateFactory(users, s => s[CaptainLocalIntegration.EnabledKey] = "true", services =>
+        {
+            services.AddSingleton<IProjectAuthorizationPort>(authorization);
+            services.AddSingleton<IRequirementRevisionRepository>(store);
+        });
+        using var client = factory.CreateClient();
+        const string email = "g14-reader@example.invalid";
+        client.DefaultRequestHeaders.Authorization = new("Bearer", await M1ApiIntegrationTests.RegisterAndLoginAsync(client, email));
+        var actor = (await users.GetByEmailAsync(email.ToUpperInvariant(), default))!.Id;
+        const string marker = "private-g14-room";
+        var revision = new RequirementRevision(RevisionId, ProjectId, 1, "requirements/1", "fixture",
+            new RequirementContent(1, [new RoomCount(marker, 2)]), DateTimeOffset.UtcNow);
+        Assert.Equal(RequirementSaveStatus.Saved, (await store.TrySaveAtomicallyAsync(null, revision, default)).Status);
+        using var response = await client.GetAsync($"/api/v1/projects/{ProjectId}/requirements{suffix}");
+        Assert.True(response.Headers.CacheControl?.NoStore);
+        Assert.Equal(new[] { (ProjectId, actor, 0), (ProjectId, actor, 1) }, authorization.Calls);
+        Assert.Equal(1, store.Reads);
+        var body = await response.Content.ReadAsStringAsync();
+        if (change == "unchanged")
+        {
+            Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+            Assert.True(JsonNode.DeepEquals(JsonSerializer.SerializeToNode(new RequirementRevisionDto(revision), JsonSerializerOptions.Web),
+                JsonNode.Parse(body)));
+        }
+        else
+        {
+            await AssertProblem(response, 404, "NOT_FOUND");
+            Assert.DoesNotContain(marker, body);
+            Assert.DoesNotContain(RevisionId.ToString(), body);
+            Assert.DoesNotContain("groundFloorRooms", body);
+            Assert.DoesNotContain("revisionId", body);
+        }
+    }
+
     private static JsonObject Body() => JsonNode.Parse("""
         {"expectedRevisionId":null,"catalogueVersion":"synthetic-policy","floorCount":1,
          "groundFloorRooms":[{"roomType":"ROOM_A","count":1}],"additionalSpaces":[],"relationships":[],"designMethod":null}
@@ -400,7 +473,6 @@ public sealed class RequirementsEndpointTests
             return Failure is null ? Task.FromResult(Result) : Task.FromException<RequirementsOperationResult>(Failure);
         }
     }
-    private sealed class SyntheticUnknownOutcome(string message) : Exception(message);
     internal static Task<WebApplication> CreateSectionTestHost(FlowDependencies flow) => Host(null, flow);
     internal static HttpClient SectionAuthenticatedClient(WebApplication app) => AuthenticatedClient(app);
 

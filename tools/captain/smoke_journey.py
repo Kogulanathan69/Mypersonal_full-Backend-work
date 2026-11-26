@@ -14,7 +14,7 @@ import uuid
 
 BASE = next((a for a in sys.argv[1:] if a.startswith("http")), "http://127.0.0.1:5180")
 SECONDARY_BASE = os.environ.get("CAPTAIN_SECONDARY_API_URL", "http://127.0.0.1:5181").rstrip("/")
-PHASES = {int(p) for p in (sys.argv[sys.argv.index("--phases") + 1].split(",") if "--phases" in sys.argv else "2,3,4,5,6,7,8,9,10,11,12,13".split(","))}
+PHASES = {int(p) for p in (sys.argv[sys.argv.index("--phases") + 1].split(",") if "--phases" in sys.argv else "2,3,4,5,6,7,8,9,10,11,12,13,14".split(","))}
 results = []
 state = {}
 
@@ -511,9 +511,51 @@ def phase7():
           not any(s in leaky for s in ("Exception", "   at ", "SELECT ", "MySql", "/home/")), leaky[:200])
     status, _, _ = call("PUT", f"/api/v1/projects/{pid}/land", raw=b"x=1", content_type="text/plain", token=bob["access"])
     check("unsupported media type rejected (415 or 404 for non-owner)", status in (404, 415), status)
-    status, _, _ = call("POST", "/api/v1/projects", raw=b'{"name":"' + b"a" * (2 * 1024 * 1024) + b'"}',
-                        content_type="application/json", token=bob["access"])
-    check("oversized body rejected (413)", status == 413, status)
+    import subprocess
+
+    before_status, before_projects, _ = call(
+        "GET", "/api/v1/projects", token=bob["access"])
+    check("oversized request baseline available", before_status == 200, before_status)
+
+    payload = b'{"name":"' + b"a" * (2 * 1024 * 1024) + b'"}'
+    config = (
+        'header = "Authorization: Bearer ' + bob["access"] + '"\n'
+        'header = "Content-Type: application/json"\n'
+        'header = "Expect: 100-continue"\n'
+        'data-binary = "' + payload.decode().replace('"', '\\"') + '"\n'
+    )
+    response = subprocess.run(
+        ["curl", "--silent", "--show-error", "--http1.1",
+         "--max-time", "90", "--expect100-timeout", "5",
+         "--write-out", "\n%{http_code}\n%{content_type}",
+         "--config", "-", BASE + "/api/v1/projects"],
+        input=config.encode(), capture_output=True,
+    )
+    parts = response.stdout.rsplit(b"\n", 2)
+    status = 0
+    response_body = None
+    response_type = ""
+    if len(parts) == 3 and parts[1].isdigit():
+        status = int(parts[1])
+        response_type = parts[2].decode("utf-8", errors="replace")
+        try:
+            response_body = json.loads(parts[0]) if parts[0] else None
+        except (ValueError, UnicodeError):
+            response_body = parts[0].decode("utf-8", errors="replace")
+
+    contract_capture.record(
+        "POST", "/api/v1/projects", status, None,
+        response_body, response_type)
+
+    check("oversized request transport completed", response.returncode == 0)
+    check("oversized body rejected (413)",
+          response.returncode == 0 and status == 413, status)
+
+    after_status, after_projects, _ = call(
+        "GET", "/api/v1/projects", token=bob["access"])
+    check("oversized request created no project",
+          before_status == 200 and after_status == 200
+          and before_projects == after_projects)
 
     # No secret material in service logs.
     secrets_used = [alice["password"], bob["password"], alice["access"], alice["refresh"], bob["access"], login["accessToken"]]
@@ -1090,11 +1132,11 @@ def phase12():
     share = {"recipientId": rec, "reportId": rid, "documentIds": [], "explicitConsent": True, "acknowledgedPolicyVersion": POLICY}
     req = call("POST", f"/api/v1/projects/{pid}/architect-requests", share, token=a)[1]["requestId"]
     complete = f"/api/v1/architect/requests/{req}/complete"
-    check("completion before acceptance refused (409)", call("POST", complete, {}, token=atok)[0] == 409)
+    check("completion before acceptance refused (409)", call("POST", complete, token=atok)[0] == 409)
     call("POST", f"/api/v1/architect/requests/{req}/respond", {"decision": "ACCEPTED", "note": "ok"}, token=atok)
-    check("customer cannot complete the architect's request (403/404)", call("POST", complete, {}, token=a)[0] in (403, 404))
+    check("customer cannot complete the architect's request (403/404)", call("POST", complete, token=a)[0] in (403, 404))
     results = []
-    threads = [threading.Thread(target=lambda: results.append(call("POST", complete, {}, token=atok)[0])) for _ in range(3)]
+    threads = [threading.Thread(target=lambda: results.append(call("POST", complete, token=atok)[0])) for _ in range(3)]
     [t.start() for t in threads]
     [t.join() for t in threads]
     check("concurrent completion: exactly one succeeds, the others are refused", sorted(results)[0] == 200 and results.count(200) == 1
@@ -1153,9 +1195,9 @@ def phase13():
     items = call("GET", "/api/v1/notifications?pageSize=5", token=a)[1].get("items", [])
     if check("a notification exists to mark read", items, items):
         nid = items[0]["notificationId"] if "notificationId" in items[0] else items[0].get("id")
-        status, body, _ = call("POST", f"/api/v1/notifications/{nid}/read", {}, token=a)
+        status, body, _ = call("POST", f"/api/v1/notifications/{nid}/read", token=a)
         check("POST notification read (200/204)", status in (200, 204), (status, body))
-        check("another user cannot mark it read (404)", call("POST", f"/api/v1/notifications/{nid}/read", {}, token=b)[0] == 404)
+        check("another user cannot mark it read (404)", call("POST", f"/api/v1/notifications/{nid}/read", token=b)[0] == 404)
 
     # Projects + requirement sections (fresh project)
     p3 = call("POST", "/api/v1/projects", {"name": "Contract coverage", "projectType": "Residential"}, token=a)[1]["id"]
@@ -1211,8 +1253,193 @@ def phase13():
         call("POST", f"/api/v1/projects/{pid}/architect-requests/{req_id}/withdraw", {"expectedStateVersion": 1}, token=a)
 
 
+def phase14():
+    """UPLOAD-01: real survey transport boundaries and rejection isolation."""
+    import hashlib
+    import subprocess
+    import tempfile
+
+    a = state["alice"]["access"]
+    b = state["bob"]["access"]
+    mib = 1024 * 1024
+
+    status, project, _ = call(
+        "POST", "/api/v1/projects",
+        {"name": "Synthetic upload boundaries", "projectType": "Residential"},
+        token=a)
+
+    if not check("UPLOAD-01 isolated project created",
+                 status in (200, 201) and isinstance(project, dict)
+                 and project.get("id"), status):
+        return
+
+    path = f"/api/v1/projects/{project['id']}/surveys"
+    pdf = text_pdf("Synthetic survey upload boundary fixture")
+
+    def sized_pdf(size):
+        marker = pdf.rfind(b"%%EOF")
+        padding = size - len(pdf)
+        if marker < 0 or padding < 0:
+            raise ValueError("Invalid synthetic PDF size")
+        return pdf[:marker] + b" " * padding + pdf[marker:]
+
+    def send(raw, ctype, token, chunked=False):
+        with tempfile.TemporaryDirectory(prefix="captain-upload-") as directory:
+            filename = os.path.join(directory, "request.bin")
+            with open(filename, "wb") as handle:
+                handle.write(raw)
+
+            config = (
+                f'header = "Content-Type: {ctype}"\n'
+                'header = "Expect: 100-continue"\n'
+                f'data-binary = "@{filename}"\n'
+            )
+            if chunked:
+                config += 'header = "Transfer-Encoding: chunked"\n'
+                config += 'header = "Content-Length:"\n'
+
+            if token:
+                config += f'header = "Authorization: Bearer {token}"\n'
+
+            response = subprocess.run(
+                ["curl", "--silent", "--show-error", "--http1.1",
+                 "--max-time", "90", "--expect100-timeout", "5",
+                 "--write-out", "\n%{http_code}\n%{content_type}",
+                 "--config", "-", BASE + path],
+                input=config.encode(), capture_output=True)
+
+        parts = response.stdout.rsplit(b"\n", 2)
+        if response.returncode != 0 or len(parts) != 3 or not parts[1].isdigit():
+            return 0, None
+
+        status = int(parts[1])
+        try:
+            body = json.loads(parts[0])
+        except (ValueError, UnicodeError):
+            body = None
+
+        contract_capture.record(
+            "POST", path, status, None, body,
+            parts[2].decode(errors="replace"))
+        return status, body
+
+    def upload(payload, token=a, media="application/pdf", field="file", chunked=False):
+        raw, ctype = multipart(field, "boundary.pdf", media, payload)
+        return send(raw, ctype, token, chunked=chunked)
+
+    def inventory():
+        status, body, _ = call("GET", path, token=a)
+        if status != 200 or not isinstance(body, dict):
+            raise RuntimeError("Survey inventory unavailable")
+        items = body.get("items")
+        if not isinstance(items, list):
+            raise RuntimeError("Invalid survey inventory")
+        return {item["surveyId"]: item for item in items}
+
+    before = inventory()
+    if not check("UPLOAD-01 fresh project has no surveys", not before):
+        return
+
+    accepted = {}
+
+    for label, payload in (
+        ("small PDF", pdf),
+        ("2 MiB PDF", sized_pdf(2 * mib)),
+        ("exactly 6 MiB PDF", sized_pdf(6 * mib)),
+    ):
+        status, body = upload(payload)
+        sid = body.get("surveyId") if isinstance(body, dict) else None
+        if check(f"UPLOAD-01 {label} accepted (202)",
+                 status == 202 and sid and sid not in accepted, status):
+            accepted[sid] = (len(payload), hashlib.sha256(payload).hexdigest())
+
+    payload = sized_pdf(6 * mib)
+    status, body = upload(payload, chunked=True)
+    sid = body.get("surveyId") if isinstance(body, dict) else None
+
+    if check("UPLOAD-01 chunked exactly 6 MiB accepted (202)",
+             status == 202 and sid and sid not in accepted, status):
+        accepted[sid] = (len(payload), hashlib.sha256(payload).hexdigest())
+
+    after_accept = inventory()
+
+    check("UPLOAD-01 accepted survey inventory matches exactly",
+          len(accepted) == 4 and set(after_accept) == set(accepted))
+
+    for sid, (length, digest) in accepted.items():
+        item = after_accept.get(sid, {})
+        check("UPLOAD-01 stored metadata preserves length and SHA-256",
+              item.get("byteLength") == length
+              and item.get("sha256Hash") == digest)
+
+        status, blob, headers = call("GET", f"{path}/{sid}/file", token=a)
+        check("UPLOAD-01 accepted file download preserves exact bytes",
+              status == 200 and isinstance(blob, bytes)
+              and len(blob) == length
+              and hashlib.sha256(blob).hexdigest() == digest
+              and headers.get("X-Content-SHA256") == digest, status)
+
+    def reject(label, result, expected, expected_code=None):
+        status, body = result
+        check(f"UPLOAD-01 {label} ({expected})",
+              status == expected
+              and (expected_code is None or code_of(body) == expected_code),
+              status)
+        check(f"UPLOAD-01 {label}: no additional survey records",
+              set(inventory()) == set(after_accept))
+
+    reject("6 MiB plus one byte rejected",
+           upload(sized_pdf(6 * mib + 1)), 413, "INVALID_FILE_SIZE")
+
+    reject("request exceeding 7 MiB rejected",
+           upload(sized_pdf(7 * mib)), 413, "PAYLOAD_TOO_LARGE")
+
+    reject("chunked 6 MiB plus one byte rejected",
+           upload(sized_pdf(6 * mib + 1), chunked=True),
+           413, "INVALID_FILE_SIZE")
+
+    reject("chunked request exceeding 7 MiB rejected",
+           upload(sized_pdf(7 * mib), chunked=True),
+           413, "PAYLOAD_TOO_LARGE")
+
+    reject("empty file rejected",
+           upload(b""), 413, "INVALID_FILE_SIZE")
+
+    reject("missing file rejected",
+           upload(pdf, field="unexpected"), 400, "FILE_REQUIRED")
+
+    reject("invalid signature rejected",
+           upload(b"not a PDF"), 400, "FILE_SIGNATURE_MISMATCH")
+
+    reject("unsupported media type rejected",
+           upload(pdf, media="text/plain"), 415, "UNSUPPORTED_MEDIA_TYPE")
+
+    raw, ctype = multipart("file", "boundary.pdf", "application/pdf", pdf)
+    boundary = ctype.split("boundary=", 1)[1].encode()
+    closing = b"\r\n--" + boundary + b"--\r\n"
+    multiple = raw[:-len(closing)] + b"\r\n" + raw
+
+    reject("multiple files rejected",
+           send(multiple, ctype, a), 400, "MULTIPLE_FILES_NOT_ALLOWED")
+
+    reject("malformed multipart rejected",
+           send(raw[:-len(closing)], ctype, a), 400)
+
+    reject("cross-user upload denied",
+           upload(pdf, token=b), 404)
+
+    reject("cross-user malformed multipart denied before parsing",
+           send(raw[:-len(closing)], ctype, b), 404)
+
+    reject("unauthenticated upload denied",
+           upload(pdf, token=None), 401)
+
+    check("UPLOAD-01 final inventory contains only accepted surveys",
+          len(accepted) == 4 and set(inventory()) == set(accepted))
+
+
 # Phase 8 runs before phase 7, which stops python-services and exercises rate limiting.
-EXTRA_PHASES = [(4, phase4), (5, phase5), (6, phase6), (8, phase8), (9, phase9), (10, phase10), (11, phase11), (12, phase12), (13, phase13), (7, phase7)]
+EXTRA_PHASES = [(4, phase4), (5, phase5), (6, phase6), (8, phase8), (9, phase9), (10, phase10), (11, phase11), (12, phase12), (13, phase13), (14, phase14), (7, phase7)]
 
 
 def main():

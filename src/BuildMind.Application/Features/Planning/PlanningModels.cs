@@ -68,7 +68,8 @@ public sealed record LandCheckResult(bool Valid, string Code, double? AreaM2, in
 
 public sealed record PlanCheckRequest(
     Guid ProjectId, Guid LandRevisionId, MetricLandDto Land, IReadOnlyList<double>? SetbackDistancesM,
-    IReadOnlyDictionary<string, int>? ExpectedRoomCounts, PlanGeometryDto Geometry);
+    IReadOnlyDictionary<string, int>? ExpectedRoomCounts, PlanGeometryDto Geometry,
+    string GeometryJson, string GeometryHash);
 
 public sealed record PlanCheckResult(
     bool GeometryValid, bool? RequirementsMatch, string ValidatorVersion, IReadOnlyList<DiagnosticDto> Diagnostics);

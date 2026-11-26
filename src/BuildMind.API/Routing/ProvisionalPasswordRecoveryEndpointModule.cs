@@ -15,9 +15,10 @@ public sealed class ProvisionalPasswordRecoveryEndpointModule : IApiEndpointModu
     {
         var recovery = apiV1.MapGroup("/auth");
         recovery.MapPost("/forgot-password", ForgotAsync).AllowAnonymous()
-            .RequireRateLimiting(BuildMind.API.Security.RateLimitingConfiguration.AuthStrictPolicy);
+            .RequireRateLimiting(BuildMind.API.Security.RateLimitingConfiguration.AuthStrictPolicy).Produces(202);
         recovery.MapPost("/reset-password", ResetAsync).AllowAnonymous()
-            .RequireRateLimiting(BuildMind.API.Security.RateLimitingConfiguration.AuthStrictPolicy);
+            .RequireRateLimiting(BuildMind.API.Security.RateLimitingConfiguration.AuthStrictPolicy)
+            .Produces(StatusCodes.Status204NoContent);
     }
 
     private static async Task<IResult> ForgotAsync(

@@ -150,6 +150,180 @@ public sealed class ReadinessCheckBehaviourTests
             Task.FromResult(HealthCheckResult.Healthy("reachable", new Dictionary<string, object> { ["reason"] = "reachable" }));
     }
 
+    [Fact]
+    public async Task Successful_probe_waits_for_scope_cleanup_before_returning()
+    {
+        var tracker = new ControlledAsyncDisposal();
+        var services = new ServiceCollection();
+        services.AddScoped<ControlledAsyncDisposal>(_ => tracker);
+        await using var provider = services.BuildServiceProvider();
+        var gate = new ReadinessProbeGate();
+
+        var check = new MySqlReadinessCheck(
+            Enabled,
+            provider.GetRequiredService<IServiceScopeFactory>(),
+            gate,
+            (sp, _) =>
+            {
+                sp.GetRequiredService<ControlledAsyncDisposal>();
+                return Task.FromResult(true);
+            },
+            TimeSpan.FromSeconds(5));
+
+        var running = Run(check);
+
+        try
+        {
+            await tracker.Entered.Task.WaitAsync(TimeSpan.FromSeconds(2));
+
+            Assert.Equal(0, gate.Semaphore.CurrentCount);
+            Assert.False(running.IsCompleted,
+                "Readiness returned before asynchronous scope cleanup completed.");
+        }
+        finally
+        {
+            tracker.Release.TrySetResult(true);
+            await running.WaitAsync(TimeSpan.FromSeconds(5));
+            await WaitUntilAsync(() => gate.Semaphore.CurrentCount == 1);
+        }
+
+        var result = await running;
+        Assert.Equal((HealthStatus.Healthy, "reachable"),
+            (result.Status, Reason(result)));
+        Assert.Equal(1, gate.Semaphore.CurrentCount);
+    }
+
+    [Fact]
+    public async Task Hanging_scope_cleanup_times_out_and_retains_gate_until_disposed()
+    {
+        var tracker = new ControlledAsyncDisposal();
+        var services = new ServiceCollection();
+        services.AddScoped<ControlledAsyncDisposal>(_ => tracker);
+        await using var provider = services.BuildServiceProvider();
+        var gate = new ReadinessProbeGate();
+        var calls = 0;
+
+        var check = new MySqlReadinessCheck(
+            Enabled,
+            provider.GetRequiredService<IServiceScopeFactory>(),
+            gate,
+            (sp, _) =>
+            {
+                Interlocked.Increment(ref calls);
+                sp.GetRequiredService<ControlledAsyncDisposal>();
+                return Task.FromResult(true);
+            },
+            TimeSpan.FromMilliseconds(200));
+
+        var running = Run(check);
+
+        try
+        {
+            await tracker.Entered.Task.WaitAsync(TimeSpan.FromSeconds(2));
+
+            var result = await running.WaitAsync(TimeSpan.FromSeconds(3));
+
+            Assert.Equal(HealthStatus.Unhealthy, result.Status);
+            Assert.Equal("timeout", Reason(result));
+            Assert.Equal(0, gate.Semaphore.CurrentCount);
+
+            var second = await Run(check).WaitAsync(TimeSpan.FromSeconds(3));
+
+            Assert.Equal(HealthStatus.Unhealthy, second.Status);
+            Assert.Equal("check_in_progress", Reason(second));
+            Assert.Equal(1, calls);
+        }
+        finally
+        {
+            tracker.Release.TrySetResult(true);
+            await running.WaitAsync(TimeSpan.FromSeconds(5));
+            await WaitUntilAsync(() => gate.Semaphore.CurrentCount == 1);
+        }
+
+        Assert.Equal(1, gate.Semaphore.CurrentCount);
+    }
+
+    [Fact]
+    public async Task Caller_cancellation_during_cleanup_retains_gate_until_disposed()
+    {
+        var tracker = new ControlledAsyncDisposal();
+        var services = new ServiceCollection();
+        services.AddScoped<ControlledAsyncDisposal>(_ => tracker);
+        await using var provider = services.BuildServiceProvider();
+        using var cancellation = new CancellationTokenSource();
+        var gate = new ReadinessProbeGate();
+        var calls = 0;
+
+        var check = new MySqlReadinessCheck(
+            Enabled,
+            provider.GetRequiredService<IServiceScopeFactory>(),
+            gate,
+            (sp, _) =>
+            {
+                Interlocked.Increment(ref calls);
+                sp.GetRequiredService<ControlledAsyncDisposal>();
+                return Task.FromResult(true);
+            },
+            TimeSpan.FromSeconds(30));
+
+        var running = check.CheckHealthAsync(
+            new HealthCheckContext(), cancellation.Token);
+
+        try
+        {
+            await tracker.Entered.Task.WaitAsync(TimeSpan.FromSeconds(2));
+
+            Assert.False(running.IsCompleted);
+            cancellation.Cancel();
+
+            await Assert.ThrowsAnyAsync<OperationCanceledException>(
+                async () =>
+                {
+                    await running.WaitAsync(TimeSpan.FromSeconds(3));
+                });
+
+            Assert.Equal(0, gate.Semaphore.CurrentCount);
+
+            var second = await Run(check).WaitAsync(TimeSpan.FromSeconds(3));
+
+            Assert.Equal(HealthStatus.Unhealthy, second.Status);
+            Assert.Equal("check_in_progress", Reason(second));
+            Assert.Equal(1, calls);
+        }
+        finally
+        {
+            tracker.Release.TrySetResult(true);
+
+            try
+            {
+                await running.WaitAsync(TimeSpan.FromSeconds(5));
+            }
+            catch (OperationCanceledException)
+            {
+                // Expected caller cancellation.
+            }
+
+            await WaitUntilAsync(() => gate.Semaphore.CurrentCount == 1);
+        }
+
+        Assert.Equal(1, gate.Semaphore.CurrentCount);
+    }
+
+    private sealed class ControlledAsyncDisposal : IAsyncDisposable
+    {
+        public TaskCompletionSource<bool> Entered { get; } =
+            new(TaskCreationOptions.RunContinuationsAsynchronously);
+
+        public TaskCompletionSource<bool> Release { get; } =
+            new(TaskCreationOptions.RunContinuationsAsynchronously);
+
+        public async ValueTask DisposeAsync()
+        {
+            Entered.TrySetResult(true);
+            await Release.Task;
+        }
+    }
+
     private sealed class DisposalTracker : IDisposable
     {
         public bool Disposed { get; private set; }

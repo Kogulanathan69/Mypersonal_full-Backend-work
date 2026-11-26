@@ -84,11 +84,18 @@ def main(src, out_doc, out_md, captures):
             if r["request"] is not None and 200 <= r["status"] < 300:
                 e["request"] = merge(e["request"], r["request"])
 
-    doc.setdefault("components", {}).setdefault("schemas", {})["ProblemDetails"] = PROBLEM
+    doc.setdefault("components", {}).setdefault("schemas", {}).setdefault("ProblemDetails", PROBLEM)
     enriched_responses = enriched_requests = 0
     for (path, method), e in evidence.items():
         op = doc["paths"][path][method]
         responses = op.setdefault("responses", {})
+        # Preserve observed bodyless success statuses without inventing schemas.
+        for status in e["statuses"]:
+            if status.startswith("2") and status not in e["responses"]:
+                responses.setdefault(status, {
+                    "description": f"Observed live ({status})",
+                    "x-buildmind-status-source": "observed-live",
+                })
         for status, schema in e["responses"].items():
             media = e["media"][status]
             entry = responses.setdefault(status, {"description": f"Observed live ({status})"})

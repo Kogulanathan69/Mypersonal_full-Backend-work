@@ -40,3 +40,13 @@
 - No destructive operation against the Captain database. It was never reset or dropped. The verification volume belongs only to the disposable `bm-captain-verify` project.
 - Production: no migration has been applied to any non-local database. Production is **NO-GO**.
 - Single writer: M4 coordinates DbContext and migrations. Migrations #5–#15 exist only on this branch and need **M4 review** before any merge. They are timestamped after the shared baseline, so they must be rebased onto M4's migration order at integration time.
+
+## Final remaining-development order
+
+| # | Migration | Owner | Adds | Destructive | Captain DB | Verified by |
+|---|---|---|---|---|---|---|
+| 16 | **20261125103924_AddLandEdgeRoles** | Captain | `land_edge_roles`: unique (land_revision_id, edge_id); FK RESTRICT to projects, land_revisions and users; indexes on project and reviewer | no | applied by `migrate.sh` (ranged) | pinned in both lists; live persistence suite; journey phase 12 |
+
+**Container upgrade path (new):** `compose-verify.sh up` applies pending migrations to an existing verification volume (the ranged script, run by the migrator over VerifyIdentity TLS) before the API starts. This was found because the final regression failed in containers without it.
+
+**Schema total:** 38 tables (37 mapped + `__EFMigrationsHistory`), 16 migrations.

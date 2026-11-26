@@ -188,7 +188,7 @@ def main():
           (status, withdrawn))
     check("withdrawn proposal cannot be approved (409)",
           call("POST", f"/api/v1/admin/proposals/{p4['proposalId']}/approve", {"expectedRowVersion": 2}, token=admin)[0] == 409)
-    status, body, _ = call("POST", f"/api/v1/admin/accounts/{staff_id}/invitation", {}, token=admin)
+    status, body, _ = call("POST", f"/api/v1/admin/accounts/{staff_id}/invitation", token=admin)
     check("admin re-sends the staff invitation (200/202) or it is refused for an already-active account (409)",
           status in (200, 202, 409), (status, body))
 

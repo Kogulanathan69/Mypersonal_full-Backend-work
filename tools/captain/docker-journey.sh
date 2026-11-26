@@ -24,5 +24,18 @@ for port in 8080 5181; do
     sleep 3
   done
 done
+# Require the local mail capture API before running email-dependent journeys.
+for attempt in {1..30}; do
+  if curl -fsS --max-time 5 "http://127.0.0.1:8026/api/v1/info" > "$evidence/mailpit-readiness.json" &&
+     python3 -c 'import json,sys; d=json.load(open(sys.argv[1])); sys.exit(not isinstance(d,dict) or not d.get("Version"))' "$evidence/mailpit-readiness.json"; then
+    echo "Mailpit HTTP readiness: PASS"
+    break
+  fi
+  if ((attempt == 30)); then
+    echo "Mailpit HTTP readiness: FAIL" >&2
+    exit 1
+  fi
+  sleep 2
+done
 BM_CAPTURE="$evidence/http.jsonl" CAPTAIN_SECONDARY_API_URL=http://127.0.0.1:5181 MAILPIT_API=http://127.0.0.1:8026/api/v1 \
-  timeout 4000 python3 -u smoke_journey.py http://127.0.0.1:8080 --phases 2,3,4,5,6,8,9,10,11,12,13
+  timeout 4000 python3 -u smoke_journey.py http://127.0.0.1:8080 --phases 2,3,4,5,6,8,9,10,11,12,13,14

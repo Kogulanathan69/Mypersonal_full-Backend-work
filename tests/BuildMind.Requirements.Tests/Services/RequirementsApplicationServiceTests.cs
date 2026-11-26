@@ -1,5 +1,6 @@
 using BuildMind.Application.Abstractions;
 using BuildMind.Application.Abstractions.Errors;
+using BuildMind.Application.Features.PlanEditor.Integration;
 using BuildMind.Application.Features.Requirements.Abstractions;
 using BuildMind.Application.Features.Requirements.Contracts;
 using BuildMind.Application.Features.Requirements.Services;
@@ -10,6 +11,69 @@ namespace BuildMind.Requirements.Tests.Services;
 
 public sealed class RequirementsApplicationServiceTests
 {
+    [Theory]
+    [InlineData("unchanged", true, RequirementsOperationStatus.Success)]
+    [InlineData("unchanged", false, RequirementsOperationStatus.NoSavedRevision)]
+    [InlineData("unauthorized", true, RequirementsOperationStatus.NotFound)]
+    [InlineData("transfer", true, RequirementsOperationStatus.NotFound)]
+    [InlineData("bump", true, RequirementsOperationStatus.NotFound)]
+    [InlineData("bump", false, RequirementsOperationStatus.NotFound)]
+    [InlineData("wrong-project", true, RequirementsOperationStatus.InvalidDependencyResponse)]
+    [InlineData("wrong-actor", true, RequirementsOperationStatus.InvalidDependencyResponse)]
+    [InlineData("null", true, RequirementsOperationStatus.InvalidDependencyResponse)]
+    [InlineData("timeout", true, RequirementsOperationStatus.DependencyTimeout)]
+    [InlineData("dependency-cancel", true, RequirementsOperationStatus.DependencyUnavailable)]
+    [InlineData("caller-cancel", true, RequirementsOperationStatus.DependencyUnavailable)]
+    public async Task REQ_G14_Read_requires_two_matching_fresh_snapshots(string change, bool hasRevision,
+        RequirementsOperationStatus expected)
+    {
+        var setup = new Setup();
+        if (hasRevision) Assert.Equal(RequirementsOperationStatus.Success, (await setup.Call(true)).Status);
+        var initialReads = setup.Store.Reads;
+        using var deadline = new CancellationTokenSource();
+        var afterRead = false;
+        setup.Store.OnRead = () => afterRead = true;
+        var calls = 0;
+        var port = new Authorization((project, actor) =>
+        {
+            calls++;
+            Assert.Equal(setup.Project.Id, project);
+            Assert.Equal(setup.User.Id, actor);
+            Assert.Equal(calls == 2, afterRead);
+            if (change == "unauthorized" || (afterRead && change == "transfer"))
+                return new(ProjectAuthorizationStatus.Denied);
+            if (afterRead)
+            {
+                if (change == "null") return null!;
+                if (change == "wrong-actor") actor = Guid.NewGuid();
+                if (change == "wrong-project") project = Guid.NewGuid();
+                if (change == "timeout") throw new TimeoutException();
+                if (change == "dependency-cancel") throw new OperationCanceledException();
+                if (change == "caller-cancel") deadline.Cancel();
+            }
+            return new(ProjectAuthorizationStatus.Authorized, new(project, actor, new(afterRead && change == "bump" ? 2 : 1)));
+        });
+        var service = new RequirementsApplicationService(setup.User, setup.Projects, setup.Catalogues,
+            new(setup.Store), new(setup.Store, TimeProvider.System), port);
+        if (change == "caller-cancel")
+            await Assert.ThrowsAnyAsync<OperationCanceledException>(() => service.GetAsync(setup.Project.Id, deadline.Token));
+        else
+        {
+            var result = await service.GetAsync(setup.Project.Id, deadline.Token);
+            Assert.Equal(expected, result.Status);
+            if (expected == RequirementsOperationStatus.Success) Assert.Equal(setup.Store.Current!.Id, result.Revision!.RevisionId);
+            else { Assert.Null(result.Revision); Assert.Empty(result.Issues); }
+        }
+        Assert.Equal(change == "unauthorized" ? 1 : 2, calls);
+        Assert.Equal(initialReads + (change == "unauthorized" ? 0 : 1), setup.Store.Reads);
+    }
+
+    private sealed class Authorization(Func<Guid, Guid, ProjectAuthorizationResult> read) : IProjectAuthorizationPort
+    {
+        public Task<ProjectAuthorizationResult> AuthorizeOwnerAsync(Guid projectId, Guid actorId, CancellationToken ct) =>
+            Task.FromResult(read(projectId, actorId));
+    }
+
     [Fact]
     public async Task SaveReadReplace_PreservesHistoryAndExplicitlyClearsOptionalSelections()
     {
@@ -326,7 +390,13 @@ public sealed class RequirementsApplicationServiceTests
         public RequirementSaveStatus? Rejection { get; set; }
         public Exception? Failure { get; set; }
         public Action? AfterCommit { get; set; }
-        public Task<RequirementRevision?> GetCurrentAsync(Guid projectId, CancellationToken cancellationToken) { Reads++; return Task.FromResult(Current); }
+        public Action? OnRead { get; set; }
+        public Task<RequirementRevision?> GetCurrentAsync(Guid projectId, CancellationToken cancellationToken)
+        {
+            Reads++;
+            OnRead?.Invoke();
+            return Task.FromResult(Current);
+        }
         public Task<RequirementRevision?> GetAsync(Guid projectId, Guid revisionId, CancellationToken cancellationToken) => Task.FromResult(History.GetValueOrDefault(revisionId));
         public Task<RequirementSaveResult> TrySaveAtomicallyAsync(Guid? expectedRevisionId, RequirementRevision proposedRevision, CancellationToken cancellationToken)
         {

@@ -13,14 +13,14 @@ public sealed class RequirementsSectionsEndpointModule : IApiEndpointModule
     {
         ArgumentNullException.ThrowIfNull(apiV1);
         var group = apiV1.MapGroup("/projects/{id}/requirements").WithTags("Requirements").RequireAuthorization();
-        group.MapGet("/spaces", GetAsync).WithName("GetRequirementSpaces");
-        group.MapGet("/relationships", GetAsync).WithName("GetRequirementRelationships");
+        group.MapGet("/spaces", GetAsync).WithName("GetRequirementSpaces").Produces(200).Produces(204);
+        group.MapGet("/relationships", GetAsync).WithName("GetRequirementRelationships").Produces(200).Produces(204);
         // Provisional summary is the complete persisted DTO, not a readiness certification.
-        group.MapGet("/summary", GetAsync).WithName("GetRequirementsSummary");
+        group.MapGet("/summary", GetAsync).WithName("GetRequirementsSummary").Produces(200).Produces(204);
         apiV1.MapPut("/projects/{id}/design-method", PutDesignMethodAsync)
-            .WithTags("Requirements").RequireAuthorization().WithName("ReplaceRequirementDesignMethod");
-        group.MapPut("/spaces", PutSpacesAsync).WithName("ReplaceRequirementSpaces");
-        group.MapPut("/relationships", PutRelationshipsAsync).WithName("ReplaceRequirementRelationships");
+            .WithTags("Requirements").RequireAuthorization().WithName("ReplaceRequirementDesignMethod").Accepts<PutDesignMethodHttpRequest>("application/json").Produces(200);
+        group.MapPut("/spaces", PutSpacesAsync).WithName("ReplaceRequirementSpaces").Accepts<PutAdditionalSpacesHttpRequest>("application/json").Produces(200);
+        group.MapPut("/relationships", PutRelationshipsAsync).WithName("ReplaceRequirementRelationships").Accepts<PutRoomRelationshipsHttpRequest>("application/json").Produces(200);
     }
 
     private static async Task<IResult> GetAsync(string id, HttpContext context, IRequirementsSectionApplicationService service, CancellationToken cancellationToken)
@@ -48,6 +48,8 @@ public sealed class RequirementsSectionsEndpointModule : IApiEndpointModule
         context.Response.Headers.CacheControl = "no-store";
         if (!Guid.TryParse(id, out var project) || project == Guid.Empty) return RequirementsEndpointModule.InvalidProject();
         if (!context.Request.HasJsonContentType()) return RequirementsEndpointModule.Problem(415);
+        if (context.Request.Headers.ContainsKey("Idempotency-Key"))
+            return await RequirementMutationHttp.PutAsync<T>(project, context, token);
         T? request;
         try { request = await context.Request.ReadFromJsonAsync<T>(token); }
         catch (JsonException) { return InvalidBody(); }
