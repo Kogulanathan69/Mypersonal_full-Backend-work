@@ -1,0 +1,29 @@
+{
+  "status": "EVIDENCE_FOUND",
+  "passages": [
+    {
+      "passage_id": "5f2a9a3b1c0e4d7f8a6b2c1d0e9f8a7b6c5d4e3f2a1b0c9d8e7f6a5b4c3d2e1f",
+      "document_id": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "source_title": "north_plan.pdf",
+      "jurisdiction": "Synthetic North Council planning area",
+      "page": 1,
+      "start_char": 49,
+      "end_char": 213,
+      "excerpt": "1. Rear space. A minimum rear space of three metres shall be provided behind every residential building (SYNTHETIC EXAMPLE, not a real regulation).",
+      "score": 4.271193,
+      "evidence_status": "EVIDENCE_CANDIDATE",
+      "warnings": [
+        "SOURCE_AND_OFFSETS_VERIFIED",
+        "LEXICAL_THRESHOLD_MET",
+        "SEMANTIC_SUPPORT_NOT_ESTABLISHED",
+        "Current legal applicability and subsequent amendments are not verified."
+      ]
+    }
+  ],
+  "warnings": [
+    "Current legal applicability and subsequent amendments are not verified.",
+    "Relevance does not establish parcel applicability or authorize construction."
+  ],
+  "legal_status_verified": false,
+  "answer_generated": false
+}

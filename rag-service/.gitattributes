@@ -1,0 +1,2 @@
+# The engine copy must stay byte-identical to PROVENANCE.json on every OS: never convert line endings.
+regulation_retrieval/** -text

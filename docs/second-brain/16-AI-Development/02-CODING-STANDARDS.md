@@ -1,0 +1,7 @@
+# Coding standards and review checklist
+
+C#: use nullable types and async I/O, cancellation tokens, consistent dependency injection, typed DTOs, small feature handlers, inward dependency direction. No EF entities in public API contracts; validate at boundaries and enforce domain invariants server-side. Parameterized EF/SQL, owner-filtered queries, transactional updates, concurrency detection, no long DB transaction across external network. Use consistent reviewed error mapping. Follow existing formatter/editorconfig, namespace and naming; PascalCase public members, camelCase local variables.
+
+Python: Pydantic models and type hints, bounded resource usage, separate router/service/pure geometry functions, deterministic unit-testable algorithms, snake_case internals with explicit boundary aliases, dependency versions pinned with approval. Avoid blocking event loop for heavy CPU/OCR; use approved worker architecture. No persistent state mutation inside geometry service. Keep metric units and CRS explicit. Add fixtures for invalid, boundary and negative cases.
+
+Review: scope/owner, test evidence, backward compatibility, transactions/concurrency, data access controls, no secrets, safe logs, resource limits, timeout/cancellation, valid errors, reproducibility, documentation/decision links. Avoid unrelated formatting or new abstractions. Security hotfix through authorized review; no direct force pushes. Definition of done in [QA](../14-Current-Backend/12-QA.md).

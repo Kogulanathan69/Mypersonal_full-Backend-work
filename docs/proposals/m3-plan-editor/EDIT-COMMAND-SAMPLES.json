@@ -1,0 +1,29 @@
+[
+  {
+    "commandType": "addRoom",
+    "targetRequired": false,
+    "validPayload": {
+      "room": {
+        "id": "10000000-0000-4000-8000-000000000001",
+        "name": "Room",
+        "type": "bedroom",
+        "polygon": [{"x": 0, "y": 0}, {"x": 4, "y": 0}, {"x": 0, "y": 3}, {"x": 0, "y": 0}],
+        "wallIds": ["20000000-0000-4000-8000-000000000001", "20000000-0000-4000-8000-000000000002", "20000000-0000-4000-8000-000000000003"]
+      },
+      "walls": [
+        {"id": "20000000-0000-4000-8000-000000000001", "start": {"x": 0, "y": 0}, "end": {"x": 4, "y": 0}, "thickness": 0.2},
+        {"id": "20000000-0000-4000-8000-000000000002", "start": {"x": 4, "y": 0}, "end": {"x": 0, "y": 3}, "thickness": 0.2},
+        {"id": "20000000-0000-4000-8000-000000000003", "start": {"x": 0, "y": 3}, "end": {"x": 0, "y": 0}, "thickness": 0.2}
+      ],
+      "openings": []
+    },
+    "invalidPayload": {}
+  },
+  {"commandType": "removeRoom", "targetRequired": true, "validPayload": {"removeOrphanOpenings": true}, "invalidPayload": {"removeOrphanOpenings": null}},
+  {"commandType": "moveRoom", "targetRequired": true, "validPayload": {"deltaX": 1.25, "deltaY": -0.5}, "invalidPayload": {"deltaX": 1.25}},
+  {"commandType": "resizeRoom", "targetRequired": true, "validPayload": {"scaleX": 1.2, "scaleY": 0.8, "anchorX": null, "anchorY": 0}, "invalidPayload": {"scaleX": 0, "scaleY": 1}},
+  {"commandType": "updateWall", "targetRequired": true, "validPayload": {"thickness": 0.25}, "invalidPayload": {}},
+  {"commandType": "addOpening", "targetRequired": false, "validPayload": {"opening": {"id": "30000000-0000-4000-8000-000000000001", "type": "door", "wallId": "20000000-0000-4000-8000-000000000001", "offset": 0.5, "width": 0.9}}, "invalidPayload": {}},
+  {"commandType": "moveOpening", "targetRequired": true, "validPayload": {"offset": 1.5}, "invalidPayload": {"offset": -1}},
+  {"commandType": "removeOpening", "targetRequired": true, "validPayload": {}, "invalidPayload": {"value": 1}}
+]

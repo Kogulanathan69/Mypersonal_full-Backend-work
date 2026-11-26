@@ -1,0 +1,81 @@
+{
+  "algorithm": "SHA-256/BM-JCS-1",
+  "valid": [
+    {
+      "name": "key-order-utf16",
+      "json": "{\"b\":1,\"a\":2,\"\\u00e9\":3,\"A\":4}",
+      "canonical": "{\"A\":4,\"a\":2,\"b\":1,\"é\":3}",
+      "sha256": "c151a7e900e1ef9f04961a70cb995bde6ff1b9c8c8b8f360d98f2b2db505af65"
+    },
+    {
+      "name": "utf16-not-code-point-order",
+      "json": "{\"\\ufb01\":1,\"\\ud83d\\ude00\":2}",
+      "canonical": "{\"😀\":2,\"ﬁ\":1}",
+      "sha256": "14dc6c14e11d686bbd1332452e5c8dc999ac1479def9c87e945308b1b27d469b"
+    },
+    {
+      "name": "nested-and-arrays",
+      "json": "{\"z\":[3,{\"y\":null,\"x\":true}],\"a\":{\"c\":false,\"b\":\"s\"}}",
+      "canonical": "{\"a\":{\"b\":\"s\",\"c\":false},\"z\":[3,{\"x\":true,\"y\":null}]}",
+      "sha256": "cca99d70cfdf3c6409f51ba96965a351589af800ea04730aecf13d0546825323"
+    },
+    {
+      "name": "whitespace-removed",
+      "json": "{ \"a\" : [ 1 , 2 ] ,\n \"b\" : { } }",
+      "canonical": "{\"a\":[1,2],\"b\":{}}",
+      "sha256": "8c547cce7ccb1b89359479c0b71a0a4b62acfc54a2b2780fd34aaeb75f9e44b7"
+    },
+    {
+      "name": "string-escapes",
+      "json": "{\"s\":\"q\\\" b\\\\ \\/ \\b\\f\\n\\r\\t \\u0001 \\u001f \\u007f\"}",
+      "canonical": "{\"s\":\"q\\\" b\\\\ / \\b\\f\\n\\r\\t \\u0001 \\u001f \"}",
+      "sha256": "25a37f19d0e943c8b59408cc51076656b971609743b04dd68ab82e7a905f6ab3"
+    },
+    {
+      "name": "non-ascii-raw",
+      "json": "{\"s\":\"Kandy \\u0dc1\\u0dca\\u200d\\u0dbb\\u0dd3 \\u20ac\"}",
+      "canonical": "{\"s\":\"Kandy ශ්‍රී €\"}",
+      "sha256": "8ab7a6837743f4be97067891b5f5eea5470ef6129aa17b21a0ab435701c04e30"
+    },
+    {
+      "name": "integers",
+      "json": "{\"a\":3,\"b\":3.0,\"c\":-0,\"d\":1e2,\"e\":999999999999999,\"f\":-42}",
+      "canonical": "{\"a\":3,\"b\":3,\"c\":0,\"d\":100,\"e\":999999999999999,\"f\":-42}",
+      "sha256": "115ad46babc546ecb6256bd1621d83ab925f3d87fe1baef18ccbb387efca555f"
+    },
+    {
+      "name": "decimals",
+      "json": "{\"a\":0.5,\"b\":12.25,\"c\":0.0001,\"d\":-2.75,\"e\":123456789012.5,\"f\":0.1}",
+      "canonical": "{\"a\":0.5,\"b\":12.25,\"c\":0.0001,\"d\":-2.75,\"e\":123456789012.5,\"f\":0.1}",
+      "sha256": "4b1f75e86d4f4c5ec699c124145acba6e35aebbc028186f5781acdaaa593a6d2"
+    },
+    {
+      "name": "constraint-shape",
+      "json": "{\"comparator\":\">=\",\"value\":3,\"unit\":\"m\",\"conditions\":[{\"field\":\"building_height_m\",\"comparator\":\"<\",\"value\":9.5,\"unit\":\"m\"}]}",
+      "canonical": "{\"comparator\":\">=\",\"conditions\":[{\"comparator\":\"<\",\"field\":\"building_height_m\",\"unit\":\"m\",\"value\":9.5}],\"unit\":\"m\",\"value\":3}",
+      "sha256": "9cf6c78c1e48c941ca0c87c7944e746502397a1e42b9182fba309fb5c69aec7a"
+    }
+  ],
+  "invalid": [
+    {
+      "name": "duplicate-key",
+      "json": "{\"a\":1,\"a\":2}"
+    },
+    {
+      "name": "number-too-large",
+      "json": "{\"a\":1e15}"
+    },
+    {
+      "name": "integer-too-large",
+      "json": "{\"a\":1000000000000000}"
+    },
+    {
+      "name": "fraction-too-small",
+      "json": "{\"a\":0.00001}"
+    },
+    {
+      "name": "lone-surrogate",
+      "json": "{\"a\":\"\\ud800\"}"
+    }
+  ]
+}

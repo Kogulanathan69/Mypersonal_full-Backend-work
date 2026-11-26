@@ -1,0 +1,24 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="../BuildMind.Domain/BuildMind.Domain.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <!-- Captain planning workflow: tests exercise internal input builders and evidence helpers directly. -->
+    <InternalsVisibleTo Include="BuildMind.Application.UnitTests" />
+    <InternalsVisibleTo Include="BuildMind.Infrastructure.Tests" />
+    <InternalsVisibleTo Include="BuildMind.Infrastructure" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.Extensions.DependencyInjection.Abstractions" Version="10.0.12" />
+  </ItemGroup>
+
+</Project>

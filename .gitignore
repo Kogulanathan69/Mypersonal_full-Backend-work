@@ -1,0 +1,34 @@
+# secrets
+.env
+.env.*
+!.env.example
+**/appsettings.Development.json
+**/secrets.json
+# dotnet
+**/bin/
+**/obj/
+.vs/
+# python
+.venv/
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+# content / runtime data
+uploads/
+input_pdfs/
+raw_pdfs/
+private_data/
+vector_store/
+chroma/
+faiss_index/
+*.sqlite3
+*.db
+*.pdf
+# IDE
+.idea/
+.vscode/
+# OS
+.DS_Store
+Thumbs.db

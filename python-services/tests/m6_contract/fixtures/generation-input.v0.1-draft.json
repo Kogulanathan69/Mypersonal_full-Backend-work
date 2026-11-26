@@ -1,0 +1,45 @@
+{
+  "schemaVersion": "m6-generation-input/0.1-draft",
+  "projectId": "10000000-0000-4000-8000-000000000001",
+  "landRevisionId": "10000000-0000-4000-8000-000000000002",
+  "requirementsRevisionId": "10000000-0000-4000-8000-000000000003",
+  "seed": 42,
+  "land": {
+    "schemaVersion": "metric-land/0.1-draft",
+    "coordinateSystem": {
+      "type": "localCartesian",
+      "unit": "m",
+      "origin": {"x": 0, "y": 0},
+      "xDirection": "right",
+      "yDirection": "up"
+    },
+    "boundary": {
+      "exterior": [
+        {"x": 0, "y": 0},
+        {"x": 10, "y": 0},
+        {"x": 10, "y": 8},
+        {"x": 0, "y": 8},
+        {"x": 0, "y": 0}
+      ],
+      "holes": []
+    }
+  },
+  "roomProgram": {
+    "level": 0,
+    "catalogueVersion": "synthetic-fixture-v1",
+    "rooms": [
+      {
+        "slotId": "10000000-0000-4000-8000-000000000004",
+        "roomType": "bedroom",
+        "dimensions": {"minWidthM": 3, "minDepthM": 3}
+      }
+    ]
+  },
+  "adjacencyPreferences": [],
+  "regulatoryEvidence": {
+    "status": "MISSING",
+    "ruleSetVersion": null,
+    "constraints": [],
+    "gaps": [{"code": "SETBACK_EVIDENCE_MISSING"}]
+  }
+}

@@ -1,0 +1,410 @@
+name: Backend basic CI
+on:
+  pull_request:
+    branches: [develop, main]
+  push:
+    branches: [develop]
+# Least privilege for every job: the workflow only needs to read the repository. Triggered by
+# pull_request (never pull_request_target), so PR code gets no repository secrets or write token.
+# Supply chain (S5): every action is pinned to a full commit SHA (release tag in the comment); update deliberately.
+# Checkout never persists the token into .git/config (no step needs git credentials).
+permissions:
+  contents: read
+jobs:
+  dotnet-build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+        with:
+          persist-credentials: false
+      - uses: actions/setup-dotnet@67a3573c9a986a3f9c594539f4ab511d57bb3ce9 # v4.3.1
+        with:
+          dotnet-version: '10.0.x'
+      # Job name kept as dotnet-build so any existing required-check name is unaffected.
+      # The solution includes the API project, so this still covers the previous API build.
+      - name: Restore solution
+        run: dotnet restore BuildMind.sln
+      - name: Build solution
+        run: dotnet build BuildMind.sln --configuration Release --no-restore
+      - name: Run C# tests
+        # STEP 08-C (lead-approved): also writes one TRX per test project so counts can be verified from the artifact.
+        run: dotnet test BuildMind.sln --configuration Release --no-build --verbosity normal --logger trx --results-directory TestResults/dotnet
+      - name: Run M3 plan editor contract checks
+        run: |
+          set -o pipefail
+          mkdir -p TestResults/dotnet
+          dotnet run --project tests/BuildMind.Application.ContractTests/BuildMind.Application.ContractTests.csproj --configuration Release --no-build --no-restore | tee TestResults/dotnet/m3-contract-checks.txt
+      - name: Upload C# test results
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: dotnet-test-results
+          path: TestResults/dotnet/
+          retention-days: 14
+          if-no-files-found: warn
+  python-tests:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5.6.0
+        with:
+          python-version: '3.13'
+      - run: python -m pip install -r python-services/requirements-dev.txt
+      # STEP 08-C (lead-approved): JUnit XML so the Python count can be verified from the artifact.
+      - run: cd python-services && python -m pytest -q -rs --junitxml=../TestResults/python/pytest-junit.xml
+      # Lead-approved 2026-11-19 with the Shapely pin: mandatory tests must RUN. Fails on any skipped python-services
+      # test and on any M6 D02 geometry module without a passing test (import-time skips or missing collection).
+      - name: Verify no mandatory python-services tests were skipped
+        run: >-
+          python -I tools/ci/check_pytest_junit.py TestResults/python/pytest-junit.xml
+          --require-module test_d02_area --require-module test_d02_feasibility
+          --require-module test_d02_footprint --require-module test_d02_parcel
+      # M7 (lead-approved 2026-11-19): private regulation retrieval service, synthetic corpus only (no PDFs/indexes in CI).
+      - name: Run rag-service tests
+        run: |
+          python -m pip install -r rag-service/requirements-dev.txt
+          cd rag-service && python -B -m pytest -q -p no:cacheprovider --junitxml=../TestResults/python/rag-service-junit.xml
+      - name: Upload Python test results
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: python-test-results
+          path: TestResults/python/
+          retention-days: 14
+          if-no-files-found: warn
+  database-compatibility:
+    # BE-M4-D02b: MySQL provider compatibility on a disposable MySQL 8.4 container.
+    # G03: internal compatibility testing only (commercial licence review pending); no binaries are published.
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    permissions:
+      contents: read
+    env:
+      MYSQL_IMAGE: mysql:8.4@sha256:a81d043930e51745522bd5c430961cf8286f0a23f0a9a2a6e0108f7ea71b0902
+      SPIKE_PROJECT: tests/BuildMind.Persistence.IntegrationTests/BuildMind.Persistence.IntegrationTests.csproj
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+        with:
+          persist-credentials: false
+      - id: setup-dotnet
+        uses: actions/setup-dotnet@67a3573c9a986a3f9c594539f4ab511d57bb3ce9 # v4.3.1
+        with:
+          dotnet-version: '10.0.x'
+      - name: Select the .NET 10 SDK for this job
+        # The runner image also ships a newer SDK, which `dotnet` would otherwise prefer. This job-local
+        # global.json (not committed) pins the SDK installed above; nothing else in the repository changes.
+        env:
+          INSTALLED_SDK: ${{ steps.setup-dotnet.outputs.dotnet-version }}
+        run: |
+          case "$INSTALLED_SDK" in
+            10.0.*) ;;
+            *) echo "setup-dotnet did not report a .NET 10 SDK (got '${INSTALLED_SDK}')" >&2; exit 1 ;;
+          esac
+          printf '{\n  "sdk": {\n    "version": "%s",\n    "rollForward": "latestPatch"\n  }\n}\n' "$INSTALLED_SDK" > global.json
+          cat global.json
+          selected="$(dotnet --version)"
+          echo "Selected .NET SDK: ${selected}"
+          case "$selected" in
+            10.0.*) ;;
+            *) echo "Expected a .NET 10 SDK but got ${selected}" >&2; exit 1 ;;
+          esac
+      - name: Generate per-run database credentials
+        run: |
+          for name in ROOT TEST RUNTIME; do
+            value="$(openssl rand -hex 24)"
+            echo "::add-mask::${value}"
+            echo "BM_${name}_PASSWORD=${value}" >> "$GITHUB_ENV"
+          done
+      - name: Start disposable MySQL 8.4 (loopback only, no volume)
+        run: |
+          docker run -d --name buildmind-mysql \
+            -e MYSQL_ROOT_PASSWORD="$BM_ROOT_PASSWORD" \
+            -p 127.0.0.1:3306:3306 \
+            --tmpfs /var/lib/mysql \
+            --health-cmd "mysqladmin ping -h 127.0.0.1 --silent" \
+            --health-interval 5s --health-timeout 5s --health-retries 30 \
+            "$MYSQL_IMAGE"
+          for attempt in $(seq 1 60); do
+            if [ "$(docker inspect --format '{{.State.Health.Status}}' buildmind-mysql)" = "healthy" ]; then
+              exit 0
+            fi
+            sleep 2
+          done
+          echo "MySQL did not become healthy" >&2
+          exit 1
+      - name: Create least-privilege TLS-only accounts
+        run: |
+          revokes="$(docker exec -e MYSQL_PWD="$BM_ROOT_PASSWORD" buildmind-mysql \
+            mysql -uroot -N -e 'SELECT @@GLOBAL.partial_revokes;')"
+          if [ "$revokes" != "0" ]; then
+            echo "partial_revokes must be OFF (wildcard schema grants would be literal)" >&2
+            exit 1
+          fi
+          docker exec -i -e MYSQL_PWD="$BM_ROOT_PASSWORD" buildmind-mysql mysql -uroot <<SQL
+          CREATE DATABASE buildmind_dev CHARACTER SET utf8mb4 COLLATE utf8mb4_0900_ai_ci;
+          CREATE USER 'bm_runtime'@'%' IDENTIFIED BY '${BM_RUNTIME_PASSWORD}' REQUIRE SSL;
+          GRANT SELECT, INSERT, UPDATE, DELETE ON buildmind_dev.* TO 'bm_runtime'@'%';
+          CREATE USER 'bm_test'@'%' IDENTIFIED BY '${BM_TEST_PASSWORD}' REQUIRE SSL;
+          GRANT ALL PRIVILEGES ON \`buildmind\\_test\\_%\`.* TO 'bm_test'@'%';
+          SQL
+          docker exec -e MYSQL_PWD="$BM_ROOT_PASSWORD" buildmind-mysql mysql -uroot -e \
+            "SELECT VERSION() AS server_version; SHOW GRANTS FOR 'bm_runtime'@'%'; SHOW GRANTS FOR 'bm_test'@'%';"
+      - name: Verify the bm_test wildcard grant is effective and scoped (TLS)
+        # Proves the stored grant pattern matches buildmind_test_* (and nothing else) before any test runs.
+        run: |
+          as_test() {
+            docker exec -e MYSQL_PWD="$BM_TEST_PASSWORD" buildmind-mysql \
+              mysql -ubm_test -h127.0.0.1 --ssl-mode=REQUIRED -N -e "$1"
+          }
+          as_test "CREATE DATABASE buildmind_test_grant_check; DROP DATABASE buildmind_test_grant_check;"
+          if as_test "CREATE DATABASE buildmind_other_grant_check;" 2>/dev/null; then
+            echo "bm_test was able to create a database outside buildmind_test_*" >&2
+            exit 1
+          fi
+          echo "bm_test grant verified: buildmind_test_* allowed, other names refused."
+      - name: Restore repository-local tools
+        run: dotnet tool restore
+      - name: Restore project dependencies
+        # dotnet-ef reads project metadata from project.assets.json; restore before any tooling command.
+        run: |
+          dotnet restore BuildMind.sln
+          dotnet restore "$SPIKE_PROJECT"
+          for assets in \
+            src/BuildMind.Infrastructure/obj/project.assets.json \
+            src/BuildMind.API/obj/project.assets.json \
+            tests/BuildMind.Persistence.IntegrationTests/obj/project.assets.json; do
+            if [ ! -f "$assets" ]; then
+              echo "Missing ${assets}" >&2
+              exit 1
+            fi
+          done
+      - name: Build in Release before tooling
+        run: |
+          dotnet build BuildMind.sln --configuration Release --no-restore
+          dotnet build "$SPIKE_PROJECT" --configuration Release --no-restore
+      - name: Verify design-time factory and migration discovery (no connection)
+        env:
+          BUILDMIND_MIGRATIONS_CONNECTION: Server=127.0.0.1;Port=3306;Database=buildmind_test_tooling;User ID=bm_test;SslMode=Required
+        run: >-
+          dotnet tool run dotnet-ef migrations list --no-connect --configuration Release
+          --project src/BuildMind.Infrastructure --startup-project src/BuildMind.API
+      - name: Generate synthetic migration with dotnet-ef (test model only, not committed)
+        run: |
+          mkdir -p TestResults
+          dotnet tool run dotnet-ef migrations add CiGeneratedSpike --context GeneratedSpikeDbContext \
+            --output-dir GeneratedMigrations --configuration Release \
+            --project "$SPIKE_PROJECT" --startup-project "$SPIKE_PROJECT"
+          # Evidence: the provider's idempotent script (known not to execute on MySQL; see T06) and the
+          # ranged script used by the supported deployment path (T25).
+          dotnet tool run dotnet-ef migrations script --idempotent --context GeneratedSpikeDbContext \
+            --configuration Release --output TestResults/generated-spike-migration-idempotent.sql \
+            --project "$SPIKE_PROJECT" --startup-project "$SPIKE_PROJECT"
+          dotnet tool run dotnet-ef migrations script --context GeneratedSpikeDbContext \
+            --configuration Release --output TestResults/generated-spike-migration-ranged.sql \
+            --project "$SPIKE_PROJECT" --startup-project "$SPIKE_PROJECT"
+      - name: Generate or verify the BuildMindDbContext migration (review artifact only)
+        # BE-M4-D03: local dotnet-ef is blocked by Smart App Control (G17). While no migration is committed, this
+        # generates the initial feature-schema migration in this disposable workspace for REVIEW ONLY; it is never
+        # committed by CI. Once a reviewed migration is committed, nothing is generated and the snapshot is verified.
+        env:
+          BUILDMIND_MIGRATIONS_CONNECTION: Server=127.0.0.1;Port=3306;Database=buildmind_test_tooling;User ID=bm_test;SslMode=Required
+        run: |
+          migrations=src/BuildMind.Infrastructure/Persistence/Migrations
+          ef() {
+            dotnet tool run dotnet-ef "$@" --context BuildMindDbContext --configuration Release \
+              --project src/BuildMind.Infrastructure --startup-project src/BuildMind.API
+          }
+          mkdir -p TestResults/buildmind-migration
+          if ls "$migrations"/*.cs >/dev/null 2>&1; then
+            echo "Committed migrations found: verifying only."
+          else
+            ef migrations add InitialFeatureSchema --output-dir Persistence/Migrations
+          fi
+          ef migrations has-pending-model-changes
+          ef migrations list --no-connect
+          ef migrations script 0 --output TestResults/buildmind-migration/buildmind-ranged-from-0.sql
+          cp "$migrations"/*.cs TestResults/buildmind-migration/
+      # STEP 08-C (lead-approved 2026-11-18): the REAL FastAPI app, loopback only, for the live C#-to-Python smoke tests.
+      - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5.6.0
+        with:
+          python-version: '3.13'
+      - name: Start the Python service (loopback only, bounded readiness)
+        run: |
+          python -m pip install --disable-pip-version-check -r python-services/requirements.txt
+          cd python-services
+          nohup python -m uvicorn app.main:app --host 127.0.0.1 --port 8099 --log-level warning \
+            > "$RUNNER_TEMP/python-service.log" 2>&1 &
+          echo $! > "$RUNNER_TEMP/python-service.pid"
+          for attempt in $(seq 1 30); do
+            if curl -fsS --max-time 2 http://127.0.0.1:8099/health > /dev/null; then
+              echo "Python service ready on 127.0.0.1:8099"
+              exit 0
+            fi
+            if ! kill -0 "$(cat "$RUNNER_TEMP/python-service.pid")" 2>/dev/null; then
+              echo "Python service exited during startup" >&2
+              tail -n 50 "$RUNNER_TEMP/python-service.log" >&2
+              exit 1
+            fi
+            sleep 1
+          done
+          echo "Python service did not become ready within 30 s" >&2
+          tail -n 50 "$RUNNER_TEMP/python-service.log" >&2
+          exit 1
+      # M7 full-stack smoke (lead-approved 2026-11-19): the REAL rag-service, loopback only, random per-run internal
+      # token (G11 MVP), NO regulation corpus (the corpus never enters CI).
+      - name: Start the RAG service (loopback only, per-run token, bounded readiness)
+        run: |
+          token="$(openssl rand -hex 24)"
+          echo "::add-mask::${token}"
+          echo "BM_RAG_TOKEN=${token}" >> "$GITHUB_ENV"
+          python -m pip install --disable-pip-version-check -r rag-service/requirements.txt
+          cd rag-service
+          BUILDMIND_RAG_INTERNAL_TOKENS="$token" nohup python -B -m uvicorn app.main:app --host 127.0.0.1 --port 8098 \
+            --log-level warning > "$RUNNER_TEMP/rag-service.log" 2>&1 &
+          echo $! > "$RUNNER_TEMP/rag-service.pid"
+          for attempt in $(seq 1 30); do
+            if curl -fsS --max-time 2 http://127.0.0.1:8098/health > /dev/null; then
+              echo "RAG service ready on 127.0.0.1:8098"
+              exit 0
+            fi
+            if ! kill -0 "$(cat "$RUNNER_TEMP/rag-service.pid")" 2>/dev/null; then
+              echo "RAG service exited during startup" >&2
+              tail -n 50 "$RUNNER_TEMP/rag-service.log" >&2
+              exit 1
+            fi
+            sleep 1
+          done
+          echo "RAG service did not become ready within 30 s" >&2
+          tail -n 50 "$RUNNER_TEMP/rag-service.log" >&2
+          exit 1
+      # M4/M6/M7 cross-service acceptance: the TEST-ONLY synthetic acceptance service (rag-service/tests/acceptance_app.py),
+      # the real FastAPI app per shared scenario, loopback only, its own random per-run token. Synthetic evidence only.
+      - name: Start the synthetic constraint acceptance service (loopback only, per-run token)
+        run: |
+          token="$(openssl rand -hex 24)"
+          echo "::add-mask::${token}"
+          echo "BM_RAG_ACCEPTANCE_TOKEN=${token}" >> "$GITHUB_ENV"
+          # Rotation evidence (C09/C10): the service accepts the current AND the next token during a rotation window.
+          next="$(openssl rand -hex 24)"
+          echo "::add-mask::${next}"
+          echo "BM_RAG_ACCEPTANCE_TOKEN_NEXT=${next}" >> "$GITHUB_ENV"
+          # Own port (the smoke API uses 8097): refuse to start if anything already listens on 8094.
+          if [ "$(curl -s -o /dev/null -w '%{http_code}' --max-time 2 http://127.0.0.1:8094/ || true)" != "000" ]; then
+            echo "Port 8094 is already in use; refusing to share it" >&2
+            exit 1
+          fi
+          cd rag-service
+          BUILDMIND_ACCEPTANCE_SYNTHETIC=1 BUILDMIND_RAG_INTERNAL_TOKENS="${token},${next}" nohup python -B -m uvicorn acceptance_app:app \
+            --app-dir tests --host 127.0.0.1 --port 8094 --log-level warning > "$RUNNER_TEMP/rag-acceptance.log" 2>&1 &
+          echo $! > "$RUNNER_TEMP/rag-acceptance.pid"
+          probe=http://127.0.0.1:8094/scenario/north-baseline/internal/v1/regulations/constraints
+          for attempt in $(seq 1 30); do
+            # Unauthenticated probe: ready when the real auth layer answers 401.
+            if [ "$(curl -s -o /dev/null -w '%{http_code}' --max-time 2 -X POST "$probe")" = "401" ]; then
+              echo "Acceptance service ready on 127.0.0.1:8094"
+              exit 0
+            fi
+            if ! kill -0 "$(cat "$RUNNER_TEMP/rag-acceptance.pid")" 2>/dev/null; then
+              echo "Acceptance service exited during startup" >&2
+              tail -n 50 "$RUNNER_TEMP/rag-acceptance.log" >&2
+              exit 1
+            fi
+            sleep 1
+          done
+          echo "Acceptance service did not become ready within 30 s" >&2
+          tail -n 50 "$RUNNER_TEMP/rag-acceptance.log" >&2
+          exit 1
+      - name: Run MySQL compatibility tests
+        env:
+          BUILDMIND_TEST_MYSQL: Server=127.0.0.1;Port=3306;User ID=bm_test;SslMode=Required;Password=${{ env.BM_TEST_PASSWORD }}
+          BUILDMIND_TEST_MYSQL_RUNTIME: Server=127.0.0.1;Port=3306;Database=buildmind_dev;User ID=bm_runtime;SslMode=Required;Password=${{ env.BM_RUNTIME_PASSWORD }}
+          BUILDMIND_TEST_PYTHON_URL: http://127.0.0.1:8099
+          BUILDMIND_TEST_RAG_URL: http://127.0.0.1:8098
+          BUILDMIND_TEST_RAG_TOKEN: ${{ env.BM_RAG_TOKEN }}
+          BUILDMIND_TEST_RAG_ACCEPTANCE_URL: http://127.0.0.1:8094
+          BUILDMIND_TEST_RAG_ACCEPTANCE_TOKEN: ${{ env.BM_RAG_ACCEPTANCE_TOKEN }}
+          BUILDMIND_TEST_RAG_ACCEPTANCE_TOKEN_NEXT: ${{ env.BM_RAG_ACCEPTANCE_TOKEN_NEXT }}
+        run: >-
+          dotnet test "$SPIKE_PROJECT"
+          --configuration Release
+          --logger "trx;LogFileName=mysql-compatibility.trx"
+          --logger "console;verbosity=normal"
+          --results-directory TestResults
+      - name: Full-stack smoke (API + MySQL + Python + RAG)
+        env:
+          ASPNETCORE_ENVIRONMENT: Development
+          Database__Enabled: 'true'
+          ConnectionStrings__BuildMind: Server=127.0.0.1;Port=3306;Database=buildmind_dev;User ID=bm_runtime;SslMode=Required;Password=${{ env.BM_RUNTIME_PASSWORD }}
+          Services__Python__Enabled: 'true'
+          Services__Python__BaseUrl: http://127.0.0.1:8099/
+          Services__Rag__Enabled: 'true'
+          Services__Rag__BaseUrl: http://127.0.0.1:8098/
+          Services__Rag__AuthToken: ${{ env.BM_RAG_TOKEN }}
+          API_PORT: '8097'
+          SMOKE_OUT: TestResults/smoke
+          SMOKE_EXPECT_MYSQL: Healthy:reachable
+          SMOKE_EXPECT_PYTHON: Healthy:reachable
+          SMOKE_EXPECT_RAG: Degraded:unavailable   # live, authenticated, but no corpus in CI
+        run: bash tools/smoke/full-stack-smoke.sh
+      - name: Verify disposable databases were removed
+        if: always()
+        run: |
+          left="$(docker exec -e MYSQL_PWD="$BM_ROOT_PASSWORD" buildmind-mysql mysql -uroot -N -e \
+            "SELECT COUNT(*) FROM information_schema.schemata WHERE schema_name LIKE 'buildmind\\_test\\_%';" 2>/dev/null || echo unavailable)"
+          echo "Leftover disposable test databases: ${left}"
+          if [ "$left" != "0" ] && [ "$left" != "unavailable" ]; then
+            exit 1
+          fi
+      - name: Check test results contain no credentials
+        id: results-scan
+        if: always()
+        run: |
+          mkdir -p TestResults
+          for secret in "$BM_ROOT_PASSWORD" "$BM_TEST_PASSWORD" "$BM_RUNTIME_PASSWORD" "$BM_RAG_TOKEN" "$BM_RAG_ACCEPTANCE_TOKEN" "$BM_RAG_ACCEPTANCE_TOKEN_NEXT"; do
+            [ -n "$secret" ] || continue
+            if grep -rqF -- "$secret" TestResults; then
+              echo "A credential was found in the test results; artifact upload is blocked." >&2
+              exit 1
+            fi
+          done
+      - name: Upload sanitized test results
+        if: always() && steps.results-scan.outcome == 'success'
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: mysql-compatibility-results
+          path: |
+            TestResults/*.trx
+            TestResults/generated-spike-migration-*.sql
+            TestResults/buildmind-migration/
+            TestResults/smoke/
+          retention-days: 14
+          if-no-files-found: warn
+      - name: Stop the Python service
+        if: always()
+        run: |
+          if [ -f "$RUNNER_TEMP/python-service.pid" ]; then
+            kill "$(cat "$RUNNER_TEMP/python-service.pid")" 2>/dev/null || true
+            sleep 1
+            kill -9 "$(cat "$RUNNER_TEMP/python-service.pid")" 2>/dev/null || true
+          fi
+      - name: Stop the RAG service
+        if: always()
+        run: |
+          if [ -f "$RUNNER_TEMP/rag-service.pid" ]; then
+            kill "$(cat "$RUNNER_TEMP/rag-service.pid")" 2>/dev/null || true
+            sleep 1
+            kill -9 "$(cat "$RUNNER_TEMP/rag-service.pid")" 2>/dev/null || true
+          fi
+      - name: Stop the synthetic constraint acceptance service
+        if: always()
+        run: |
+          if [ -f "$RUNNER_TEMP/rag-acceptance.pid" ]; then
+            kill "$(cat "$RUNNER_TEMP/rag-acceptance.pid")" 2>/dev/null || true
+            sleep 1
+            kill -9 "$(cat "$RUNNER_TEMP/rag-acceptance.pid")" 2>/dev/null || true
+          fi
+      - name: Remove disposable MySQL container
+        if: always()
+        run: docker rm -f -v buildmind-mysql || true

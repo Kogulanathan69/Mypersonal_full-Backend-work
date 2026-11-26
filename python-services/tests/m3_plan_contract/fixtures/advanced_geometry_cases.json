@@ -1,0 +1,104 @@
+{
+  "fixtureVersion": "m3-advanced-geometry/1-draft",
+  "provisional": true,
+  "baseSharedWallPlan": {
+    "schemaVersion": "0.1-draft",
+    "projectId": "90000000-0000-4000-8000-000000000001",
+    "planId": "90000000-0000-4000-8000-000000000002",
+    "landRevisionId": "90000000-0000-4000-8000-000000000003",
+    "requirementsRevisionId": "90000000-0000-4000-8000-000000000004",
+    "coordinateSystem": {
+      "type": "localCartesian",
+      "unit": "m",
+      "origin": { "x": 0, "y": 0 },
+      "xDirection": "right",
+      "yDirection": "up"
+    },
+    "floors": [
+      {
+        "id": "91000000-0000-4000-8000-000000000001",
+        "level": 0,
+        "rooms": [
+          {
+            "id": "92000000-0000-4000-8000-000000000001",
+            "name": "Room A",
+            "type": "bedroom",
+            "polygon": [
+              { "x": 0, "y": 0 }, { "x": 4, "y": 0 }, { "x": 4, "y": 3 },
+              { "x": 0, "y": 3 }, { "x": 0, "y": 0 }
+            ],
+            "wallIds": [
+              "93000000-0000-4000-8000-000000000001",
+              "93000000-0000-4000-8000-000000000002",
+              "93000000-0000-4000-8000-000000000003",
+              "93000000-0000-4000-8000-000000000004"
+            ]
+          },
+          {
+            "id": "92000000-0000-4000-8000-000000000002",
+            "name": "Room B",
+            "type": "living",
+            "polygon": [
+              { "x": 4, "y": 0 }, { "x": 8, "y": 0 }, { "x": 8, "y": 3 },
+              { "x": 4, "y": 3 }, { "x": 4, "y": 0 }
+            ],
+            "wallIds": [
+              "93000000-0000-4000-8000-000000000005",
+              "93000000-0000-4000-8000-000000000006",
+              "93000000-0000-4000-8000-000000000007",
+              "93000000-0000-4000-8000-000000000002"
+            ]
+          }
+        ],
+        "walls": [
+          { "id": "93000000-0000-4000-8000-000000000001", "start": { "x": 0, "y": 0 }, "end": { "x": 4, "y": 0 }, "thickness": 0.2 },
+          { "id": "93000000-0000-4000-8000-000000000002", "start": { "x": 4, "y": 0 }, "end": { "x": 4, "y": 3 }, "thickness": 0.2 },
+          { "id": "93000000-0000-4000-8000-000000000003", "start": { "x": 4, "y": 3 }, "end": { "x": 0, "y": 3 }, "thickness": 0.2 },
+          { "id": "93000000-0000-4000-8000-000000000004", "start": { "x": 0, "y": 3 }, "end": { "x": 0, "y": 0 }, "thickness": 0.2 },
+          { "id": "93000000-0000-4000-8000-000000000005", "start": { "x": 4, "y": 0 }, "end": { "x": 8, "y": 0 }, "thickness": 0.2 },
+          { "id": "93000000-0000-4000-8000-000000000006", "start": { "x": 8, "y": 0 }, "end": { "x": 8, "y": 3 }, "thickness": 0.2 },
+          { "id": "93000000-0000-4000-8000-000000000007", "start": { "x": 8, "y": 3 }, "end": { "x": 4, "y": 3 }, "thickness": 0.2 }
+        ],
+        "openings": [
+          {
+            "id": "94000000-0000-4000-8000-000000000001",
+            "type": "door",
+            "wallId": "93000000-0000-4000-8000-000000000002",
+            "offset": 0.5,
+            "width": 0.9
+          }
+        ]
+      }
+    ]
+  },
+  "executableCases": [
+    { "name": "valid_adjacent_rooms_shared_wall_door", "mutation": "none", "expected": "STRUCTURALLY_ACCEPTED" },
+    { "name": "duplicate_entity_id", "mutation": "duplicateRoomId", "expectedCode": "DUPLICATE_ENTITY_ID" },
+    { "name": "missing_wall_reference", "mutation": "missingRoomWall", "expectedCode": "INVALID_GEOMETRY_REFERENCE" },
+    { "name": "zero_length_wall", "mutation": "zeroLengthWall", "expectedCode": "INVALID_GEOMETRY_REFERENCE" },
+    { "name": "opening_exceeds_wall", "mutation": "openingExceedsWall", "expectedCode": "INVALID_OPENING_POSITION" },
+    { "name": "invalid_polygon_closure", "mutation": "openRoomRing", "expected": "SCHEMA_REJECTED" },
+    { "name": "negative_opening_offset", "mutation": "negativeOpeningOffset", "expected": "SCHEMA_REJECTED" },
+    { "name": "non_finite_coordinate", "mutation": "nonFiniteCoordinate", "expected": "SCHEMA_REJECTED" }
+  ],
+  "pendingConformanceCases": [
+    { "name": "valid_rectangular_room", "category": "basic", "status": "BLOCKED_AUTHORITATIVE_VALIDATION", "expectedRelationship": "validPolygon" },
+    { "name": "multiple_independent_rooms", "category": "basic", "status": "BLOCKED_AUTHORITATIVE_VALIDATION", "expectedRelationship": "disjointInteriors" },
+    { "name": "valid_concave_room", "category": "basic", "status": "BLOCKED_SPATIAL_DEPENDENCY", "polygon": [[0,0],[4,0],[4,1],[2,1],[2,3],[0,3],[0,0]] },
+    { "name": "multiple_floors_distinct_ids", "category": "basic", "status": "STRUCTURAL_CHECK_ONLY", "expectedRelationship": "uniqueFloorIds" },
+    { "name": "three_connected_rooms", "category": "sharedWall", "status": "BLOCKED_CANONICAL_CONTRACT", "expectedRelationship": "explicitAdjacency" },
+    { "name": "walls_meeting_at_endpoint", "category": "sharedWall", "status": "BLOCKED_CANONICAL_CONTRACT", "expectedRelationship": "junction" },
+    { "name": "t_junction", "category": "sharedWall", "status": "BLOCKED_SPATIAL_DEPENDENCY", "segments": [[[0,0],[4,0]],[[2,0],[2,3]]] },
+    { "name": "reversed_shared_wall_orientation", "category": "sharedWall", "status": "BLOCKED_CANONICAL_CONTRACT", "expectedRelationship": "sameUndirectedEdge" },
+    { "name": "shared_wall_resize_neighbor_adjustment", "category": "sharedWall", "status": "UNSUPPORTED", "expectedCode": "UNSUPPORTED_TOPOLOGY" },
+    { "name": "overlapping_room_interiors", "category": "invalid", "status": "BLOCKED_SPATIAL_DEPENDENCY", "expectedCode": "GEOMETRY_OVERLAP" },
+    { "name": "self_intersecting_room", "category": "invalid", "status": "BLOCKED_SPATIAL_DEPENDENCY", "polygon": [[0,0],[4,3],[0,3],[4,0],[0,0]] },
+    { "name": "zero_area_room", "category": "invalid", "status": "BLOCKED_SPATIAL_DEPENDENCY", "polygon": [[0,0],[1,0],[2,0],[0,0]] },
+    { "name": "repeated_degenerate_vertices", "category": "invalid", "status": "BLOCKED_SPATIAL_DEPENDENCY", "polygon": [[0,0],[4,0],[4,0],[0,3],[0,0]] },
+    { "name": "invalid_wall_thickness", "category": "invalid", "status": "STRUCTURAL_CHECK_ONLY", "expected": "SCHEMA_REJECTED" },
+    { "name": "overlapping_openings", "category": "opening", "status": "BLOCKED_SPATIAL_DEPENDENCY", "expectedCode": "INVALID_OPENING_POSITION" },
+    { "name": "opening_removed_wall", "category": "opening", "status": "STRUCTURAL_CHECK_ONLY", "expectedCode": "INVALID_GEOMETRY_REFERENCE" },
+    { "name": "opening_after_wall_move", "category": "opening", "status": "UNSUPPORTED", "expectedCode": "UNSUPPORTED_TOPOLOGY" },
+    { "name": "opening_after_wall_resize", "category": "opening", "status": "BLOCKED_CANONICAL_CONTRACT", "expectedRelationship": "offsetPolicy" }
+  ]
+}

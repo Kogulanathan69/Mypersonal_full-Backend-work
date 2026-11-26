@@ -1,0 +1,18 @@
+{
+  "version": "synthetic-fixture-v1",
+  "schemaVersion": "requirements/1",
+  "floorCountBounds": { "minimum": 1, "maximum": 1 },
+  "rooms": [
+    { "roomType": "bedroom", "bounds": { "minimum": 1, "maximum": 4 }, "required": true },
+    { "roomType": "livingRoom", "bounds": { "minimum": 1, "maximum": 1 }, "required": true },
+    { "roomType": "kitchen", "bounds": { "minimum": 1, "maximum": 1 }, "required": true },
+    { "roomType": "bathroom", "bounds": { "minimum": 1, "maximum": 3 }, "required": true }
+  ],
+  "additionalSpaces": [],
+  "relationships": [
+    { "kind": "adjacent", "directed": false, "allowsSelfReference": false },
+    { "kind": "separated", "directed": false, "allowsSelfReference": false }
+  ],
+  "designMethods": ["AI_GENERATED"],
+  "designMethodRequired": false
+}

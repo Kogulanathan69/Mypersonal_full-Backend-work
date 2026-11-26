@@ -1,0 +1,18 @@
+{
+  "schemaVersion": "m6-generation-result/0.1-draft",
+  "projectId": "10000000-0000-4000-8000-000000000001",
+  "landRevisionId": "10000000-0000-4000-8000-000000000002",
+  "requirementsRevisionId": "10000000-0000-4000-8000-000000000003",
+  "outcome": "UNAVAILABLE",
+  "reasonCode": "GENERATION_UNAVAILABLE",
+  "algorithmVersion": null,
+  "seed": 42,
+  "alternatives": [],
+  "diagnostics": [
+    {
+      "code": "GENERATION_UNAVAILABLE",
+      "severity": "CRITICAL",
+      "message": "Plan generation is unavailable in this synthetic contract fixture."
+    }
+  ]
+}

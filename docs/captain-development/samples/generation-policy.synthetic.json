@@ -1,0 +1,13 @@
+{
+  "version": "synthetic-generation-policy-v1",
+  "label": "DEVELOPMENT ONLY - synthetic room dimensions and synthetic setbacks; not legal minimums, not regulatory values",
+  "roomDimensions": {
+    "bedroom": { "minWidthM": 3.0, "minDepthM": 3.0 },
+    "livingRoom": { "minWidthM": 4.0, "minDepthM": 3.0 },
+    "kitchen": { "minWidthM": 2.5, "minDepthM": 2.5 },
+    "bathroom": { "minWidthM": 2.0, "minDepthM": 2.0 }
+  },
+  "evidenceMode": "synthetic-fixture",
+  "syntheticSetbackM": 1.0,
+  "syntheticRuleSetVersion": "synthetic-captain-v1"
+}

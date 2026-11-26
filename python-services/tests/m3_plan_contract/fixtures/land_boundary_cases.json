@@ -1,0 +1,14 @@
+{
+  "fixtureVersion": "m3-land-boundary/1-draft",
+  "provisional": true,
+  "coordinateSystem": { "type": "localCartesian", "unit": "m", "origin": [0, 0], "xDirection": "right", "yDirection": "up" },
+  "cases": [
+    { "name": "valid_rectangular_parcel", "parcel": [[0,0],[12,0],[12,10],[0,10],[0,0]], "status": "BLOCKED_AUTHORITATIVE_VALIDATION" },
+    { "name": "valid_irregular_parcel", "parcel": [[0,0],[12,0],[10,5],[12,10],[0,10],[0,0]], "status": "BLOCKED_AUTHORITATIVE_VALIDATION" },
+    { "name": "footprint_fully_inside", "parcel": [[0,0],[12,0],[12,10],[0,10],[0,0]], "footprint": [[2,2],[8,2],[8,7],[2,7],[2,2]], "expectedRelationship": "inside", "status": "BLOCKED_SPATIAL_DEPENDENCY" },
+    { "name": "partial_boundary_crossing", "parcel": [[0,0],[12,0],[12,10],[0,10],[0,0]], "footprint": [[10,2],[14,2],[14,7],[10,7],[10,2]], "expectedRelationship": "crosses", "status": "BLOCKED_SPATIAL_DEPENDENCY" },
+    { "name": "footprint_outside", "parcel": [[0,0],[12,0],[12,10],[0,10],[0,0]], "footprint": [[14,2],[18,2],[18,7],[14,7],[14,2]], "expectedRelationship": "outside", "status": "BLOCKED_SPATIAL_DEPENDENCY" },
+    { "name": "boundary_touching", "parcel": [[0,0],[12,0],[12,10],[0,10],[0,0]], "footprint": [[0,2],[5,2],[5,7],[0,7],[0,2]], "expectedRelationship": "touches", "status": "BLOCKED_CANONICAL_CONTRACT" },
+    { "name": "self_intersecting_parcel", "parcel": [[0,0],[12,10],[0,10],[12,0],[0,0]], "expectedRelationship": "invalid", "status": "BLOCKED_SPATIAL_DEPENDENCY" }
+  ]
+}

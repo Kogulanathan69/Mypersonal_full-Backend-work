@@ -1,0 +1,12 @@
+{
+  "version": "synthetic-generation-policy-rag-v1",
+  "label": "DEVELOPMENT ONLY - synthetic room dimensions; regulatory evidence from the M7 constraint service (fail closed)",
+  "roomDimensions": {
+    "bedroom": { "minWidthM": 3.0, "minDepthM": 3.0 },
+    "livingRoom": { "minWidthM": 4.0, "minDepthM": 3.0 },
+    "kitchen": { "minWidthM": 2.5, "minDepthM": 2.5 },
+    "bathroom": { "minWidthM": 2.0, "minDepthM": 2.0 }
+  },
+  "evidenceMode": "rag-constraints",
+  "jurisdiction": "Synthetic local test jurisdiction"
+}

@@ -1,0 +1,20 @@
+using BuildMind.Domain.Entities;
+using BuildMind.Reports.Tests.Fixtures;
+using static BuildMind.Reports.Tests.Fixtures.SyntheticReportFixtures;
+
+namespace BuildMind.Reports.Tests.Domain;
+
+public class ReportTests
+{
+    [Fact] public void Pending_has_initial_state() { var r = Pending(); Assert.Equal(ReportStatus.Pending, r.Status); Assert.Equal(1L, r.StateVersion); Assert.Null(r.Artifact); Assert.Null(r.FailureCode); Assert.Null(r.CompletedAtUtc); }
+    [Fact] public void Complete_returns_new_terminal_state() { var p = Pending(); var a = Artifact(); var r = p.Complete(1, a, Time.AddMinutes(4)); Assert.Equal(ReportStatus.Ready, r.Status); Assert.Equal(2L, r.StateVersion); Assert.Same(a, r.Artifact); Assert.Same(p.InputSnapshot, r.InputSnapshot); Assert.Equal(ReportStatus.Pending, p.Status); }
+    [Theory] [InlineData("REPORT_FAILED")] [InlineData("PDF_ERROR_01")] [InlineData("A")] public void Failure_accepts_identifier(string code) { var p = Pending(); var r = p.Fail(1, code, Time.AddMinutes(4)); Assert.Equal(ReportStatus.Failed, r.Status); Assert.Equal(2L, r.StateVersion); Assert.Equal(code, r.FailureCode); Assert.Null(r.Artifact); Assert.Equal(ReportStatus.Pending, p.Status); }
+    [Theory] [InlineData(null)] [InlineData("")] [InlineData(" ")] [InlineData("lowercase")] [InlineData("RAW ERROR")] [InlineData("A-B")] [InlineData("A/B")] [InlineData("A.B")] [InlineData("A\nB")] [InlineData("Aé")] public void Failure_rejects_invalid_identifier(string? code) { var p = Pending(); Assert.ThrowsAny<ArgumentException>(() => p.Fail(1, code!, Time.AddMinutes(4))); Assert.ThrowsAny<ArgumentException>(() => Report.Rehydrate(p.Id, p.ProjectId, p.RequestedBy, p.RequestedAtUtc, p.InputSnapshot, 2, ReportStatus.Failed, failureCode: code, failedAtUtc: Time.AddMinutes(4))); }
+    [Fact] public void Failure_code_length_boundary() { var p = Pending(); Assert.Equal(new string('A', 64), p.Fail(1, new string('A', 64), Time.AddMinutes(4)).FailureCode); Assert.ThrowsAny<ArgumentException>(() => p.Fail(1, new string('A', 65), Time.AddMinutes(4))); Assert.ThrowsAny<ArgumentException>(() => Report.Rehydrate(p.Id, p.ProjectId, p.RequestedBy, p.RequestedAtUtc, p.InputSnapshot, 2, ReportStatus.Failed, failureCode: new string('A', 65), failedAtUtc: Time.AddMinutes(4))); }
+    [Theory] [InlineData(1)] [InlineData(3)] [InlineData(100)] public void Terminal_rehydration_rejects_wrong_versions(int version) { var p = Pending(); Assert.ThrowsAny<ArgumentException>(() => Report.Rehydrate(p.Id, p.ProjectId, p.RequestedBy, p.RequestedAtUtc, p.InputSnapshot, version, ReportStatus.Ready, Artifact(), Time.AddMinutes(4))); Assert.ThrowsAny<ArgumentException>(() => Report.Rehydrate(p.Id, p.ProjectId, p.RequestedBy, p.RequestedAtUtc, p.InputSnapshot, version, ReportStatus.Failed, failureCode: "TEST_ERROR", failedAtUtc: Time.AddMinutes(4))); }
+    [Fact] public void Terminal_rehydration_accepts_version_two() { var p = Pending(); Assert.Equal(ReportStatus.Ready, Report.Rehydrate(p.Id, p.ProjectId, p.RequestedBy, p.RequestedAtUtc, p.InputSnapshot, 2, ReportStatus.Ready, Artifact(), Time.AddMinutes(4)).Status); Assert.Equal(ReportStatus.Failed, Report.Rehydrate(p.Id, p.ProjectId, p.RequestedBy, p.RequestedAtUtc, p.InputSnapshot, 2, ReportStatus.Failed, failureCode: "TEST_ERROR", failedAtUtc: Time.AddMinutes(4)).Status); }
+    [Fact] public void Stale_version_rejected() { var p = Pending(); Assert.Throws<InvalidOperationException>(() => p.Complete(2, Artifact(), Time.AddMinutes(4))); }
+    [Fact] public void Terminal_transition_rejected() { var r = Pending().Fail(1, "TEST_ERROR", Time.AddMinutes(4)); Assert.Throws<InvalidOperationException>(() => r.Complete(2, Artifact(), Time.AddMinutes(5))); }
+    [Fact] public void Chronology_rejected() { var p = Pending(); Assert.ThrowsAny<ArgumentException>(() => p.Fail(1, "TEST_ERROR", Time)); Assert.ThrowsAny<ArgumentException>(() => p.Complete(1, Artifact(), Time.AddMinutes(2))); }
+    [Fact] public void Wrong_project_rejected() => Assert.ThrowsAny<ArgumentException>(() => Report.CreatePending(ReportId, Id(99), SyntheticReportFixtures.User, Time.AddMinutes(2), Snapshot()));
+}

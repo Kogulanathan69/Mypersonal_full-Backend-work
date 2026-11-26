@@ -1,0 +1,72 @@
+# Staging-oriented topology (NOT production, NOT deployed). Secrets come from files outside the repository
+# (docker secrets); no credential is written here. Internal services are on a private network with no published ports;
+# only the API is published, on loopback. Production remains NO-GO (RH09, G03, G11, G19).
+name: buildmind-staging
+
+networks:
+  internal: { internal: true }
+  edge: {}
+
+secrets:
+  mysql_root_password: { file: ${BM_SECRETS_DIR:?set BM_SECRETS_DIR}/mysql-root.password }
+  python_internal_token: { file: ${BM_SECRETS_DIR}/python-internal.token }
+
+volumes:
+  mysql-data: {}
+  private-artifacts: {}
+
+services:
+  mysql:
+    image: mysql:8.4.3
+    networks: [internal]
+    environment:
+      MYSQL_ROOT_PASSWORD_FILE: /run/secrets/mysql_root_password
+    secrets: [mysql_root_password]
+    volumes: [mysql-data:/var/lib/mysql]
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "127.0.0.1", "--silent"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+    restart: unless-stopped
+    deploy: { resources: { limits: { cpus: "2", memory: 1536M } } }
+
+  python-services:
+    image: buildmind-python:local
+    build: { context: ../.., dockerfile: deploy/captain/python.Dockerfile }
+    networks: [internal]
+    read_only: true
+    tmpfs: ["/tmp:size=512m,mode=1777"]
+    cap_drop: [ALL]
+    security_opt: ["no-new-privileges:true"]
+    environment:
+      BUILDMIND_PY_AUTH: required
+      BUILDMIND_PY_ENVIRONMENT: staging
+      BUILDMIND_PY_INTERNAL_TOKENS_FILE: /run/secrets/python_internal_token
+    secrets: [python_internal_token]
+    restart: unless-stopped
+    deploy: { resources: { limits: { cpus: "2", memory: 2G, pids: 128 } } }
+
+  api:
+    image: buildmind-api:local
+    build: { context: ../.., dockerfile: deploy/captain/api.Dockerfile }
+    networks: [internal, edge]
+    ports: ["127.0.0.1:8080:8080"]
+    read_only: true
+    tmpfs: ["/tmp:size=128m"]
+    cap_drop: [ALL]
+    security_opt: ["no-new-privileges:true"]
+    depends_on:
+      mysql: { condition: service_healthy }
+      python-services: { condition: service_started }
+    environment:
+      ASPNETCORE_ENVIRONMENT: Staging
+      Services__Python__Enabled: "true"
+      Services__Python__BaseUrl: http://python-services:8091
+    # The API reads configuration from the environment: secrets come from an env file kept outside the repository
+    # (Jwt__SigningKey, Services__Python__AuthToken, ConnectionStrings__BuildMind with SslMode=VerifyFull).
+    env_file: [${BM_SECRETS_DIR}/api.env]
+    volumes: [private-artifacts:/var/lib/buildmind]
+    restart: unless-stopped
+    stop_grace_period: 30s
+    deploy: { resources: { limits: { cpus: "2", memory: 1G } } }

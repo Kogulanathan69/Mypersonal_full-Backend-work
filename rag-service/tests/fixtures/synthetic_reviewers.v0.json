@@ -1,0 +1,56 @@
+{
+  "registry_version": "synthetic-reviewers-0.1",
+  "synthetic": true,
+  "reviewers": [
+    {
+      "reviewer_id": "synthetic:reviewer-north",
+      "role": "synthetic_test_reviewer",
+      "status": "ACTIVE",
+      "authorized_from": "2026-01-01",
+      "authorized_until": "2026-12-31",
+      "jurisdictions": [
+        "Synthetic North Council planning area"
+      ],
+      "kinds": [
+        "FRONT_SETBACK_MIN",
+        "REAR_SPACE_MIN",
+        "SIDE_SPACE_MIN",
+        "BUILDING_HEIGHT_MAX"
+      ]
+    },
+    {
+      "reviewer_id": "synthetic:reviewer-south",
+      "role": "synthetic_test_reviewer",
+      "status": "ACTIVE",
+      "authorized_from": "2026-01-01",
+      "authorized_until": "2026-12-31",
+      "jurisdictions": [
+        "Synthetic South Council planning area"
+      ],
+      "kinds": [
+        "PLOT_COVERAGE_MAX",
+        "PARKING_SPACES_MIN"
+      ]
+    },
+    {
+      "reviewer_id": "synthetic:reviewer-revoked",
+      "role": "synthetic_test_reviewer",
+      "status": "REVOKED",
+      "authorized_from": "2026-01-01",
+      "authorized_until": null,
+      "jurisdictions": [
+        "Synthetic North Council planning area",
+        "Synthetic South Council planning area"
+      ],
+      "kinds": [
+        "FRONT_SETBACK_MIN",
+        "REAR_SPACE_MIN",
+        "SIDE_SPACE_MIN"
+      ]
+    }
+  ],
+  "integrity": {
+    "algorithm": "SHA-256/BM-JCS-1",
+    "sha256": "7eb66074adf5fb56f1bfcbe16fe40da315a6baa0d30fe9d563d847136f25b84a"
+  }
+}

@@ -1,0 +1,20 @@
+# Keep secrets, private data, caches and test artefacts out of every build context.
+.git
+.github
+.vs
+.vscode
+**/bin
+**/obj
+**/TestResults
+**/__pycache__
+**/.pytest_cache
+**/.venv
+**/venv*
+**/*.pfx
+**/*.pem
+**/*.key
+**/*.env
+**/secrets
+python-services/tests_local
+tools/captain/rh09
+docs/second-brain

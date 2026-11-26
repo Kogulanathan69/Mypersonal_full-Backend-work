@@ -1,0 +1,1371 @@
+{
+  "description": "Synthetic, non-production contract cases. Empty geometry in structural success provides no evidence of feasibility, legal compliance or geometric diversity.",
+  "positive": [
+    {
+      "id": "generation-input",
+      "model": "GenerationInput",
+      "payload": {
+        "schemaVersion": "m6-generation-input/0.1-draft",
+        "projectId": "10000000-0000-4000-8000-000000000001",
+        "landRevisionId": "10000000-0000-4000-8000-000000000002",
+        "requirementsRevisionId": "10000000-0000-4000-8000-000000000003",
+        "seed": 42,
+        "land": {
+          "schemaVersion": "metric-land/0.1-draft",
+          "coordinateSystem": {
+            "type": "localCartesian",
+            "unit": "m",
+            "origin": {
+              "x": 0,
+              "y": 0
+            },
+            "xDirection": "right",
+            "yDirection": "up"
+          },
+          "boundary": {
+            "exterior": [
+              {
+                "x": 0,
+                "y": 0
+              },
+              {
+                "x": 10,
+                "y": 0
+              },
+              {
+                "x": 10,
+                "y": 8
+              },
+              {
+                "x": 0,
+                "y": 8
+              },
+              {
+                "x": 0,
+                "y": 0
+              }
+            ],
+            "holes": []
+          }
+        },
+        "roomProgram": {
+          "level": 0,
+          "catalogueVersion": "synthetic-fixture-v1",
+          "rooms": [
+            {
+              "slotId": "10000000-0000-4000-8000-000000000004",
+              "roomType": "bedroom",
+              "dimensions": {
+                "minWidthM": 3,
+                "minDepthM": 3,
+                "maxWidthM": null,
+                "maxDepthM": null
+              }
+            },
+            {
+              "slotId": "10000000-0000-4000-8000-000000000005",
+              "roomType": "kitchen",
+              "dimensions": {
+                "minWidthM": 2,
+                "minDepthM": 2,
+                "maxWidthM": 4,
+                "maxDepthM": null
+              }
+            }
+          ]
+        },
+        "adjacencyPreferences": [
+          {
+            "fromSlotId": "10000000-0000-4000-8000-000000000004",
+            "toSlotId": "10000000-0000-4000-8000-000000000005",
+            "relationship": "adjacent"
+          }
+        ],
+        "regulatoryEvidence": {
+          "status": "REVIEWED",
+          "ruleSetVersion": "synthetic-rules-v1",
+          "gaps": [],
+          "constraints": [
+            {
+              "ruleId": "synthetic-setback",
+              "type": "setback",
+              "parcelEdgeIndex": 0,
+              "distanceM": 0,
+              "source": {
+                "sourceVersion": "synthetic-source-v1",
+                "sourceLocator": "fixture:setback",
+                "jurisdiction": "synthetic-fixture"
+              },
+              "applicability": {
+                "status": "APPLICABLE",
+                "basis": "Synthetic fixture metadata."
+              },
+              "reviewedBy": "10000000-0000-4000-8000-000000000006",
+              "reviewReference": "synthetic-review"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "metric-land",
+      "model": "MetricLand",
+      "payload": {
+        "schemaVersion": "metric-land/0.1-draft",
+        "coordinateSystem": {
+          "type": "localCartesian",
+          "unit": "m",
+          "origin": {
+            "x": 0,
+            "y": 0
+          },
+          "xDirection": "right",
+          "yDirection": "up"
+        },
+        "boundary": {
+          "exterior": [
+            {
+              "x": 0,
+              "y": 0
+            },
+            {
+              "x": 10,
+              "y": 0
+            },
+            {
+              "x": 10,
+              "y": 8
+            },
+            {
+              "x": 0,
+              "y": 8
+            },
+            {
+              "x": 0,
+              "y": 0
+            }
+          ],
+          "holes": []
+        }
+      }
+    },
+    {
+      "id": "missing-evidence",
+      "model": "RegulatoryEvidence",
+      "payload": {
+        "status": "MISSING",
+        "ruleSetVersion": null,
+        "constraints": [],
+        "gaps": [
+          {
+            "code": "SETBACK_EVIDENCE_MISSING"
+          }
+        ]
+      }
+    },
+    {
+      "id": "feasibility-needs-review",
+      "model": "FeasibilityResult",
+      "payload": {
+        "projectId": "10000000-0000-4000-8000-000000000001",
+        "landRevisionId": "10000000-0000-4000-8000-000000000002",
+        "requirementsRevisionId": "10000000-0000-4000-8000-000000000003",
+        "schemaVersion": "m6-feasibility-result/0.1-draft",
+        "status": "NEEDS_REVIEW",
+        "buildableFootprint": null,
+        "landAreaM2": 80,
+        "buildableAreaM2": null,
+        "requiredAreaM2": null,
+        "regulatoryEvidenceStatus": "MISSING",
+        "ruleSetVersion": null,
+        "feasibilityPolicyVersion": "synthetic-policy-v1",
+        "diagnostics": [
+          {
+            "code": "SETBACK_EVIDENCE_MISSING",
+            "severity": "CRITICAL",
+            "message": "Synthetic review case needs evidence.",
+            "path": null,
+            "relatedEntityIds": [],
+            "sourceReferenceIds": []
+          }
+        ]
+      }
+    },
+    {
+      "id": "feasibility-empty",
+      "model": "FeasibilityResult",
+      "payload": {
+        "projectId": "10000000-0000-4000-8000-000000000001",
+        "landRevisionId": "10000000-0000-4000-8000-000000000002",
+        "requirementsRevisionId": "10000000-0000-4000-8000-000000000003",
+        "schemaVersion": "m6-feasibility-result/0.1-draft",
+        "status": "INFEASIBLE",
+        "buildableFootprint": null,
+        "landAreaM2": 80,
+        "buildableAreaM2": 0,
+        "requiredAreaM2": 20,
+        "regulatoryEvidenceStatus": "REVIEWED",
+        "ruleSetVersion": "synthetic-rules-v1",
+        "feasibilityPolicyVersion": "synthetic-policy-v1",
+        "diagnostics": [
+          {
+            "code": "BUILDABLE_AREA_INSUFFICIENT",
+            "severity": "CRITICAL",
+            "message": "Synthetic calculated empty footprint.",
+            "path": null,
+            "relatedEntityIds": [],
+            "sourceReferenceIds": []
+          }
+        ]
+      }
+    },
+    {
+      "id": "generation-unavailable",
+      "model": "GenerationResult",
+      "payload": {
+        "schemaVersion": "m6-generation-result/0.1-draft",
+        "projectId": "10000000-0000-4000-8000-000000000001",
+        "landRevisionId": "10000000-0000-4000-8000-000000000002",
+        "requirementsRevisionId": "10000000-0000-4000-8000-000000000003",
+        "outcome": "UNAVAILABLE",
+        "reasonCode": "GENERATION_UNAVAILABLE",
+        "algorithmVersion": null,
+        "seed": 42,
+        "alternatives": [],
+        "diagnostics": [
+          {
+            "code": "GENERATION_UNAVAILABLE",
+            "severity": "CRITICAL",
+            "message": "Plan generation is unavailable in this synthetic contract fixture.",
+            "path": null,
+            "relatedEntityIds": [],
+            "sourceReferenceIds": []
+          }
+        ]
+      }
+    },
+    {
+      "id": "generation-structural-success",
+      "model": "GenerationResult",
+      "payload": {
+        "schemaVersion": "m6-generation-result/0.1-draft",
+        "projectId": "10000000-0000-4000-8000-000000000001",
+        "landRevisionId": "10000000-0000-4000-8000-000000000002",
+        "requirementsRevisionId": "10000000-0000-4000-8000-000000000003",
+        "outcome": "SUCCESS",
+        "reasonCode": null,
+        "algorithmVersion": "synthetic-v1",
+        "seed": 42,
+        "alternatives": [
+          {
+            "projectId": "10000000-0000-4000-8000-000000000001",
+            "landRevisionId": "10000000-0000-4000-8000-000000000002",
+            "requirementsRevisionId": "10000000-0000-4000-8000-000000000003",
+            "alternativeId": "10000000-0000-4000-8000-000000000022",
+            "algorithmVersion": "synthetic-v1",
+            "geometry": {
+              "projectId": "10000000-0000-4000-8000-000000000001",
+              "landRevisionId": "10000000-0000-4000-8000-000000000002",
+              "requirementsRevisionId": "10000000-0000-4000-8000-000000000003",
+              "schemaVersion": "0.1-draft",
+              "planId": "10000000-0000-4000-8000-000000000021",
+              "coordinateSystem": {
+                "type": "localCartesian",
+                "unit": "m",
+                "origin": {
+                  "x": 0,
+                  "y": 0
+                },
+                "xDirection": "right",
+                "yDirection": "up"
+              },
+              "floors": [
+                {
+                  "id": "10000000-0000-4000-8000-000000000023",
+                  "level": 0,
+                  "rooms": [],
+                  "walls": [],
+                  "openings": []
+                }
+              ]
+            },
+            "metrics": {
+              "floorAreaM2": 0,
+              "footprintAreaM2": 0,
+              "roomCount": 0
+            },
+            "validation": {
+              "projectId": "10000000-0000-4000-8000-000000000001",
+              "landRevisionId": "10000000-0000-4000-8000-000000000002",
+              "requirementsRevisionId": "10000000-0000-4000-8000-000000000003",
+              "validationId": "10000000-0000-4000-8000-000000000020",
+              "candidateId": "10000000-0000-4000-8000-000000000021",
+              "geometryHash": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+              "geometryValid": true,
+              "requirementsMatch": true,
+              "regulatoryEvidenceStatus": "REVIEWED",
+              "hasBlockingIssues": false,
+              "validatorVersion": "synthetic-validator-v1",
+              "ruleSetVersion": "synthetic-rules-v1",
+              "validatedAtUtc": "2026-11-19T06:30:00Z",
+              "diagnostics": []
+            },
+            "diversitySignature": {
+              "version": "synthetic-v1",
+              "value": "synthetic-0"
+            }
+          },
+          {
+            "projectId": "10000000-0000-4000-8000-000000000001",
+            "landRevisionId": "10000000-0000-4000-8000-000000000002",
+            "requirementsRevisionId": "10000000-0000-4000-8000-000000000003",
+            "alternativeId": "10000000-0000-4000-8000-000000000025",
+            "algorithmVersion": "synthetic-v1",
+            "geometry": {
+              "projectId": "10000000-0000-4000-8000-000000000001",
+              "landRevisionId": "10000000-0000-4000-8000-000000000002",
+              "requirementsRevisionId": "10000000-0000-4000-8000-000000000003",
+              "schemaVersion": "0.1-draft",
+              "planId": "10000000-0000-4000-8000-000000000024",
+              "coordinateSystem": {
+                "type": "localCartesian",
+                "unit": "m",
+                "origin": {
+                  "x": 0,
+                  "y": 0
+                },
+                "xDirection": "right",
+                "yDirection": "up"
+              },
+              "floors": [
+                {
+                  "id": "10000000-0000-4000-8000-000000000026",
+                  "level": 0,
+                  "rooms": [],
+                  "walls": [],
+                  "openings": []
+                }
+              ]
+            },
+            "metrics": {
+              "floorAreaM2": 0,
+              "footprintAreaM2": 0,
+              "roomCount": 0
+            },
+            "validation": {
+              "projectId": "10000000-0000-4000-8000-000000000001",
+              "landRevisionId": "10000000-0000-4000-8000-000000000002",
+              "requirementsRevisionId": "10000000-0000-4000-8000-000000000003",
+              "validationId": "10000000-0000-4000-8000-000000000023",
+              "candidateId": "10000000-0000-4000-8000-000000000024",
+              "geometryHash": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+              "geometryValid": true,
+              "requirementsMatch": true,
+              "regulatoryEvidenceStatus": "REVIEWED",
+              "hasBlockingIssues": false,
+              "validatorVersion": "synthetic-validator-v1",
+              "ruleSetVersion": "synthetic-rules-v1",
+              "validatedAtUtc": "2026-11-19T06:30:00Z",
+              "diagnostics": []
+            },
+            "diversitySignature": {
+              "version": "synthetic-v1",
+              "value": "synthetic-1"
+            }
+          },
+          {
+            "projectId": "10000000-0000-4000-8000-000000000001",
+            "landRevisionId": "10000000-0000-4000-8000-000000000002",
+            "requirementsRevisionId": "10000000-0000-4000-8000-000000000003",
+            "alternativeId": "10000000-0000-4000-8000-000000000028",
+            "algorithmVersion": "synthetic-v1",
+            "geometry": {
+              "projectId": "10000000-0000-4000-8000-000000000001",
+              "landRevisionId": "10000000-0000-4000-8000-000000000002",
+              "requirementsRevisionId": "10000000-0000-4000-8000-000000000003",
+              "schemaVersion": "0.1-draft",
+              "planId": "10000000-0000-4000-8000-000000000027",
+              "coordinateSystem": {
+                "type": "localCartesian",
+                "unit": "m",
+                "origin": {
+                  "x": 0,
+                  "y": 0
+                },
+                "xDirection": "right",
+                "yDirection": "up"
+              },
+              "floors": [
+                {
+                  "id": "10000000-0000-4000-8000-000000000029",
+                  "level": 0,
+                  "rooms": [],
+                  "walls": [],
+                  "openings": []
+                }
+              ]
+            },
+            "metrics": {
+              "floorAreaM2": 0,
+              "footprintAreaM2": 0,
+              "roomCount": 0
+            },
+            "validation": {
+              "projectId": "10000000-0000-4000-8000-000000000001",
+              "landRevisionId": "10000000-0000-4000-8000-000000000002",
+              "requirementsRevisionId": "10000000-0000-4000-8000-000000000003",
+              "validationId": "10000000-0000-4000-8000-000000000026",
+              "candidateId": "10000000-0000-4000-8000-000000000027",
+              "geometryHash": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+              "geometryValid": true,
+              "requirementsMatch": true,
+              "regulatoryEvidenceStatus": "REVIEWED",
+              "hasBlockingIssues": false,
+              "validatorVersion": "synthetic-validator-v1",
+              "ruleSetVersion": "synthetic-rules-v1",
+              "validatedAtUtc": "2026-11-19T06:30:00Z",
+              "diagnostics": []
+            },
+            "diversitySignature": {
+              "version": "synthetic-v1",
+              "value": "synthetic-2"
+            }
+          }
+        ],
+        "diagnostics": []
+      }
+    },
+    {
+      "id": "validation-result",
+      "model": "ValidationResult",
+      "payload": {
+        "projectId": "10000000-0000-4000-8000-000000000001",
+        "landRevisionId": "10000000-0000-4000-8000-000000000002",
+        "requirementsRevisionId": "10000000-0000-4000-8000-000000000003",
+        "validationId": "10000000-0000-4000-8000-000000000020",
+        "candidateId": "10000000-0000-4000-8000-000000000021",
+        "geometryHash": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "geometryValid": true,
+        "requirementsMatch": true,
+        "regulatoryEvidenceStatus": "REVIEWED",
+        "hasBlockingIssues": false,
+        "validatorVersion": "synthetic-validator-v1",
+        "ruleSetVersion": "synthetic-rules-v1",
+        "validatedAtUtc": "2026-11-19T06:30:00Z",
+        "diagnostics": []
+      }
+    },
+    {
+      "id": "job-queued",
+      "model": "GenerationJob",
+      "payload": {
+        "projectId": "10000000-0000-4000-8000-000000000001",
+        "landRevisionId": "10000000-0000-4000-8000-000000000002",
+        "requirementsRevisionId": "10000000-0000-4000-8000-000000000003",
+        "schemaVersion": "m6-generation-job/0.1-draft",
+        "jobId": "10000000-0000-4000-8000-000000000050",
+        "correlationId": "10000000-0000-4000-8000-000000000051",
+        "seed": 42,
+        "state": "QUEUED",
+        "inputFingerprint": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+        "idempotency": {
+          "key": "synthetic-request",
+          "projectId": "10000000-0000-4000-8000-000000000001",
+          "operation": "GENERATE_PLAN",
+          "inputFingerprint": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+          "seed": 42
+        },
+        "createdAtUtc": "2026-11-19T06:31:00Z",
+        "startedAtUtc": null,
+        "completedAtUtc": null,
+        "result": null,
+        "failure": null
+      }
+    },
+    {
+      "id": "job-running",
+      "model": "GenerationJob",
+      "payload": {
+        "projectId": "10000000-0000-4000-8000-000000000001",
+        "landRevisionId": "10000000-0000-4000-8000-000000000002",
+        "requirementsRevisionId": "10000000-0000-4000-8000-000000000003",
+        "schemaVersion": "m6-generation-job/0.1-draft",
+        "jobId": "10000000-0000-4000-8000-000000000050",
+        "correlationId": "10000000-0000-4000-8000-000000000051",
+        "seed": 42,
+        "state": "RUNNING",
+        "inputFingerprint": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+        "idempotency": {
+          "key": "synthetic-request",
+          "projectId": "10000000-0000-4000-8000-000000000001",
+          "operation": "GENERATE_PLAN",
+          "inputFingerprint": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+          "seed": 42
+        },
+        "createdAtUtc": "2026-11-19T06:31:00Z",
+        "startedAtUtc": "2026-11-19T06:32:00Z",
+        "completedAtUtc": null,
+        "result": null,
+        "failure": null
+      }
+    },
+    {
+      "id": "job-succeeded",
+      "model": "GenerationJob",
+      "payload": {
+        "projectId": "10000000-0000-4000-8000-000000000001",
+        "landRevisionId": "10000000-0000-4000-8000-000000000002",
+        "requirementsRevisionId": "10000000-0000-4000-8000-000000000003",
+        "schemaVersion": "m6-generation-job/0.1-draft",
+        "jobId": "10000000-0000-4000-8000-000000000050",
+        "correlationId": "10000000-0000-4000-8000-000000000051",
+        "seed": 42,
+        "state": "SUCCEEDED",
+        "inputFingerprint": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+        "idempotency": {
+          "key": "synthetic-request",
+          "projectId": "10000000-0000-4000-8000-000000000001",
+          "operation": "GENERATE_PLAN",
+          "inputFingerprint": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+          "seed": 42
+        },
+        "createdAtUtc": "2026-11-19T06:31:00Z",
+        "startedAtUtc": "2026-11-19T06:32:00Z",
+        "completedAtUtc": "2026-11-19T06:33:00Z",
+        "result": {
+          "schemaVersion": "m6-generation-result/0.1-draft",
+          "projectId": "10000000-0000-4000-8000-000000000001",
+          "landRevisionId": "10000000-0000-4000-8000-000000000002",
+          "requirementsRevisionId": "10000000-0000-4000-8000-000000000003",
+          "outcome": "SUCCESS",
+          "reasonCode": null,
+          "algorithmVersion": "synthetic-v1",
+          "seed": 42,
+          "alternatives": [
+            {
+              "projectId": "10000000-0000-4000-8000-000000000001",
+              "landRevisionId": "10000000-0000-4000-8000-000000000002",
+              "requirementsRevisionId": "10000000-0000-4000-8000-000000000003",
+              "alternativeId": "10000000-0000-4000-8000-000000000022",
+              "algorithmVersion": "synthetic-v1",
+              "geometry": {
+                "projectId": "10000000-0000-4000-8000-000000000001",
+                "landRevisionId": "10000000-0000-4000-8000-000000000002",
+                "requirementsRevisionId": "10000000-0000-4000-8000-000000000003",
+                "schemaVersion": "0.1-draft",
+                "planId": "10000000-0000-4000-8000-000000000021",
+                "coordinateSystem": {
+                  "type": "localCartesian",
+                  "unit": "m",
+                  "origin": {
+                    "x": 0,
+                    "y": 0
+                  },
+                  "xDirection": "right",
+                  "yDirection": "up"
+                },
+                "floors": [
+                  {
+                    "id": "10000000-0000-4000-8000-000000000023",
+                    "level": 0,
+                    "rooms": [],
+                    "walls": [],
+                    "openings": []
+                  }
+                ]
+              },
+              "metrics": {
+                "floorAreaM2": 0,
+                "footprintAreaM2": 0,
+                "roomCount": 0
+              },
+              "validation": {
+                "projectId": "10000000-0000-4000-8000-000000000001",
+                "landRevisionId": "10000000-0000-4000-8000-000000000002",
+                "requirementsRevisionId": "10000000-0000-4000-8000-000000000003",
+                "validationId": "10000000-0000-4000-8000-000000000020",
+                "candidateId": "10000000-0000-4000-8000-000000000021",
+                "geometryHash": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+                "geometryValid": true,
+                "requirementsMatch": true,
+                "regulatoryEvidenceStatus": "REVIEWED",
+                "hasBlockingIssues": false,
+                "validatorVersion": "synthetic-validator-v1",
+                "ruleSetVersion": "synthetic-rules-v1",
+                "validatedAtUtc": "2026-11-19T06:30:00Z",
+                "diagnostics": []
+              },
+              "diversitySignature": {
+                "version": "synthetic-v1",
+                "value": "synthetic-0"
+              }
+            },
+            {
+              "projectId": "10000000-0000-4000-8000-000000000001",
+              "landRevisionId": "10000000-0000-4000-8000-000000000002",
+              "requirementsRevisionId": "10000000-0000-4000-8000-000000000003",
+              "alternativeId": "10000000-0000-4000-8000-000000000025",
+              "algorithmVersion": "synthetic-v1",
+              "geometry": {
+                "projectId": "10000000-0000-4000-8000-000000000001",
+                "landRevisionId": "10000000-0000-4000-8000-000000000002",
+                "requirementsRevisionId": "10000000-0000-4000-8000-000000000003",
+                "schemaVersion": "0.1-draft",
+                "planId": "10000000-0000-4000-8000-000000000024",
+                "coordinateSystem": {
+                  "type": "localCartesian",
+                  "unit": "m",
+                  "origin": {
+                    "x": 0,
+                    "y": 0
+                  },
+                  "xDirection": "right",
+                  "yDirection": "up"
+                },
+                "floors": [
+                  {
+                    "id": "10000000-0000-4000-8000-000000000026",
+                    "level": 0,
+                    "rooms": [],
+                    "walls": [],
+                    "openings": []
+                  }
+                ]
+              },
+              "metrics": {
+                "floorAreaM2": 0,
+                "footprintAreaM2": 0,
+                "roomCount": 0
+              },
+              "validation": {
+                "projectId": "10000000-0000-4000-8000-000000000001",
+                "landRevisionId": "10000000-0000-4000-8000-000000000002",
+                "requirementsRevisionId": "10000000-0000-4000-8000-000000000003",
+                "validationId": "10000000-0000-4000-8000-000000000023",
+                "candidateId": "10000000-0000-4000-8000-000000000024",
+                "geometryHash": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+                "geometryValid": true,
+                "requirementsMatch": true,
+                "regulatoryEvidenceStatus": "REVIEWED",
+                "hasBlockingIssues": false,
+                "validatorVersion": "synthetic-validator-v1",
+                "ruleSetVersion": "synthetic-rules-v1",
+                "validatedAtUtc": "2026-11-19T06:30:00Z",
+                "diagnostics": []
+              },
+              "diversitySignature": {
+                "version": "synthetic-v1",
+                "value": "synthetic-1"
+              }
+            },
+            {
+              "projectId": "10000000-0000-4000-8000-000000000001",
+              "landRevisionId": "10000000-0000-4000-8000-000000000002",
+              "requirementsRevisionId": "10000000-0000-4000-8000-000000000003",
+              "alternativeId": "10000000-0000-4000-8000-000000000028",
+              "algorithmVersion": "synthetic-v1",
+              "geometry": {
+                "projectId": "10000000-0000-4000-8000-000000000001",
+                "landRevisionId": "10000000-0000-4000-8000-000000000002",
+                "requirementsRevisionId": "10000000-0000-4000-8000-000000000003",
+                "schemaVersion": "0.1-draft",
+                "planId": "10000000-0000-4000-8000-000000000027",
+                "coordinateSystem": {
+                  "type": "localCartesian",
+                  "unit": "m",
+                  "origin": {
+                    "x": 0,
+                    "y": 0
+                  },
+                  "xDirection": "right",
+                  "yDirection": "up"
+                },
+                "floors": [
+                  {
+                    "id": "10000000-0000-4000-8000-000000000029",
+                    "level": 0,
+                    "rooms": [],
+                    "walls": [],
+                    "openings": []
+                  }
+                ]
+              },
+              "metrics": {
+                "floorAreaM2": 0,
+                "footprintAreaM2": 0,
+                "roomCount": 0
+              },
+              "validation": {
+                "projectId": "10000000-0000-4000-8000-000000000001",
+                "landRevisionId": "10000000-0000-4000-8000-000000000002",
+                "requirementsRevisionId": "10000000-0000-4000-8000-000000000003",
+                "validationId": "10000000-0000-4000-8000-000000000026",
+                "candidateId": "10000000-0000-4000-8000-000000000027",
+                "geometryHash": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+                "geometryValid": true,
+                "requirementsMatch": true,
+                "regulatoryEvidenceStatus": "REVIEWED",
+                "hasBlockingIssues": false,
+                "validatorVersion": "synthetic-validator-v1",
+                "ruleSetVersion": "synthetic-rules-v1",
+                "validatedAtUtc": "2026-11-19T06:30:00Z",
+                "diagnostics": []
+              },
+              "diversitySignature": {
+                "version": "synthetic-v1",
+                "value": "synthetic-2"
+              }
+            }
+          ],
+          "diagnostics": []
+        },
+        "failure": null
+      }
+    },
+    {
+      "id": "job-infeasible",
+      "model": "GenerationJob",
+      "payload": {
+        "projectId": "10000000-0000-4000-8000-000000000001",
+        "landRevisionId": "10000000-0000-4000-8000-000000000002",
+        "requirementsRevisionId": "10000000-0000-4000-8000-000000000003",
+        "schemaVersion": "m6-generation-job/0.1-draft",
+        "jobId": "10000000-0000-4000-8000-000000000050",
+        "correlationId": "10000000-0000-4000-8000-000000000051",
+        "seed": 42,
+        "state": "INFEASIBLE",
+        "inputFingerprint": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+        "idempotency": {
+          "key": "synthetic-request",
+          "projectId": "10000000-0000-4000-8000-000000000001",
+          "operation": "GENERATE_PLAN",
+          "inputFingerprint": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+          "seed": 42
+        },
+        "createdAtUtc": "2026-11-19T06:31:00Z",
+        "startedAtUtc": "2026-11-19T06:32:00Z",
+        "completedAtUtc": "2026-11-19T06:33:00Z",
+        "result": null,
+        "failure": {
+          "reasonCode": "BUILDABLE_AREA_INSUFFICIENT",
+          "diagnostics": [
+            {
+              "code": "BUILDABLE_AREA_INSUFFICIENT",
+              "severity": "CRITICAL",
+              "message": "Synthetic job failure.",
+              "path": null,
+              "relatedEntityIds": [],
+              "sourceReferenceIds": []
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "job-failed",
+      "model": "GenerationJob",
+      "payload": {
+        "projectId": "10000000-0000-4000-8000-000000000001",
+        "landRevisionId": "10000000-0000-4000-8000-000000000002",
+        "requirementsRevisionId": "10000000-0000-4000-8000-000000000003",
+        "schemaVersion": "m6-generation-job/0.1-draft",
+        "jobId": "10000000-0000-4000-8000-000000000050",
+        "correlationId": "10000000-0000-4000-8000-000000000051",
+        "seed": 42,
+        "state": "FAILED",
+        "inputFingerprint": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+        "idempotency": {
+          "key": "synthetic-request",
+          "projectId": "10000000-0000-4000-8000-000000000001",
+          "operation": "GENERATE_PLAN",
+          "inputFingerprint": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+          "seed": 42
+        },
+        "createdAtUtc": "2026-11-19T06:31:00Z",
+        "startedAtUtc": "2026-11-19T06:32:00Z",
+        "completedAtUtc": "2026-11-19T06:33:00Z",
+        "result": null,
+        "failure": {
+          "reasonCode": "SEARCH_EXHAUSTED",
+          "diagnostics": [
+            {
+              "code": "SEARCH_EXHAUSTED",
+              "severity": "CRITICAL",
+              "message": "Synthetic job failure.",
+              "path": null,
+              "relatedEntityIds": [],
+              "sourceReferenceIds": []
+            }
+          ]
+        }
+      }
+    }
+  ],
+  "variants": [
+    {
+      "id": "missing-job-id",
+      "base": "job-queued",
+      "python": "reject",
+      "pythonError": "missing",
+      "csharp": "json-reject",
+      "change": {
+        "path": [
+          "jobId"
+        ],
+        "op": "remove"
+      }
+    },
+    {
+      "id": "malformed-uuid",
+      "base": "job-queued",
+      "python": "reject",
+      "pythonError": "value_error",
+      "csharp": "json-reject",
+      "change": {
+        "path": [
+          "jobId"
+        ],
+        "op": "set",
+        "value": "invalid"
+      }
+    },
+    {
+      "id": "nil-uuid",
+      "base": "job-queued",
+      "python": "reject",
+      "pythonError": "value_error",
+      "csharp": "semantic-gap",
+      "change": {
+        "path": [
+          "jobId"
+        ],
+        "op": "set",
+        "value": "00000000-0000-0000-0000-000000000000"
+      }
+    },
+    {
+      "id": "unsupported-schema",
+      "base": "generation-input",
+      "python": "reject",
+      "pythonError": "literal_error",
+      "csharp": "semantic-gap",
+      "change": {
+        "path": [
+          "schemaVersion"
+        ],
+        "op": "set",
+        "value": "v2"
+      }
+    },
+    {
+      "id": "unknown-field",
+      "base": "metric-land",
+      "python": "reject",
+      "pythonError": "extra_forbidden",
+      "csharp": "json-reject",
+      "change": {
+        "path": [
+          "boundary",
+          "extra"
+        ],
+        "op": "set",
+        "value": true
+      }
+    },
+    {
+      "id": "incorrect-casing",
+      "base": "metric-land",
+      "python": "reject",
+      "pythonError": "extra_forbidden",
+      "csharp": "json-reject",
+      "change": {
+        "path": [
+          "SchemaVersion"
+        ],
+        "op": "set",
+        "value": "metric-land/0.1-draft"
+      }
+    },
+    {
+      "id": "required-property-replaced-with-incorrect-casing",
+      "base": "metric-land",
+      "python": "reject",
+      "pythonError": [
+        "missing",
+        "extra_forbidden"
+      ],
+      "csharp": "json-reject",
+      "change": {
+        "path": [
+          "schemaVersion"
+        ],
+        "op": "rename",
+        "value": "SchemaVersion"
+      }
+    },
+    {
+      "id": "unsupported-room-literal",
+      "base": "generation-input",
+      "python": "reject",
+      "pythonError": "literal_error",
+      "csharp": "semantic-gap",
+      "change": {
+        "path": [
+          "roomProgram",
+          "rooms",
+          0,
+          "roomType"
+        ],
+        "op": "set",
+        "value": "garage"
+      }
+    },
+    {
+      "id": "number-as-string",
+      "base": "generation-input",
+      "python": "reject",
+      "pythonError": "int_type",
+      "csharp": "json-reject",
+      "change": {
+        "path": [
+          "seed"
+        ],
+        "op": "set",
+        "value": "42"
+      }
+    },
+    {
+      "id": "nonfinite-coordinate",
+      "base": "metric-land",
+      "python": "reject",
+      "pythonError": "finite_number",
+      "csharp": "semantic-gap",
+      "change": {
+        "path": [
+          "coordinateSystem",
+          "origin",
+          "x"
+        ],
+        "op": "number",
+        "value": "1e999"
+      }
+    },
+    {
+      "id": "negative-area",
+      "base": "feasibility-empty",
+      "python": "reject",
+      "pythonError": "greater_than_equal",
+      "csharp": "semantic-gap",
+      "change": {
+        "path": [
+          "landAreaM2"
+        ],
+        "op": "set",
+        "value": -1
+      }
+    },
+    {
+      "id": "seed-below-zero",
+      "base": "generation-input",
+      "python": "reject",
+      "pythonError": "greater_than_equal",
+      "csharp": "semantic-gap",
+      "change": {
+        "path": [
+          "seed"
+        ],
+        "op": "set",
+        "value": -1
+      }
+    },
+    {
+      "id": "seed-over-int32",
+      "base": "generation-input",
+      "python": "reject",
+      "pythonError": "less_than_equal",
+      "csharp": "json-reject",
+      "change": {
+        "path": [
+          "seed"
+        ],
+        "op": "set",
+        "value": 2147483648
+      }
+    },
+    {
+      "id": "uppercase-geometry-hash",
+      "base": "validation-result",
+      "python": "reject",
+      "pythonError": "string_pattern_mismatch",
+      "csharp": "semantic-gap",
+      "change": {
+        "path": [
+          "geometryHash"
+        ],
+        "op": "set",
+        "value": "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA"
+      }
+    },
+    {
+      "id": "short-input-fingerprint",
+      "base": "job-queued",
+      "python": "reject",
+      "pythonError": "string_too_short",
+      "csharp": "semantic-gap",
+      "change": {
+        "path": [
+          "inputFingerprint"
+        ],
+        "op": "set",
+        "value": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
+      }
+    },
+    {
+      "id": "invalid-timestamp",
+      "base": "validation-result",
+      "python": "reject",
+      "pythonError": "value_error",
+      "csharp": "json-reject",
+      "change": {
+        "path": [
+          "validatedAtUtc"
+        ],
+        "op": "set",
+        "value": "not-a-timestamp"
+      }
+    },
+    {
+      "id": "missing-revision",
+      "base": "generation-input",
+      "python": "reject",
+      "pythonError": "missing",
+      "csharp": "json-reject",
+      "change": {
+        "path": [
+          "landRevisionId"
+        ],
+        "op": "remove"
+      }
+    },
+    {
+      "id": "revision-mismatch",
+      "base": "generation-structural-success",
+      "python": "reject",
+      "pythonError": "value_error",
+      "csharp": "semantic-gap",
+      "change": {
+        "path": [
+          "landRevisionId"
+        ],
+        "op": "set",
+        "value": "10000000-0000-4000-8000-000000000099"
+      }
+    },
+    {
+      "id": "unclosed-ring",
+      "base": "metric-land",
+      "python": "reject",
+      "pythonError": "value_error",
+      "csharp": "semantic-gap",
+      "change": {
+        "path": [
+          "boundary",
+          "exterior",
+          4,
+          "x"
+        ],
+        "op": "set",
+        "value": 1
+      }
+    },
+    {
+      "id": "reversed-dimension-bounds",
+      "base": "generation-input",
+      "python": "reject",
+      "pythonError": "value_error",
+      "csharp": "semantic-gap",
+      "change": {
+        "path": [
+          "roomProgram",
+          "rooms",
+          0,
+          "dimensions",
+          "maxWidthM"
+        ],
+        "op": "set",
+        "value": 1
+      }
+    },
+    {
+      "id": "contradictory-evidence",
+      "base": "missing-evidence",
+      "python": "reject",
+      "pythonError": "value_error",
+      "csharp": "semantic-gap",
+      "change": {
+        "path": [
+          "ruleSetVersion"
+        ],
+        "op": "set",
+        "value": "synthetic-rules-v1"
+      }
+    },
+    {
+      "id": "unsupported-job-state",
+      "base": "job-queued",
+      "python": "reject",
+      "pythonError": "literal_error",
+      "csharp": "semantic-gap",
+      "change": {
+        "path": [
+          "state"
+        ],
+        "op": "set",
+        "value": "CANCELLED"
+      }
+    },
+    {
+      "id": "queued-start-timestamp",
+      "base": "job-queued",
+      "python": "reject",
+      "pythonError": "value_error",
+      "csharp": "semantic-gap",
+      "change": {
+        "path": [
+          "startedAtUtc"
+        ],
+        "op": "set",
+        "value": "2026-11-19T06:32:00Z"
+      }
+    },
+    {
+      "id": "terminal-before-start",
+      "base": "job-succeeded",
+      "python": "reject",
+      "pythonError": "value_error",
+      "csharp": "semantic-gap",
+      "change": {
+        "path": [
+          "completedAtUtc"
+        ],
+        "op": "set",
+        "value": "2026-11-19T06:31:00Z"
+      }
+    },
+    {
+      "id": "result-on-failed-job",
+      "base": "job-failed",
+      "python": "reject",
+      "pythonError": "value_error",
+      "csharp": "semantic-gap",
+      "change": {
+        "path": [
+          "result"
+        ],
+        "op": "set",
+        "value": {
+          "schemaVersion": "m6-generation-result/0.1-draft",
+          "projectId": "10000000-0000-4000-8000-000000000001",
+          "landRevisionId": "10000000-0000-4000-8000-000000000002",
+          "requirementsRevisionId": "10000000-0000-4000-8000-000000000003",
+          "outcome": "UNAVAILABLE",
+          "reasonCode": "GENERATION_UNAVAILABLE",
+          "algorithmVersion": null,
+          "seed": 42,
+          "alternatives": [],
+          "diagnostics": [
+            {
+              "code": "GENERATION_UNAVAILABLE",
+              "severity": "CRITICAL",
+              "message": "Plan generation is unavailable in this synthetic contract fixture."
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "infeasible-search-exhausted",
+      "base": "job-infeasible",
+      "python": "reject",
+      "pythonError": "value_error",
+      "csharp": "semantic-gap",
+      "change": {
+        "path": [
+          "failure"
+        ],
+        "op": "set",
+        "value": {
+          "reasonCode": "SEARCH_EXHAUSTED",
+          "diagnostics": [
+            {
+              "code": "SEARCH_EXHAUSTED",
+              "severity": "CRITICAL",
+              "message": "Synthetic job failure.",
+              "path": null,
+              "relatedEntityIds": [],
+              "sourceReferenceIds": []
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "invalid-alternative-count",
+      "base": "generation-structural-success",
+      "python": "reject",
+      "pythonError": "value_error",
+      "csharp": "semantic-gap",
+      "change": {
+        "path": [
+          "alternatives",
+          2
+        ],
+        "op": "remove"
+      }
+    },
+    {
+      "id": "blocking-validation",
+      "base": "generation-structural-success",
+      "python": "reject",
+      "pythonError": "value_error",
+      "csharp": "semantic-gap",
+      "change": {
+        "path": [
+          "alternatives",
+          0,
+          "validation"
+        ],
+        "op": "set",
+        "value": {
+          "projectId": "10000000-0000-4000-8000-000000000001",
+          "landRevisionId": "10000000-0000-4000-8000-000000000002",
+          "requirementsRevisionId": "10000000-0000-4000-8000-000000000003",
+          "validationId": "10000000-0000-4000-8000-000000000020",
+          "candidateId": "10000000-0000-4000-8000-000000000021",
+          "geometryHash": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "geometryValid": true,
+          "requirementsMatch": true,
+          "regulatoryEvidenceStatus": "REVIEWED",
+          "hasBlockingIssues": true,
+          "validatorVersion": "synthetic-validator-v1",
+          "ruleSetVersion": "synthetic-rules-v1",
+          "validatedAtUtc": "2026-11-19T06:30:00Z",
+          "diagnostics": [
+            {
+              "code": "ROOM_OVERLAP",
+              "severity": "CRITICAL",
+              "message": "Synthetic blocking issue.",
+              "path": null,
+              "relatedEntityIds": [],
+              "sourceReferenceIds": []
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "duplicate-alternative-id",
+      "base": "generation-structural-success",
+      "python": "reject",
+      "pythonError": "value_error",
+      "csharp": "semantic-gap",
+      "change": {
+        "path": [
+          "alternatives",
+          1,
+          "alternativeId"
+        ],
+        "op": "set",
+        "value": "10000000-0000-4000-8000-000000000022"
+      }
+    },
+    {
+      "id": "duplicate-signature",
+      "base": "generation-structural-success",
+      "python": "reject",
+      "pythonError": "value_error",
+      "csharp": "semantic-gap",
+      "change": {
+        "path": [
+          "alternatives",
+          1,
+          "diversitySignature"
+        ],
+        "op": "set",
+        "value": {
+          "version": "synthetic-v1",
+          "value": "synthetic-0"
+        }
+      }
+    },
+    {
+      "id": "idempotency-key-resource-limit",
+      "base": "job-queued",
+      "python": "reject",
+      "pythonError": "string_too_long",
+      "csharp": "semantic-gap",
+      "change": {
+        "path": [
+          "idempotency",
+          "key"
+        ],
+        "op": "set",
+        "value": "kkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkk"
+      }
+    },
+    {
+      "id": "m3-omits-rooms",
+      "base": "generation-structural-success",
+      "python": "accept",
+      "pythonError": null,
+      "csharp": "known-difference",
+      "change": {
+        "path": [
+          "alternatives",
+          0,
+          "geometry",
+          "floors",
+          0,
+          "rooms"
+        ],
+        "op": "remove"
+      }
+    },
+    {
+      "id": "m3-omits-walls",
+      "base": "generation-structural-success",
+      "python": "accept",
+      "pythonError": null,
+      "csharp": "known-difference",
+      "change": {
+        "path": [
+          "alternatives",
+          0,
+          "geometry",
+          "floors",
+          0,
+          "walls"
+        ],
+        "op": "remove"
+      }
+    },
+    {
+      "id": "m3-omits-openings",
+      "base": "generation-structural-success",
+      "python": "accept",
+      "pythonError": null,
+      "csharp": "known-difference",
+      "change": {
+        "path": [
+          "alternatives",
+          0,
+          "geometry",
+          "floors",
+          0,
+          "openings"
+        ],
+        "op": "remove"
+      }
+    }
+  ]
+}

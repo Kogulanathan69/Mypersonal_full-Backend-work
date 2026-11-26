@@ -1,0 +1,60 @@
+{
+    "description":  "Verbatim code-only copy of the reviewed runtime modules of the existing BuildMind regulation retrieval engine (STEP 4 retrieval + STEP 6 evidence assessment). Lead-approved 2026-11-19 (G10: code-only copy into rag-service). No PDFs, extracted text, indexes or evaluation data are included.",
+    "source":  "C:\\BuildMind-PDF-Processor\\regulation_retrieval (not version-controlled; unchanged by the copy)",
+    "copied":  "2026-11-19",
+    "baseline":  "Existing suite run in place, read-only: 93 tests OK (2026-11-19).",
+    "files":  [
+                  {
+                      "path":  "__init__.py",
+                      "sha256":  "72f04d44f4d6dbc2761e4a701fb5678999cd59b2b82842f9b08a845329c42fe3"
+                  },
+                  {
+                      "path":  "approved_sources_step4.py",
+                      "sha256":  "2a838c4b346d79193638a54d926877fb2d438e23767a697a184efb1aaea44a30"
+                  },
+                  {
+                      "path":  "chunking.py",
+                      "sha256":  "a46f7ccc8ec940a09c7b4d78ea51e0a64aa9be63a86ef221c73b0a093329281c"
+                  },
+                  {
+                      "path":  "corpus.py",
+                      "sha256":  "a436f15659a061b910653c1bae5be13548fc5f735d1949f18a2a7d04e042f51b"
+                  },
+                  {
+                      "path":  "corpus_step4.py",
+                      "sha256":  "2c18931f9b0be8b4c88d4bb2ca72063d92e256d7af62693879f994ae6645d542"
+                  },
+                  {
+                      "path":  "evidence_step6/__init__.py",
+                      "sha256":  "af687a25c7cf0fe33ddc350ae639426921b89420db04747e7d92b999a2cebaa9"
+                  },
+                  {
+                      "path":  "evidence_step6/assessor.py",
+                      "sha256":  "73525faf03e9911ed7c9363009c375ea595f762cef721c2d7c81e2f46b37a7d1"
+                  },
+                  {
+                      "path":  "evidence_step6/grouping.py",
+                      "sha256":  "544009e1683587bf70a9b941fadda17b147451105e96499273a44529009000b1"
+                  },
+                  {
+                      "path":  "evidence_step6/service.py",
+                      "sha256":  "701ab978936ddd469af12ce5f6e8cdca84fb0e87ea3bc0444760f19c7e29cc6e"
+                  },
+                  {
+                      "path":  "index.py",
+                      "sha256":  "4747f1d0756e75c21c3a5beafbef6d65387dee519119383917156cc55e13614b"
+                  },
+                  {
+                      "path":  "metadata.py",
+                      "sha256":  "4aa8f85affc29c604dbc026f1195da28728808afe25e19c4dccbf64048ef93b9"
+                  },
+                  {
+                      "path":  "service.py",
+                      "sha256":  "3e72e4dec1d414481a834b456e5f54cf3d1f2f5d2f4a35ace886f3f215464c23"
+                  },
+                  {
+                      "path":  "service_step4.py",
+                      "sha256":  "a6d0ac6c12d4d743e3b156753e58909bbb4439cab0ab2666928bbd281e9c13cc"
+                  }
+              ]
+}

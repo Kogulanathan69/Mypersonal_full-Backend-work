@@ -1,0 +1,3 @@
+# Filled only by the CI step `dotnet ef migrations add` (synthetic test model). Never committed.
+*
+!.gitignore

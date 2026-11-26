@@ -1,0 +1,2 @@
+# Shell scripts run under bash (CI/Linux): always LF, even on Windows checkouts with core.autocrlf.
+*.sh text eol=lf

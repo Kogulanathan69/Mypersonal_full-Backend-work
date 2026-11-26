@@ -1,0 +1,256 @@
+using BuildMind.Application.Features.Generation.Contracts;
+using BuildMind.Application.Features.PlanEditor.Contracts;
+using BuildMind.Application.Features.PlanEditor.Versioning;
+
+namespace BuildMind.Application.Features.Planning;
+
+/// <summary>
+/// Captain planning workflow (land boundary, generation jobs, candidate persistence). Development-only composition;
+/// production activation is NOT approved. Wire contracts to the Python service are the existing M6 drafts
+/// (<see cref="GenerationInputDto"/> / <see cref="GenerationResultDto"/>), unchanged.
+/// </summary>
+public static class PlanningSchemas
+{
+    public const string MetricLand = "metric-land/0.1-draft";
+    public const string EvidenceModeNone = "none";
+    public const string EvidenceModeSynthetic = "synthetic-fixture";
+    public const string EvidenceModeRag = "rag-constraints";
+
+    /// <summary>Recorded on plan validation evidence produced from synthetic setbacks; never "REVIEWED".</summary>
+    public const string SyntheticEvidenceStatus = "SYNTHETIC_FIXTURE";
+    public const string UnverifiedEvidenceStatus = "UNVERIFIED";
+}
+
+public enum PlanningStatus
+{
+    Success,
+    Unauthenticated,
+    NotFound,
+    ValidationFailed,
+    Conflict,
+    StaleInputs,
+    InputsMissing,
+    GenerationInProgress,
+    GenerationUnsuccessful,
+    PolicyUnavailable,
+    DependencyUnavailable,
+    DependencyTimeout,
+}
+
+public sealed record PlanningResult<T>(PlanningStatus Status, T? Value = default, string? Code = null,
+    IReadOnlyList<DiagnosticDto>? Diagnostics = null)
+{
+    public static PlanningResult<T> Ok(T value) => new(PlanningStatus.Success, value);
+}
+
+public enum ProtectedWriteStatus { Written, Denied, Conflict }
+
+/// <summary>Immutable, user-confirmed land boundary in a local metric frame. Survey link is provenance only.</summary>
+public sealed record LandRevision(
+    Guid Id, Guid ProjectId, long RevisionNumber, MetricLandDto Land, double AreaM2, int EdgeCount,
+    Guid? SurveyId, Guid CreatedBy, DateTimeOffset CreatedAtUtc, string? FrameJson = null, string? GeometryDigest = null);
+
+public enum GenerationJobStatus { Running, Succeeded, Failed }
+
+public sealed record GenerationJob(
+    Guid Id, Guid ProjectId, Guid RequestedBy, string IdempotencyKey, Guid LandRevisionId,
+    Guid RequirementsRevisionId, GenerationJobStatus Status, string? Outcome, string? ReasonCode,
+    string? AlgorithmVersion, string EvidenceMode, int Seed, DateTimeOffset CreatedAtUtc,
+    DateTimeOffset? CompletedAtUtc, IReadOnlyList<DiagnosticDto> Diagnostics, string? EvidencePackId = null);
+
+/// <summary>One validated alternative, persisted exactly as generated (M3 draft geometry + M6 metadata).</summary>
+public sealed record GenerationCandidate(
+    Guid Id, Guid JobId, Guid ProjectId, int Ordinal, PlanGeometryDto Geometry, string GeometryJson,
+    string GeometryHash, AlternativeMetricsDto Metrics, ValidationResultDto Validation, string DiversitySignature,
+    DateTimeOffset CreatedAtUtc);
+
+public sealed record LandCheckResult(bool Valid, string Code, double? AreaM2, int? EdgeCount);
+
+public sealed record PlanCheckRequest(
+    Guid ProjectId, Guid LandRevisionId, MetricLandDto Land, IReadOnlyList<double>? SetbackDistancesM,
+    IReadOnlyDictionary<string, int>? ExpectedRoomCounts, PlanGeometryDto Geometry);
+
+public sealed record PlanCheckResult(
+    bool GeometryValid, bool? RequirementsMatch, string ValidatorVersion, IReadOnlyList<DiagnosticDto> Diagnostics);
+
+/// <summary>Operator-supplied, synthetic, development-only generation policy (no compiled-in values).</summary>
+public sealed record GenerationPolicy(
+    string Version, string Label, IReadOnlyDictionary<string, RoomDimensionsDto> RoomDimensions,
+    string EvidenceMode, double? SyntheticSetbackM, string? SyntheticRuleSetVersion, string? Jurisdiction = null);
+
+public interface IGenerationPolicyProvider
+{
+    /// <summary>Null means unavailable (fail closed), never a permissive default.</summary>
+    GenerationPolicy? Get();
+}
+
+public interface ILandRevisionStore
+{
+    Task<LandRevision?> GetCurrentAsync(Guid projectId, CancellationToken cancellationToken);
+    Task<LandRevision?> GetAsync(Guid projectId, Guid landRevisionId, CancellationToken cancellationToken);
+
+    /// <summary>Protected append: project row lock + owner + authorization version, then current-head CAS.</summary>
+    Task<ProtectedWriteStatus> TryAppendAsync(LandRevision revision, Guid? expectedCurrentId, long authorizationVersion,
+        CancellationToken cancellationToken);
+}
+
+public interface IGenerationJobStore
+{
+    Task<GenerationJob?> FindByKeyAsync(Guid projectId, Guid actorId, string idempotencyKey, CancellationToken cancellationToken);
+    Task<GenerationJob?> GetAsync(Guid projectId, Guid jobId, CancellationToken cancellationToken);
+    Task<IReadOnlyList<GenerationCandidate>> GetCandidatesAsync(Guid projectId, Guid jobId, CancellationToken cancellationToken);
+
+    /// <summary>Protected insert of a Running job; a duplicate (project, actor, key) returns Conflict.</summary>
+    Task<ProtectedWriteStatus> TryStartAsync(GenerationJob running, long authorizationVersion, CancellationToken cancellationToken);
+
+    /// <summary>Protected Running -> terminal transition plus candidate inserts in one transaction.</summary>
+    Task<ProtectedWriteStatus> TryCompleteAsync(GenerationJob completed, IReadOnlyList<GenerationCandidate> candidates,
+        long authorizationVersion, CancellationToken cancellationToken);
+}
+
+/// <summary>Private Python service (fail closed). Failures throw DependencyFailureException.</summary>
+public interface IPlanningComputeClient
+{
+    Task<LandCheckResult> ValidateLandAsync(Guid projectId, Guid landRevisionId, MetricLandDto land, CancellationToken cancellationToken);
+
+    /// <summary>Captain coordinate frame (CRS transformation, anchor, digest, physical edges). No persistence.</summary>
+    Task<LandFrameResult> BuildLandFrameAsync(LandFrameInput input, CancellationToken cancellationToken);
+    Task<GenerationResultDto> RunGenerationAsync(GenerationInputDto input, bool syntheticReviewedSetbacks, CancellationToken cancellationToken);
+    Task<PlanCheckResult> ValidatePlanAsync(PlanCheckRequest request, CancellationToken cancellationToken);
+}
+
+/// <summary>Server-issued plan validation evidence (the only evidence a revision may cite).</summary>
+public sealed record IssuedValidationEvidence(Guid ProjectId, Guid PlanId, PlanValidationReferenceDto Reference,
+    IReadOnlyList<DiagnosticDto> Diagnostics);
+
+public interface IPlanCreationStore
+{
+    /// <summary>
+    /// Protected creation of a plan with its first immutable revision and the server-issued evidence it cites
+    /// (project row lock + owner + version). An existing plan id returns Conflict.
+    /// </summary>
+    Task<ProtectedWriteStatus> TryCreateAsync(PlanRevisionSnapshot firstRevision, IssuedValidationEvidence evidence,
+        long authorizationVersion, CancellationToken cancellationToken);
+}
+
+public sealed record PlanConfirmationSummary(Guid ConfirmationId, Guid ConfirmedRevisionId, string GeometryHash,
+    Guid ValidationId, DateTimeOffset ConfirmedAtUtc, bool WarningAcknowledgement);
+
+public sealed record PlanSummary(Guid PlanId, Guid? HeadRevisionId, long? HeadVersionNumber, DateTimeOffset? HeadCreatedAtUtc,
+    PlanConfirmationSummary? Confirmation);
+
+/// <summary>Read model of a project's plans (caller must establish ownership first).</summary>
+public interface IPlanCatalog
+{
+    Task<IReadOnlyList<PlanSummary>> ListAsync(Guid projectId, CancellationToken cancellationToken);
+}
+
+public sealed record SurveyExtractionInput(Guid ExtractionId, Guid FileId, string MediaType, byte[] Content, string Sha256);
+
+/// <summary>Validated, bounded extraction evidence. Outcome: COMPLETED / NEEDS_REVIEW / FAILED. Never an approval.</summary>
+public sealed record SurveyExtractionOutput(string Outcome, string Method, string ExtractionJson);
+
+/// <summary>Survey extraction on the private Python service (separate port so planning fakes stay unaffected).</summary>
+public interface ISurveyExtractionClient
+{
+    Task<SurveyExtractionOutput> ExtractAsync(SurveyExtractionInput input, CancellationToken cancellationToken);
+}
+
+/// <summary>Stored extraction evidence for a survey (the caller must establish project ownership first).</summary>
+public sealed record SurveyExtractionView(Guid ExtractionId, Guid SurveyId, string Outcome, string Method, string ExtractionJson,
+    DateTimeOffset CreatedAtUtc);
+
+public interface ISurveyExtractionReader
+{
+    Task<SurveyExtractionView?> GetAsync(Guid projectId, Guid surveyId, CancellationToken cancellationToken);
+}
+
+public interface IPlanVersionAppendStore
+{
+    /// <summary>
+    /// Protected append of a new immutable revision citing server-issued evidence: project row lock + owner + version,
+    /// head CAS from the expected base, ledger insert and head move in one transaction.
+    /// </summary>
+    Task<ProtectedWriteStatus> TryAppendWithEvidenceAsync(PlanRevisionSnapshot revision, IssuedValidationEvidence evidence,
+        long authorizationVersion, CancellationToken cancellationToken);
+}
+
+public sealed record ReportSummary(Guid ReportId, string Status, Guid PlanId, Guid PlanRevisionId, Guid ConfirmationId,
+    DateTimeOffset RequestedAtUtc, DateTimeOffset? CompletedAtUtc, string? FailureCode);
+
+/// <summary>Owner-scoped report listing (the caller must establish ownership first). Bounded.</summary>
+public interface IReportCatalog
+{
+    Task<IReadOnlyList<ReportSummary>> ListAsync(Guid projectId, int maximum, CancellationToken cancellationToken);
+}
+
+/// <summary>Durable survey extraction work (claims are atomic and leased; see the Infrastructure queue).</summary>
+public interface ISurveyExtractionWork
+{
+    Task<IReadOnlyList<Guid>> FindClaimableAsync(int limit, CancellationToken cancellationToken);
+
+    /// <summary>Claims and processes one survey; returns a short outcome label (never document content).</summary>
+    Task<string> ProcessAsync(Guid surveyId, CancellationToken cancellationToken);
+
+    /// <summary>Deletes survey blobs that no survey row references and that are older than the grace period.</summary>
+    Task<string> ReconcileStorageAsync(CancellationToken cancellationToken);
+}
+
+public sealed record LifecycleMilestone(string Code, bool Satisfied, bool Required);
+
+public sealed record LifecycleStaleness(int StaleGenerationJobs, int StalePlans, int SupersededConfirmations, int StaleReports);
+
+public sealed record ProjectLifecycleView(Guid ProjectId, string Stage, IReadOnlyList<LifecycleMilestone> Milestones, LifecycleStaleness Stale,
+    IReadOnlyList<string> NextActions);
+
+/// <summary>Read-only lifecycle derivation (the caller must establish ownership first).</summary>
+public interface IProjectLifecycleReader
+{
+    Task<ProjectLifecycleView> GetAsync(Guid projectId, CancellationToken cancellationToken);
+}
+
+/// <summary>Georeferenced source boundary (explicit CRS; never guessed). Captain-local frame contract captain-frame-v1.</summary>
+public sealed record GeoreferenceInput(string SourceCrs, string? SourceUnit, string? CalculationCrs, IReadOnlyList<CoordinatePointDto> SourceExterior);
+
+public sealed record LandFrameInput(string SourceCrs, string? SourceUnit, string? CalculationCrs, IReadOnlyList<CoordinatePointDto> Exterior,
+    IReadOnlyList<LandEdge>? PreviousEdges);
+
+public sealed record LandEdge(Guid EdgeId, double[] Start, double[] End, double LengthM, double GridBearingDeg, string Role, Guid? ParentEdgeId);
+
+public sealed record LandFrameResult(bool Valid, string Code, IReadOnlyList<CoordinatePointDto>? LocalExterior, string? FrameJson,
+    string? GeometryDigest, IReadOnlyList<LandEdge>? Edges, string? Crs, double[]? Anchor);
+
+/// <summary>
+/// Canonical land geometry digest, byte-for-byte identical to python-services app/internal/land_frame.py:
+/// open ring → counter-clockwise → start at the lexicographically smallest vertex (fixed 6-decimal text) →
+/// SHA-256 over "captain-frame-v1|crs|anchorX,anchorY|x,y;x,y;...".
+/// </summary>
+public static class LandFrameDigest
+{
+    public const string FrameVersion = "captain-frame-v1";
+
+    public static string Format(double value)
+    {
+        var text = Math.Round(value, 6, MidpointRounding.ToEven).ToString("F6", System.Globalization.CultureInfo.InvariantCulture);
+        return text == "-0.000000" ? "0.000000" : text;
+    }
+
+    public static string Compute(string crs, double anchorX, double anchorY, IReadOnlyList<(double X, double Y)> localRing)
+    {
+        var ring = localRing.Select(p => (X: Math.Round(p.X, 6), Y: Math.Round(p.Y, 6))).ToList();
+        if (ring.Count > 1 && ring[0] == ring[^1]) ring.RemoveAt(ring.Count - 1);
+        var area2 = 0.0;
+        for (var i = 0; i < ring.Count; i++)
+        {
+            var (x1, y1) = ring[i];
+            var (x2, y2) = ring[(i + 1) % ring.Count];
+            area2 += x1 * y2 - x2 * y1;
+        }
+        if (area2 < 0) ring.Reverse();
+        var start = Enumerable.Range(0, ring.Count)
+            .OrderBy(i => Format(ring[i].X), StringComparer.Ordinal).ThenBy(i => Format(ring[i].Y), StringComparer.Ordinal).First();
+        var ordered = ring.Skip(start).Concat(ring.Take(start));
+        var payload = $"{FrameVersion}|{crs}|{Format(anchorX)},{Format(anchorY)}|" + string.Join(';', ordered.Select(p => $"{Format(p.X)},{Format(p.Y)}"));
+        return Convert.ToHexStringLower(System.Security.Cryptography.SHA256.HashData(System.Text.Encoding.ASCII.GetBytes(payload)));
+    }
+}

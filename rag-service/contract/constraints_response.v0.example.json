@@ -1,0 +1,87 @@
+{
+  "contract_version": "constraints-0",
+  "digest_algorithm": "SHA-256/BM-JCS-1",
+  "table_version": "synthetic-0.2",
+  "table_sha256": "52d396d0b3582bab97f7108d55f32b27cdfa1895af384f1698ddf2bb50de3201",
+  "reviewer_registry_version": "synthetic-reviewers-0.1",
+  "reviewer_registry_sha256": "7eb66074adf5fb56f1bfcbe16fe40da315a6baa0d30fe9d563d847136f25b84a",
+  "synthetic": true,
+  "jurisdiction": "Synthetic North Council planning area",
+  "building_use": null,
+  "binding": {
+    "project_id": "11111111-1111-4111-8111-111111111111",
+    "project_revision": 3,
+    "land_revision_id": "22222222-2222-4222-8222-222222222222",
+    "requirement_revision_id": "33333333-3333-4333-8333-333333333333"
+  },
+  "kinds": [
+    {
+      "kind": "REAR_SPACE_MIN",
+      "status": "VERIFIED",
+      "constraints": [
+        {
+          "constraint_id": "syn.north.rear-space",
+          "kind": "REAR_SPACE_MIN",
+          "comparator": ">=",
+          "value": 3.0,
+          "unit": "m",
+          "applies_to": "residential",
+          "conditions": [],
+          "review_status": "HUMAN_REVIEWED",
+          "reviewer_role": "synthetic_test_reviewer",
+          "reviewer_id": "synthetic:reviewer-north",
+          "review_reference": "SYN-2026-001",
+          "reviewed_at": "2026-11-19",
+          "source": {
+            "document_id": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+            "page": 1,
+            "start_char": 64,
+            "end_char": 118,
+            "excerpt": "A minimum rear space of three metres shall be provided"
+          }
+        }
+      ]
+    },
+    {
+      "kind": "SIDE_SPACE_MIN",
+      "status": "UNVERIFIED",
+      "constraints": [
+        {
+          "constraint_id": "syn.north.side-space",
+          "kind": "SIDE_SPACE_MIN",
+          "comparator": ">=",
+          "value": 1.0,
+          "unit": "m",
+          "applies_to": "any",
+          "conditions": [],
+          "review_status": "UNREVIEWED",
+          "reviewer_role": null,
+          "reviewer_id": null,
+          "review_reference": null,
+          "reviewed_at": null,
+          "source": {
+            "document_id": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+            "page": 1,
+            "start_char": 233,
+            "end_char": 301,
+            "excerpt": "A side space of one metre shall be kept free of permanent structures"
+          }
+        }
+      ]
+    },
+    {
+      "kind": "FLOOR_AREA_RATIO_MAX",
+      "status": "MISSING",
+      "constraints": []
+    }
+  ],
+  "overall_status": "INCOMPLETE",
+  "legal_status_verified": false,
+  "warnings": [
+    "Legal currency and amendments are not verified.",
+    "Only HUMAN_REVIEWED constraints may block; UNVERIFIED, CONFLICTING and MISSING kinds require review.",
+    "No precedence is applied: overlapping reviewed constraints with different requirements are CONFLICTING.",
+    "SYNTHETIC_TABLE: test values only, not real regulations."
+  ],
+  "evidence_pack_id": "3377322f4cee6b25ad729b1ca6a9939e801e302fe6b78282cf3a1cdd634290e6"
+}

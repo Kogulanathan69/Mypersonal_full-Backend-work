@@ -1,0 +1,8 @@
+# Source register and reconciliation
+
+- Exact uploaded `BuildMind_BE_Second_Brain_Clean_Architecture_Team_Ownership_v2(1).zip` (48 Markdown notes; SHA256 `1636f8f32beacb527d57c7beee37ecb8ff559cb0dcbcd9951a460fe674014ffc`). Historical files retained with notices. Old SQL Server/payment/old ownership decisions not active. Entry pages renamed with `-V2-HISTORICAL` suffix; historical links retained except current entry navigation points here.
+- Six revised `BuildMind_M1_Backend_7_Day_Task_Plan.pdf` through `BuildMind_M6_Backend_7_Day_Task_Plan.pdf`: page text extracted from actual provided files, used for detailed planned tasks, ownership, API intentions and table candidates. No test claims imported.
+- `BuildMind_BRD_v2_0_Revised_MVP(2).pdf`: historical draft (page 1 still says basic 3D, budget; superseded by later discussion). Not treated as the current release specification; record remaining uncertain scope.
+- `BuildMind_Backend_Team_Starter_CleanArchitecture_SecondBrain.zip`: starter structure reference only; no live source audit. Historical terminal/screenshot evidence from conversation.
+- Latest user directions in this conversation and project decisions previously supplied: 2D-only/no costs, hidden nonblocking Vastu, six backend allocations, M7 existing RAG plus lead (M4 choice not definitively confirmed). Admin staff approval requirement from earlier project decisions; admin coding owner not allocated.
+- New V3 proposed implementation conventions are design guidance, not verified regulatory statements, existing endpoints or approved schema. No external regulatory research, dataset license review, production verification or current remote inspection performed.

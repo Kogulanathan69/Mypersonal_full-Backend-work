@@ -1,0 +1,17 @@
+# Final external decision register (operator / Captain / owners)
+
+Updated 2026-11-25 at the end of the closure execution. Nothing here can be completed from inside the repository without the named decision or input.
+
+Development continues on everything else while these are open. **Never paste secrets into chat or source files.** Each value goes into a file under `~/bm-captain/secrets/` (mode 0600), which the scripts read.
+
+| # | Input | Why / what depends on it | Proceeds without it | Secure mechanism | Acceptance once supplied |
+|---|---|---|---|---|---|
+| I-1 | External LLM provider choice + authorization to send **minimised, non-identifying plan geometry** (no survey files, names or addresses) to it | Real external-model editing quality | OpenAI-compatible adapter, strict schema, validation pipeline; verified against a **local** model (llama.cpp) | `CaptainIntegration:AiEdit:Provider=openai-compatible`, `BaseUrl`, `Model`, `ApiKeyFile=~/bm-captain/secrets/llm.key` | Same journey checks against the provider |
+| I-2 | Email provider (SMTP host/port, STARTTLS/TLS, sender address, credentials) | Real external delivery of verification, recovery, invitations and notifications | All code paths; Mailpit local capture | `CaptainIntegration:Email:*` env, `PasswordFile=~/bm-captain/secrets/smtp.password`, `AllowExternalDelivery=true` **and** `UseStartTls=true` (plaintext external SMTP is refused by design) | Recovery + verification round trip to I-3 |
+| I-3 | One authorized test recipient mailbox | Proof of receipt | — | operator-provided address | Code received and used successfully |
+| I-4 | STEP 8B decision + approved corpus manifest valid on the target OS (or an approved Windows execution path, G17) + reviewed regulation data | Real retrieval, reviewed constraints, regulatory generation | Fail-closed paths; Captain-side evidence binding | M7-approved manifest, or approval of the zero-code POSIX staging layout (REAL-REGULATION-RAG-REPORT option A; approved PDFs verified intact) | `RagLiveSmokeTests`, `RagConstraintAcceptanceTests`, journey phase 5 real-retrieval checks |
+| I-5 | Authorized representative survey documents (English/Sinhala/Tamil) with ground truth | OCR accuracy measurement | Sandbox, pipeline, synthetic tests | private directory outside the repository | Accuracy report per language |
+| I-6 | Ratification of the Captain role model, lifecycle stage names, coordinate-frame contract (JC-01 local), opening generation preferences | Shared-contract adoption | Implemented locally, versioned | review | Owner sign-off |
+| I-7 | Production activation, independent review (G19), MySQL provider licence review (G03) | Production | — | — | Separate gates |
+| I-8 | M4 decision on the MySQL provider (RH09): adopt MySqlConnector-based EF provider when an EF Core 10 release exists, or accept server-side containment (`max_execution_time`, `innodb_lock_wait_timeout`) as the interim control | Bounded cancellation of hung database calls | Containment verified (RH09-RESOLUTION-REPORT) | M4 dependency approval | RH09 probe S1–S9 on the chosen provider + HTTP-level timeout acceptance |
+| I-9 | Container supply chain for any non-local use: base-image digest pinning, image vulnerability scanning, registry and signing | Production images | Local images built and verified (DOCKER-CONTAINER-VERIFICATION) | CI/registry owner | Pinned digests, clean scan report, signed images |

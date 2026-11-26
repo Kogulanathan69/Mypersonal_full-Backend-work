@@ -1,0 +1,117 @@
+{
+  "contract_version": "constraints-0",
+  "table_version": "synthetic-0.2",
+  "synthetic": true,
+  "constraints": [
+    {
+      "constraint_id": "syn.north.rear-space",
+      "jurisdiction": "Synthetic North Council planning area",
+      "kind": "REAR_SPACE_MIN",
+      "comparator": ">=",
+      "value": 3,
+      "unit": "m",
+      "applies_to": "residential",
+      "conditions": [],
+      "review_status": "HUMAN_REVIEWED",
+      "reviewer_role": "synthetic_test_reviewer",
+      "reviewer_id": "synthetic:reviewer-north",
+      "review_reference": "SYN-2026-001",
+      "reviewed_at": "2026-11-19",
+      "source": {
+        "document_id": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "page": 1,
+        "start_char": 64,
+        "end_char": 118,
+        "excerpt": "A minimum rear space of three metres shall be provided"
+      }
+    },
+    {
+      "constraint_id": "syn.north.side-space",
+      "jurisdiction": "Synthetic North Council planning area",
+      "kind": "SIDE_SPACE_MIN",
+      "comparator": ">=",
+      "value": 1,
+      "unit": "m",
+      "applies_to": "any",
+      "conditions": [],
+      "review_status": "UNREVIEWED",
+      "source": {
+        "document_id": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "page": 1,
+        "start_char": 233,
+        "end_char": 301,
+        "excerpt": "A side space of one metre shall be kept free of permanent structures"
+      }
+    },
+    {
+      "constraint_id": "syn.north.height",
+      "jurisdiction": "Synthetic North Council planning area",
+      "kind": "BUILDING_HEIGHT_MAX",
+      "comparator": "<=",
+      "value": 15,
+      "unit": "m",
+      "applies_to": "residential",
+      "conditions": [],
+      "review_status": "HUMAN_REVIEWED",
+      "reviewer_role": "synthetic_test_reviewer",
+      "reviewer_id": "synthetic:reviewer-north",
+      "review_reference": "SYN-2026-002",
+      "reviewed_at": "2026-11-19",
+      "source": {
+        "document_id": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "page": 2,
+        "start_char": 115,
+        "end_char": 146,
+        "excerpt": "shall not exceed fifteen metres"
+      }
+    },
+    {
+      "constraint_id": "syn.south.coverage",
+      "jurisdiction": "Synthetic South Council planning area",
+      "kind": "PLOT_COVERAGE_MAX",
+      "comparator": "<=",
+      "value": 65,
+      "unit": "percent",
+      "applies_to": "residential",
+      "conditions": [],
+      "review_status": "HUMAN_REVIEWED",
+      "reviewer_role": "synthetic_test_reviewer",
+      "reviewer_id": "synthetic:reviewer-south",
+      "review_reference": "SYN-2026-003",
+      "reviewed_at": "2026-11-19",
+      "source": {
+        "document_id": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+        "page": 1,
+        "start_char": 111,
+        "end_char": 163,
+        "excerpt": "shall not exceed sixty five percent of the plot area"
+      }
+    },
+    {
+      "constraint_id": "syn.south.parking",
+      "jurisdiction": "Synthetic South Council planning area",
+      "kind": "PARKING_SPACES_MIN",
+      "comparator": ">=",
+      "value": 1,
+      "unit": "count",
+      "applies_to": "residential",
+      "conditions": [],
+      "review_status": "REJECTED",
+      "reviewer_role": "synthetic_test_reviewer",
+      "reviewer_id": "synthetic:reviewer-south",
+      "review_reference": "SYN-2026-004",
+      "reviewed_at": "2026-11-19",
+      "source": {
+        "document_id": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+        "page": 1,
+        "start_char": 215,
+        "end_char": 273,
+        "excerpt": "One parking space shall be provided for each dwelling unit"
+      }
+    }
+  ],
+  "integrity": {
+    "algorithm": "SHA-256/BM-JCS-1",
+    "sha256": "52d396d0b3582bab97f7108d55f32b27cdfa1895af384f1698ddf2bb50de3201"
+  }
+}
