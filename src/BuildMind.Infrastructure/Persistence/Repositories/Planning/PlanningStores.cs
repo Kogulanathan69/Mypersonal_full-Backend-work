@@ -3,6 +3,8 @@ using BuildMind.Application.Features.Generation.Contracts;
 using BuildMind.Application.Features.PlanEditor.Contracts;
 using BuildMind.Application.Features.PlanEditor.Versioning;
 using BuildMind.Application.Features.Planning;
+using BuildMind.Domain.ValueObjects;
+using BuildMind.Domain.ValueObjects.Land;
 using BuildMind.Infrastructure.Persistence.Mapping;
 using BuildMind.Infrastructure.Persistence.Records.PlanEditor;
 using BuildMind.Infrastructure.Persistence.Records.Planning;
@@ -83,10 +85,26 @@ internal sealed class MySqlLandRevisionStore(BuildMindDbContext context, Transac
                 .FirstOrDefaultAsync(inner).ConfigureAwait(false);
             if (head?.Id != expectedCurrentId || revision.RevisionNumber != (head?.RevisionNumber ?? 0) + 1)
                 return ProtectedWriteStatus.Conflict;
+            var loc = revision.Location is { State: LandLocationState.Provided } l ? l : null;
+            var rep = revision.ReportedArea;
             context.Add(new LandRevisionRecord
             {
                 Id = revision.Id, ProjectId = revision.ProjectId, RevisionNumber = revision.RevisionNumber,
-                LandJson = PlanningJson.Write(revision.Land), AreaM2 = revision.AreaM2, EdgeCount = revision.EdgeCount,
+                LandJson = PlanningJson.Write(revision.Land), AreaM2 = revision.AreaM2, PerimeterM = revision.PerimeterM,
+                LocationLocalityId = loc?.LocalityId, LocationLocalityName = loc?.LocalityName,
+                LocationLatitude = loc?.Latitude, LocationLongitude = loc?.Longitude,
+                LocationSource = loc?.Source?.ToString(),
+                LocationVerificationStatus = loc?.VerificationStatus.ToString(),
+                LocationVerificationProvider = loc?.VerificationProvider,
+                LocationVerifiedAtUtc = loc?.VerifiedAtUtc,
+                ReportedAreaOriginalValue = rep?.OriginalValue,
+                ReportedAreaUnit = rep?.Unit.ToString(),
+                ReportedAreaM2 = rep?.AreaM2,
+                ReportedAreaSourceFileId = rep?.Source.FileId,
+                ReportedAreaSourcePageNumber = rep?.Source.PageNumber,
+                ReportedAreaSourceReferenceText = rep?.Source.ReferenceText,
+                ReportedAreaReviewStatus = rep?.ReviewStatus.ToString(),
+                EdgeCount = revision.EdgeCount,
                 SurveyId = revision.SurveyId, CreatedBy = revision.CreatedBy, CreatedAtUtc = revision.CreatedAtUtc,
                 FrameJson = revision.FrameJson, GeometryDigest = revision.GeometryDigest,
             });
@@ -94,9 +112,39 @@ internal sealed class MySqlLandRevisionStore(BuildMindDbContext context, Transac
             return ProtectedWriteStatus.Written;
         }, token);
 
-    private static LandRevision ToModel(LandRevisionRecord row) => new(row.Id, row.ProjectId, row.RevisionNumber,
-        PlanningJson.Read<MetricLandDto>(row.LandJson), row.AreaM2, row.EdgeCount, row.SurveyId, row.CreatedBy, row.CreatedAtUtc,
-        row.FrameJson, row.GeometryDigest);
+    private static LandRevision ToModel(LandRevisionRecord row)
+    {
+        LandLocation? location = null;
+        if (row.LocationLocalityName is not null)
+        {
+            if (!Enum.TryParse<LandLocationSource>(row.LocationSource, out var source)
+                || !Enum.TryParse<LandLocationVerificationStatus>(row.LocationVerificationStatus, out var verificationStatus))
+            {
+                throw new InvalidDataException("Stored land location metadata is invalid.");
+            }
+            location = LandLocation.Create(row.LocationLocalityName, source, row.LocationLocalityId,
+                row.LocationLatitude, row.LocationLongitude, verificationStatus,
+                row.LocationVerificationProvider, row.LocationVerifiedAtUtc);
+        }
+
+        ReportedLandArea? reportedArea = null;
+        if (row.ReportedAreaOriginalValue is { } origValue)
+        {
+            if (!Enum.TryParse<ReportedAreaUnit>(row.ReportedAreaUnit, out var unit)
+                || !Enum.TryParse<ReportedAreaReviewStatus>(row.ReportedAreaReviewStatus, out var reviewStatus)
+                || row.ReportedAreaSourceFileId is not { } sourceFileId)
+            {
+                throw new InvalidDataException("Stored reported land area metadata is invalid.");
+            }
+            reportedArea = new ReportedLandArea(origValue, unit,
+                new LandAreaSourceReference(sourceFileId, row.ReportedAreaSourcePageNumber, row.ReportedAreaSourceReferenceText),
+                reviewStatus);
+        }
+
+        return new(row.Id, row.ProjectId, row.RevisionNumber,
+            PlanningJson.Read<MetricLandDto>(row.LandJson), row.AreaM2, row.EdgeCount, row.SurveyId, row.CreatedBy, row.CreatedAtUtc,
+            row.FrameJson, row.GeometryDigest, row.PerimeterM, location, reportedArea);
+    }
 }
 
 internal sealed class MySqlGenerationJobStore(BuildMindDbContext context, TransactionRunner transactions) : IGenerationJobStore

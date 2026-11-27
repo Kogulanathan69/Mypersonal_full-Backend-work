@@ -252,14 +252,78 @@ public sealed class PlanningServiceTests
         Assert.Single(compute.LastLandFrameInput.PreviousEdges!);
     }
 
+    [Fact]
+    public async Task Land_submit_accepts_user_selected_location_and_project_owned_reported_area_without_spoofed_verification()
+    {
+        var surveyId = Guid.NewGuid();
+        var surveys = new FakeSurveys();
+        surveys.AddOwned(Project, surveyId, Actor);
+        var reviews = new FakeSurveyReviews();
+        var lands = new FakeLands();
+        var service = new LandService(new PlanningAccess(new User(), new Authorization(true)), lands, new FakeCompute(), surveys, TimeProvider.System, reviews);
+        var exterior = new[]
+        {
+            new CoordinatePointDto { X = 0, Y = 0 },
+            new CoordinatePointDto { X = 12, Y = 0 },
+            new CoordinatePointDto { X = 12, Y = 10 },
+            new CoordinatePointDto { X = 0, Y = 10 },
+        };
+
+        // Client cannot claim geocoding verification or manually reviewed status without review evidence.
+        var verifiedSpoof = await service.SubmitAsync(Project, new SubmitLandCommand(exterior, null, surveyId,
+            Location: new LandLocationInput("LK-1100", "Colombo", 6.9271, 79.8612, "GeocodingProvider", "Verified", "Nominatim", DateTimeOffset.UtcNow)), CancellationToken.None);
+        Assert.Equal(PlanningStatus.ValidationFailed, verifiedSpoof.Status);
+        Assert.Equal("LAND_LOCATION_VERIFICATION_FORBIDDEN", verifiedSpoof.Code);
+
+        var unreviewedClaim = await service.SubmitAsync(Project, new SubmitLandCommand(exterior, null, surveyId,
+            ReportedArea: new ReportedLandAreaInput(1500, "FT2", surveyId, 1, "Lot A", "ManuallyReviewed")), CancellationToken.None);
+        Assert.Equal(PlanningStatus.ValidationFailed, unreviewedClaim.Status);
+        Assert.Equal("REPORTED_AREA_REVIEW_EVIDENCE_REQUIRED", unreviewedClaim.Code);
+
+        var foreignSurvey = await service.SubmitAsync(Project, new SubmitLandCommand(exterior, null, null,
+            ReportedArea: new ReportedLandAreaInput(1500, "FT2", Guid.NewGuid(), 1, "Foreign")), CancellationToken.None);
+        Assert.Equal(PlanningStatus.ValidationFailed, foreignSurvey.Status);
+        Assert.Equal("REPORTED_AREA_SURVEY_NOT_FOUND", foreignSurvey.Code);
+
+        // With valid review evidence and unverified user-selected location, both persist distinctly from calculated AreaM2.
+        reviews.AddReview(surveyId);
+        var valid = await service.SubmitAsync(Project, new SubmitLandCommand(exterior, null, surveyId,
+            Location: new LandLocationInput("LK-1100", "Colombo", 6.9271, 79.8612, "UserSelected"),
+            ReportedArea: new ReportedLandAreaInput(1500, "FT2", surveyId, 1, "Lot A", "ManuallyReviewed")), CancellationToken.None);
+        Assert.Equal(PlanningStatus.Success, valid.Status);
+        Assert.Equal(120d, valid.Value!.AreaM2);
+        Assert.Equal(44d, valid.Value.PerimeterM);
+        Assert.NotNull(valid.Value.Location);
+        Assert.Equal("Colombo", valid.Value.Location!.LocalityName);
+        Assert.Equal(BuildMind.Domain.ValueObjects.Land.LandLocationVerificationStatus.NotVerified, valid.Value.Location.VerificationStatus);
+        Assert.NotNull(valid.Value.ReportedArea);
+        Assert.Equal(1500d, valid.Value.ReportedArea!.OriginalValue);
+        Assert.Equal(1500d * 0.09290304, valid.Value.ReportedArea.AreaM2!.Value, 6);
+        Assert.Equal(ReportedAreaReviewStatus.ManuallyReviewed, valid.Value.ReportedArea.ReviewStatus);
+    }
+
     private sealed class FakeSurveys : ISurveyRepository
     {
+        private readonly Dictionary<(Guid ProjectId, Guid SurveyId), Survey> _items = [];
+        public void AddOwned(Guid projectId, Guid surveyId, Guid actor) =>
+            _items[(projectId, surveyId)] = Survey.CreateQueued(surveyId, projectId, actor, Guid.NewGuid(), "survey.pdf", "application/pdf", 1024, new string('a', 64), DateTimeOffset.UtcNow);
         public Task<Survey?> GetAsync(Guid projectId, Guid surveyId, CancellationToken cancellationToken) =>
-            Task.FromResult<Survey?>(null);
+            Task.FromResult(_items.GetValueOrDefault((projectId, surveyId)));
         public Task<Survey?> AddAsync(Survey survey, CancellationToken cancellationToken) =>
             Task.FromResult<Survey?>(survey);
         public Task<bool> UpdateAsync(Survey survey, long expectedStateVersion, CancellationToken cancellationToken) =>
             Task.FromResult(false);
+    }
+
+    private sealed class FakeSurveyReviews : ISurveyReviewStore
+    {
+        private readonly Dictionary<Guid, List<SurveyReviewRevision>> _bySurvey = [];
+        public void AddReview(Guid surveyId) => _bySurvey[surveyId] =
+            [new SurveyReviewRevision(Guid.NewGuid(), Guid.NewGuid(), surveyId, 1, Actor, DateTimeOffset.UtcNow, [], "ok")];
+        public Task<IReadOnlyList<SurveyReviewRevision>> ListAsync(Guid projectId, Guid surveyId, CancellationToken token) =>
+            Task.FromResult<IReadOnlyList<SurveyReviewRevision>>(_bySurvey.GetValueOrDefault(surveyId) ?? []);
+        public Task<ProtectedWriteStatus> AppendAsync(SurveyReviewRevision revision, Guid projectId, long authorizationVersion, CancellationToken token) =>
+            Task.FromResult(ProtectedWriteStatus.Written);
     }
 
     private sealed class FakePolicies : IGenerationPolicyProvider { public GenerationPolicy? Get() => Policy(); }

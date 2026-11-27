@@ -11,7 +11,68 @@ internal sealed class LandRevisionRecordConfiguration : IEntityTypeConfiguration
 {
     public void Configure(EntityTypeBuilder<LandRevisionRecord> builder)
     {
-        builder.ToTable("land_revisions");
+        builder.ToTable("land_revisions", table =>
+        {
+            table.HasCheckConstraint("ck_land_revisions_revision_number", "revision_number > 0");
+            table.HasCheckConstraint("ck_land_revisions_edge_count", "edge_count >= 3");
+            table.HasCheckConstraint("ck_land_revisions_area", "area_m2 > 0 AND (perimeter_m IS NULL OR perimeter_m > 0)");
+            table.HasCheckConstraint("ck_land_revisions_location", """
+                (
+                    location_locality_id IS NULL
+                    AND location_locality_name IS NULL
+                    AND location_latitude IS NULL
+                    AND location_longitude IS NULL
+                    AND location_source IS NULL
+                    AND location_verification_status IS NULL
+                    AND location_verification_provider IS NULL
+                    AND location_verified_at_utc IS NULL
+                )
+                OR
+                (
+                    location_locality_name IS NOT NULL
+                    AND CHAR_LENGTH(TRIM(location_locality_name)) BETWEEN 1 AND 200
+                    AND (location_locality_id IS NULL OR CHAR_LENGTH(TRIM(location_locality_id)) BETWEEN 1 AND 100)
+                    AND location_source IN ('UserSelected', 'SurveyDocument', 'GeocodingProvider')
+                    AND location_verification_status IN ('NotVerified', 'Verified')
+                    AND (
+                        (location_latitude IS NULL AND location_longitude IS NULL)
+                        OR (location_latitude IS NOT NULL AND location_longitude IS NOT NULL
+                            AND location_latitude BETWEEN -90 AND 90 AND location_longitude BETWEEN -180 AND 180)
+                    )
+                    AND (
+                        (location_verification_status = 'NotVerified' AND location_verification_provider IS NULL AND location_verified_at_utc IS NULL)
+                        OR (location_verification_status = 'Verified' AND location_source = 'GeocodingProvider'
+                            AND location_verification_provider IS NOT NULL
+                            AND CHAR_LENGTH(TRIM(location_verification_provider)) BETWEEN 1 AND 100
+                            AND location_verified_at_utc IS NOT NULL)
+                    )
+                )
+                """);
+            table.HasCheckConstraint("ck_land_revisions_reported_area", """
+                (
+                    reported_area_original_value IS NULL
+                    AND reported_area_unit IS NULL
+                    AND reported_area_m2 IS NULL
+                    AND reported_area_source_file_id IS NULL
+                    AND reported_area_source_page_number IS NULL
+                    AND reported_area_source_reference_text IS NULL
+                    AND reported_area_review_status IS NULL
+                )
+                OR
+                (
+                    reported_area_original_value IS NOT NULL
+                    AND reported_area_original_value > 0
+                    AND reported_area_unit IN ('M2', 'FT2', 'Unknown')
+                    AND reported_area_source_file_id IS NOT NULL
+                    AND reported_area_review_status IN ('Unreviewed', 'ManualReviewRequired', 'ManuallyReviewed')
+                    AND (
+                        (reported_area_unit = 'Unknown' AND reported_area_m2 IS NULL)
+                        OR (reported_area_unit IN ('M2', 'FT2') AND reported_area_m2 IS NOT NULL AND reported_area_m2 > 0)
+                    )
+                    AND (reported_area_source_page_number IS NULL OR reported_area_source_page_number > 0)
+                )
+                """);
+        });
         builder.HasKey(r => r.Id).HasName("pk_land_revisions");
         builder.Property(r => r.Id).HasColumnName("id").ValueGeneratedNever();
         builder.Property(r => r.ProjectId).HasColumnName("project_id").IsRequired();

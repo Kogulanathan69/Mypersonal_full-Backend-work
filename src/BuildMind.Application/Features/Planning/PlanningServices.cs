@@ -12,6 +12,8 @@ using BuildMind.Application.Features.PlanEditor.Versioning;
 using BuildMind.Application.Features.Requirements.Abstractions;
 using BuildMind.Application.Features.Survey.Abstractions;
 using BuildMind.Domain.Entities;
+using BuildMind.Domain.ValueObjects;
+using BuildMind.Domain.ValueObjects.Land;
 
 namespace BuildMind.Application.Features.Planning;
 
@@ -54,12 +56,30 @@ public static class DeterministicIds
     }
 }
 
+public sealed record LandLocationInput(
+    string? LocalityId,
+    string? LocalityName,
+    double? Latitude = null,
+    double? Longitude = null,
+    string? Source = null,
+    string? VerificationStatus = null,
+    string? VerificationProvider = null,
+    DateTimeOffset? VerifiedAtUtc = null);
+
+public sealed record ReportedLandAreaInput(
+    double? OriginalValue,
+    string? Unit,
+    Guid? SourceFileId,
+    int? SourcePageNumber = null,
+    string? SourceReferenceText = null,
+    string? ReviewStatus = null);
+
 public sealed record SubmitLandCommand(IReadOnlyList<CoordinatePointDto>? Exterior, Guid? ExpectedCurrentLandRevisionId, Guid? SurveyId,
-    GeoreferenceInput? Georeference = null);
+    GeoreferenceInput? Georeference = null, LandLocationInput? Location = null, ReportedLandAreaInput? ReportedArea = null);
 
 public sealed class LandService(
     PlanningAccess access, ILandRevisionStore store, IPlanningComputeClient compute, ISurveyRepository surveys,
-    TimeProvider time)
+    TimeProvider time, ISurveyReviewStore? surveyReviews = null)
 {
     public const int MaxVertices = 129;
     public const double MaxCoordinateM = 1_000_000;
@@ -105,6 +125,12 @@ public sealed class LandService(
         if (command.SurveyId is { } surveyId
             && (surveyId == Guid.Empty || await surveys.GetAsync(projectId, surveyId, token).ConfigureAwait(false) is null))
             return new(PlanningStatus.ValidationFailed, Code: "SURVEY_NOT_FOUND");
+        var (location, locationError) = ValidateLocation(command.SurveyId, command.Location);
+        if (locationError is not null)
+            return new(PlanningStatus.ValidationFailed, Code: locationError);
+        var (reportedArea, areaError) = await ValidateReportedAreaAsync(projectId, command.ReportedArea, token).ConfigureAwait(false);
+        if (areaError is not null)
+            return new(PlanningStatus.ValidationFailed, Code: areaError);
 
         var current = await store.GetCurrentAsync(projectId, token).ConfigureAwait(false);
         if (current?.Id != command.ExpectedCurrentLandRevisionId)
@@ -174,13 +200,94 @@ public sealed class LandService(
 
         var revision = new LandRevision(id, projectId, (current?.RevisionNumber ?? 0) + 1, land, area, edges,
             command.SurveyId, actor, PlanningClock.Now(time), frameJson, frame.GeometryDigest,
-            PerimeterM: perimeter);
+            PerimeterM: perimeter, Location: location, ReportedArea: reportedArea);
         return await store.TryAppendAsync(revision, command.ExpectedCurrentLandRevisionId, version, token).ConfigureAwait(false) switch
         {
             ProtectedWriteStatus.Written => PlanningResult<LandRevision>.Ok(revision),
             ProtectedWriteStatus.Conflict => new(PlanningStatus.Conflict, Code: "REVISION_CONFLICT"),
             _ => new(PlanningStatus.NotFound),
         };
+    }
+
+    private static (LandLocation? Location, string? ErrorCode) ValidateLocation(Guid? surveyId, LandLocationInput? input)
+    {
+        if (input is null) return (null, null);
+        if (!string.IsNullOrWhiteSpace(input.VerificationStatus)
+            && !string.Equals(input.VerificationStatus.Trim(), nameof(LandLocationVerificationStatus.NotVerified), StringComparison.Ordinal))
+            return (null, "LAND_LOCATION_VERIFICATION_FORBIDDEN");
+        if (!string.IsNullOrWhiteSpace(input.VerificationProvider) || input.VerifiedAtUtc is not null)
+            return (null, "LAND_LOCATION_VERIFICATION_FORBIDDEN");
+        if (string.Equals(input.Source?.Trim(), nameof(LandLocationSource.GeocodingProvider), StringComparison.Ordinal))
+            return (null, "LAND_LOCATION_SOURCE_FORBIDDEN");
+
+        var source = LandLocationSource.UserSelected;
+        if (!string.IsNullOrWhiteSpace(input.Source))
+        {
+            if (!Enum.TryParse<LandLocationSource>(input.Source.Trim(), ignoreCase: false, out source) || !Enum.IsDefined(source))
+                return (null, "LAND_LOCATION_INVALID");
+            if (source == LandLocationSource.SurveyDocument && (surveyId is null || surveyId == Guid.Empty))
+                return (null, "SURVEY_NOT_FOUND");
+        }
+
+        try
+        {
+            var location = LandLocation.Create(
+                input.LocalityName ?? string.Empty,
+                source,
+                input.LocalityId,
+                input.Latitude,
+                input.Longitude,
+                LandLocationVerificationStatus.NotVerified,
+                verificationProvider: null,
+                verifiedAtUtc: null);
+            return (location, null);
+        }
+        catch (ArgumentException)
+        {
+            return (null, "LAND_LOCATION_INVALID");
+        }
+    }
+
+    private async Task<(ReportedLandArea? ReportedArea, string? ErrorCode)> ValidateReportedAreaAsync(
+        Guid projectId, ReportedLandAreaInput? input, CancellationToken token)
+    {
+        if (input is null) return (null, null);
+        if (input.SourceFileId is not { } sourceFileId || sourceFileId == Guid.Empty)
+            return (null, "REPORTED_AREA_SURVEY_NOT_FOUND");
+        if (await surveys.GetAsync(projectId, sourceFileId, token).ConfigureAwait(false) is null)
+            return (null, "REPORTED_AREA_SURVEY_NOT_FOUND");
+        if (input.OriginalValue is not { } originalValue)
+            return (null, "LAND_REPORTED_AREA_INVALID");
+        if (string.IsNullOrWhiteSpace(input.Unit)
+            || !Enum.TryParse<ReportedAreaUnit>(input.Unit.Trim(), ignoreCase: false, out var unit)
+            || !Enum.IsDefined(unit))
+            return (null, "LAND_REPORTED_AREA_INVALID");
+
+        var reviewStatus = ReportedAreaReviewStatus.Unreviewed;
+        if (!string.IsNullOrWhiteSpace(input.ReviewStatus))
+        {
+            if (!Enum.TryParse<ReportedAreaReviewStatus>(input.ReviewStatus.Trim(), ignoreCase: false, out reviewStatus)
+                || !Enum.IsDefined(reviewStatus))
+                return (null, "LAND_REPORTED_AREA_INVALID");
+            if (reviewStatus == ReportedAreaReviewStatus.ManuallyReviewed)
+            {
+                var reviews = surveyReviews is null
+                    ? []
+                    : await surveyReviews.ListAsync(projectId, sourceFileId, token).ConfigureAwait(false);
+                if (reviews.Count == 0)
+                    return (null, "REPORTED_AREA_REVIEW_EVIDENCE_REQUIRED");
+            }
+        }
+
+        try
+        {
+            var source = new LandAreaSourceReference(sourceFileId, input.SourcePageNumber, input.SourceReferenceText?.Trim());
+            return (new ReportedLandArea(originalValue, unit, source, reviewStatus), null);
+        }
+        catch (ArgumentException)
+        {
+            return (null, "LAND_REPORTED_AREA_INVALID");
+        }
     }
 
     /// <summary>Edges, CRS, and anchor of the current revision, for split lineage across anchor shifts.</summary>
