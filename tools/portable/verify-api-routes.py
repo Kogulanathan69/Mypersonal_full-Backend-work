@@ -6,6 +6,7 @@ Run after tools/portable/start.sh. No authentication tokens or secrets needed.
 import json
 import os
 import sys
+import time
 import urllib.error
 import urllib.request
 
@@ -24,11 +25,20 @@ required_path_prefixes = (
     "/api/v1/projects/{projectId}/land",
     "/api/v1/projects/{projectId}/generation-jobs",
 )
-try:
-    with urllib.request.urlopen(url, timeout=12) as response:
-        document = json.load(response)
-except (OSError, ValueError, urllib.error.URLError) as exc:
-    print(f"API_DOCUMENT_UNAVAILABLE: {url}: {exc}", file=sys.stderr)
+document = None
+last_error = None
+# Compose service health is not guaranteed to include Swagger readiness.
+for attempt in range(20):
+    try:
+        with urllib.request.urlopen(url, timeout=5) as response:
+            document = json.load(response)
+        break
+    except (OSError, ValueError, urllib.error.URLError) as exc:
+        last_error = exc
+        if attempt < 19:
+            time.sleep(1)
+if document is None:
+    print(f"API_DOCUMENT_UNAVAILABLE: {url}: {last_error}", file=sys.stderr)
     sys.exit(1)
 
 paths = document.get("paths", {})
