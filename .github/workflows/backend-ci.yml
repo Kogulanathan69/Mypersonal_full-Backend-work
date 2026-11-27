@@ -233,8 +233,12 @@ jobs:
       - name: Start the Python service (loopback only, bounded readiness)
         run: |
           python -m pip install --disable-pip-version-check -r python-services/requirements.txt
+          token="$(openssl rand -hex 32)"
+          echo "::add-mask::${token}"
+          echo "BM_PY_TOKEN=${token}" >> "$GITHUB_ENV"
           cd python-services
-          nohup python -m uvicorn app.main:app --host 127.0.0.1 --port 8099 --log-level warning \
+          BUILDMIND_PY_AUTH=required BUILDMIND_PY_INTERNAL_TOKENS="$token" \
+            nohup python -m uvicorn app.main:app --host 127.0.0.1 --port 8099 --log-level warning \
             > "$RUNNER_TEMP/python-service.log" 2>&1 &
           echo $! > "$RUNNER_TEMP/python-service.pid"
           for attempt in $(seq 1 30); do
@@ -321,6 +325,9 @@ jobs:
           BUILDMIND_TEST_MYSQL: Server=127.0.0.1;Port=3306;User ID=bm_test;SslMode=Required;Password=${{ env.BM_TEST_PASSWORD }}
           BUILDMIND_TEST_MYSQL_RUNTIME: Server=127.0.0.1;Port=3306;Database=buildmind_dev;User ID=bm_runtime;SslMode=Required;Password=${{ env.BM_RUNTIME_PASSWORD }}
           BUILDMIND_TEST_PYTHON_URL: http://127.0.0.1:8099
+          # BM-INT-01 live geometry tests use explicit loopback URL and token.
+          BUILDMIND_TEST_EXACT_PYTHON_URL: http://127.0.0.1:8099
+          BUILDMIND_TEST_EXACT_PYTHON_TOKEN: ${{ env.BM_PY_TOKEN }}
           BUILDMIND_TEST_RAG_URL: http://127.0.0.1:8098
           BUILDMIND_TEST_RAG_TOKEN: ${{ env.BM_RAG_TOKEN }}
           BUILDMIND_TEST_RAG_ACCEPTANCE_URL: http://127.0.0.1:8094
