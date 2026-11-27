@@ -32,7 +32,21 @@ if [[ -e "$MARKER" ]]; then
     exit 1
 fi
 
-mysql_query -e 'SELECT 1;' >/dev/null
+# Docker's health probe can report ready before the migrator's own TLS path
+# accepts connections. Probe that exact path with a finite deadline.
+ready=0
+for attempt in $(seq 1 30); do
+    if mysql_query -e 'SELECT 1;' >/dev/null 2>&1; then
+        ready=1
+        break
+    fi
+    sleep 2
+done
+if [[ "$ready" != "1" ]]; then
+    echo "MIGRATOR_TLS_CONNECTION_UNAVAILABLE_AFTER_60_SECONDS" >&2
+    mysql_query -e 'SELECT 1;' >/dev/null
+    exit 1
+fi
 echo "MIGRATOR_TLS_CONNECTION_PASS"
 
 history_exists="$(mysql_query -e "
