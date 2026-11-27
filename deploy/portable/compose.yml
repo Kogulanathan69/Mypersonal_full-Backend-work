@@ -1,0 +1,248 @@
+name: bm-portable
+
+services:
+  mysql:
+    image: mysql:8.4@sha256:a81d043930e51745522bd5c430961cf8286f0a23f0a9a2a6e0108f7ea71b0902
+    command:
+      - --require-secure-transport=ON
+      - --ssl-ca=/etc/mysql/tls/ca.pem
+      - --ssl-cert=/etc/mysql/tls/server-cert.pem
+      - --ssl-key=/etc/mysql/tls/server-key.pem
+    environment:
+      MYSQL_ROOT_PASSWORD_FILE: /run/secrets/mysql_root_password
+    volumes:
+      - mysql-data:/var/lib/mysql
+      - ${BM_STATE}/secrets/mysql_root_password:/run/secrets/mysql_root_password:ro
+      - ${BM_STATE}/pki/mysql-ca.crt:/etc/mysql/tls/ca.pem:ro
+      - ${BM_STATE}/pki/mysql-server.crt:/etc/mysql/tls/server-cert.pem:ro
+      - ${BM_STATE}/pki/mysql-server.key:/etc/mysql/tls/server-key.pem:ro
+      - ${BM_STATE}/mysql-init:/docker-entrypoint-initdb.d:ro
+    networks:
+      - internal
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "--silent"]
+      interval: 5s
+      timeout: 5s
+      retries: 40
+      start_period: 30s
+
+  artifacts-init:
+    image: buildmind-api:portable
+    user: "0:0"
+    network_mode: none
+    entrypoint:
+      - sh
+      - -ec
+      - |
+        mkdir -p /var/lib/buildmind/surveys /var/lib/buildmind/reports
+        chown -R 1654:1654 /var/lib/buildmind
+        chmod -R 700 /var/lib/buildmind
+    volumes:
+      - artifacts:/var/lib/buildmind
+
+  python-services:
+    image: buildmind-python:portable
+    build:
+      context: ../..
+      dockerfile: deploy/captain/python.Dockerfile
+    command:
+      - uvicorn
+      - app.main:app
+      - --host
+      - 0.0.0.0
+      - --port
+      - "8091"
+      - --ssl-keyfile
+      - /run/bm/pki/python-server.key
+      - --ssl-certfile
+      - /run/bm/pki/python-server.crt
+      - --ssl-ca-certs
+      - /run/bm/pki/client-ca.crt
+      - --ssl-cert-reqs
+      - "2"
+    environment:
+      BUILDMIND_PY_AUTH: required
+    volumes:
+      - ${BM_STATE}/pki/python-server.key:/run/bm/pki/python-server.key:ro
+      - ${BM_STATE}/pki/python-server.crt:/run/bm/pki/python-server.crt:ro
+      - ${BM_STATE}/pki/client-ca.crt:/run/bm/pki/client-ca.crt:ro
+      - ${BM_STATE}/pki/server-ca.crt:/run/bm/pki/server-ca.crt:ro
+      - ${BM_STATE}/pki/health-client.key:/run/bm/pki/health-client.key:ro
+      - ${BM_STATE}/pki/health-client.crt:/run/bm/pki/health-client.crt:ro
+      - ${BM_STATE}/secrets/python_internal_token:/run/bm/secrets/python-internal.token:ro
+    read_only: true
+    tmpfs:
+      - /tmp:size=128m
+    cap_drop: [ALL]
+    security_opt:
+      - no-new-privileges:true
+    networks:
+      - internal
+    healthcheck:
+      test:
+        - CMD
+        - curl
+        - --fail
+        - --silent
+        - --cacert
+        - /run/bm/pki/server-ca.crt
+        - --cert
+        - /run/bm/pki/health-client.crt
+        - --key
+        - /run/bm/pki/health-client.key
+        - --resolve
+        - python-services:8091:127.0.0.1
+        - https://python-services:8091/health
+      interval: 10s
+      timeout: 5s
+      retries: 20
+
+  rag-service:
+    environment:
+      BUILDMIND_RAG_CORPUS_ROOT: ""
+      BUILDMIND_RAG_MANIFEST: ""
+      BUILDMIND_RAG_INDEX: ""
+    image: buildmind-rag:portable
+    build:
+      context: ../..
+      dockerfile: deploy/captain/rag.Dockerfile
+    user: "${BM_UID}:${BM_GID}"
+    command:
+      - uvicorn
+      - app.main:app
+      - --host
+      - 0.0.0.0
+      - --port
+      - "8092"
+      - --ssl-keyfile
+      - /run/bm/pki/rag-server.key
+      - --ssl-certfile
+      - /run/bm/pki/rag-server.crt
+      - --ssl-ca-certs
+      - /run/bm/pki/client-ca.crt
+      - --ssl-cert-reqs
+      - "2"
+    env_file:
+      - ${BM_STATE}/secrets/rag.env
+    volumes:
+      - ${BM_STATE}/corpus:/corpus:ro
+      - ${BM_STATE}/pki/rag-server.key:/run/bm/pki/rag-server.key:ro
+      - ${BM_STATE}/pki/rag-server.crt:/run/bm/pki/rag-server.crt:ro
+      - ${BM_STATE}/pki/client-ca.crt:/run/bm/pki/client-ca.crt:ro
+      - ${BM_STATE}/pki/server-ca.crt:/run/bm/pki/server-ca.crt:ro
+      - ${BM_STATE}/pki/health-client.key:/run/bm/pki/health-client.key:ro
+      - ${BM_STATE}/pki/health-client.crt:/run/bm/pki/health-client.crt:ro
+    read_only: true
+    tmpfs:
+      - /tmp:size=128m
+    cap_drop: [ALL]
+    security_opt:
+      - no-new-privileges:true
+    networks:
+      - internal
+    healthcheck:
+      test:
+        - CMD
+        - curl
+        - --fail
+        - --silent
+        - --cacert
+        - /run/bm/pki/server-ca.crt
+        - --cert
+        - /run/bm/pki/health-client.crt
+        - --key
+        - /run/bm/pki/health-client.key
+        - --resolve
+        - rag-service:8092:127.0.0.1
+        - https://rag-service:8092/health
+      interval: 10s
+      timeout: 5s
+      retries: 20
+
+  mailpit:
+    image: axllent/mailpit:v1.21.8
+    user: "${BM_UID}:${BM_GID}"
+    command:
+      - --smtp-tls-cert
+      - /run/bm/mail/mailpit.crt
+      - --smtp-tls-key
+      - /run/bm/mail/mailpit.key
+      - --smtp-require-starttls
+    volumes:
+      - ${BM_STATE}/pki/mailpit.crt:/run/bm/mail/mailpit.crt:ro
+      - ${BM_STATE}/pki/mailpit.key:/run/bm/mail/mailpit.key:ro
+    ports:
+      - "127.0.0.1:${BM_MAIL_PORT:-8027}:8025"
+    read_only: true
+    tmpfs:
+      - /tmp:size=64m
+    cap_drop: [ALL]
+    security_opt:
+      - no-new-privileges:true
+    networks:
+      - internal
+      - edge
+
+  api:
+    image: buildmind-api:portable
+    build:
+      context: ../..
+      dockerfile: deploy/captain/api.Dockerfile
+    env_file:
+      - ${BM_STATE}/secrets/api.env
+    volumes:
+      - ${BM_STATE}/pki/mysql-ca.crt:/run/bm/mysql/ca.pem:ro
+      - ${BM_STATE}/pki/mysql-client.crt:/run/bm/mysql/client-cert.pem:ro
+      - ${BM_STATE}/pki/mysql-client.key:/run/bm/mysql/client-key.pem:ro
+      - ${BM_STATE}/pki/server-ca.crt:/run/bm/pki/server-ca.crt:ro
+      - ${BM_STATE}/pki/api-client.crt:/run/bm/pki/api-client.crt:ro
+      - ${BM_STATE}/pki/api-client.key:/run/bm/pki/api-client.key:ro
+      - ${BM_STATE}/ca-bundle.pem:/run/bm/ca-bundle.pem:ro
+      - ${BM_SAMPLES}:/app/samples:ro
+      - artifacts:/var/lib/buildmind
+    ports:
+      - "127.0.0.1:${BM_API_PORT:-5182}:8080"
+    read_only: true
+    tmpfs:
+      - /tmp:size=128m
+    cap_drop: [ALL]
+    security_opt:
+      - no-new-privileges:true
+    networks:
+      - internal
+      - edge
+    depends_on:
+      mysql:
+        condition: service_healthy
+      python-services:
+        condition: service_healthy
+      rag-service:
+        condition: service_healthy
+      mailpit:
+        condition: service_started
+      artifacts-init:
+        condition: service_completed_successfully
+
+  migrator:
+    image: buildmind-migrator:portable
+    build:
+      context: ../..
+      dockerfile: deploy/portable/migrator.Dockerfile
+    profiles: [migration]
+    env_file:
+      - ${BM_STATE}/secrets/migrator.env
+    volumes:
+      - ${BM_STATE}/pki/mysql-ca.crt:/run/bm/mysql/ca.pem:ro
+      - ${BM_STATE}/pki/mysql-migrator.crt:/run/bm/mysql/client-cert.pem:ro
+      - ${BM_STATE}/pki/mysql-migrator.key:/run/bm/mysql/client-key.pem:ro
+    networks:
+      - internal
+
+networks:
+  internal:
+    internal: true
+  edge:
+
+volumes:
+  mysql-data:
+  artifacts:
