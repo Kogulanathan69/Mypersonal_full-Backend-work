@@ -69,18 +69,26 @@ fi
 
 echo "CURRENT_MIGRATION: $current"
 
+# Generate SQL in the migrator container's own writable filesystem.
+# Stream it directly to the host-side migration process; never bind-mount a
+# writable single file from WSL (Docker Desktop can reject those writes).
 SQL_FILE="$(mktemp "$STATE/migration.XXXXXX.sql")"
 trap 'rm -f "$SQL_FILE"' EXIT
 
 compose run --rm --no-deps -T \
-    -v "$SQL_FILE:/tmp/buildmind-migrations.sql" \
-    migrator migrations script "$current" \
-    --context BuildMindDbContext \
-    --configuration Release \
-    --no-build \
-    --project src/BuildMind.Infrastructure \
-    --startup-project src/BuildMind.API \
-    --output /tmp/buildmind-migrations.sql
+    --entrypoint sh migrator -ec '
+        set -eu
+        sql_file="$(mktemp /tmp/buildmind-migrations.XXXXXX.sql)"
+        trap '\''rm -f "$sql_file"'\'' EXIT
+        dotnet tool run dotnet-ef migrations script "$@" \
+            --context BuildMindDbContext \
+            --configuration Release \
+            --no-build \
+            --project src/BuildMind.Infrastructure \
+            --startup-project src/BuildMind.API \
+            --output "$sql_file"
+        cat "$sql_file"
+    ' sh "$current" > "$SQL_FILE"
 
 if grep -Eiq '^[[:space:]]*(CREATE|ALTER|DROP|INSERT|UPDATE|DELETE|RENAME|TRUNCATE)[[:space:]]' "$SQL_FILE"; then
     touch "$MARKER"
