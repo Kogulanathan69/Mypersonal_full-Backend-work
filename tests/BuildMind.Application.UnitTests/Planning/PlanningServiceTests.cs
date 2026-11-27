@@ -6,6 +6,7 @@ using BuildMind.Application.Features.PlanEditor.Integration;
 using BuildMind.Application.Features.PlanEditor.Versioning;
 using BuildMind.Application.Features.Planning;
 using BuildMind.Application.Features.Requirements.Abstractions;
+using BuildMind.Application.Features.Survey.Abstractions;
 using BuildMind.Domain.Entities;
 using BuildMind.Domain.ValueObjects;
 
@@ -219,6 +220,48 @@ public sealed class PlanningServiceTests
                 : new ProjectAuthorizationResult(ProjectAuthorizationStatus.Denied));
     }
 
+    [Fact]
+    public async Task Land_submit_computes_perimeter_and_forwards_previous_frame_anchor()
+    {
+        var lands = new FakeLands
+        {
+            Current = Land() with
+            {
+                FrameJson = """{"frame":{"frameId":"00000000-0000-0000-0000-000000000000","crs":"EPSG:5235","anchor":[500100,500200]},"edges":[{"edgeId":"11111111-1111-1111-1111-111111111111","start":[0,0],"end":[12,0],"lengthM":12,"gridBearingDeg":90,"role":"UNASSIGNED","parentEdgeId":null}]}""",
+            },
+        };
+        var compute = new FakeCompute();
+        var access = new PlanningAccess(new User(), new Authorization(true));
+        var service = new LandService(access, lands, compute, new FakeSurveys(), TimeProvider.System);
+        var exterior = new[]
+        {
+            new CoordinatePointDto { X = 0, Y = 0 },
+            new CoordinatePointDto { X = 12, Y = 0 },
+            new CoordinatePointDto { X = 12, Y = 10 },
+            new CoordinatePointDto { X = 0, Y = 10 },
+        };
+
+        var result = await service.SubmitAsync(Project, new SubmitLandCommand(exterior, lands.Current.Id, null), CancellationToken.None);
+
+        Assert.Equal(PlanningStatus.Success, result.Status);
+        Assert.Equal(44d, result.Value!.PerimeterM);
+        Assert.NotNull(compute.LastLandFrameInput);
+        Assert.Equal("EPSG:5235", compute.LastLandFrameInput!.PreviousCrs);
+        Assert.NotNull(compute.LastLandFrameInput.PreviousAnchor);
+        Assert.Equal([500100d, 500200d], compute.LastLandFrameInput.PreviousAnchor!);
+        Assert.Single(compute.LastLandFrameInput.PreviousEdges!);
+    }
+
+    private sealed class FakeSurveys : ISurveyRepository
+    {
+        public Task<Survey?> GetAsync(Guid projectId, Guid surveyId, CancellationToken cancellationToken) =>
+            Task.FromResult<Survey?>(null);
+        public Task<Survey?> AddAsync(Survey survey, CancellationToken cancellationToken) =>
+            Task.FromResult<Survey?>(survey);
+        public Task<bool> UpdateAsync(Survey survey, long expectedStateVersion, CancellationToken cancellationToken) =>
+            Task.FromResult(false);
+    }
+
     private sealed class FakePolicies : IGenerationPolicyProvider { public GenerationPolicy? Get() => Policy(); }
 
     private sealed class FakeLands : ILandRevisionStore
@@ -285,12 +328,15 @@ public sealed class PlanningServiceTests
         public string Outcome { get; set; } = GenerationOutcomes.Success;
         public Exception? Failure { get; set; }
         public bool PlanValid { get; set; } = true;
+        public LandFrameInput? LastLandFrameInput { get; private set; }
 
         public Task<LandFrameResult> BuildLandFrameAsync(LandFrameInput input, CancellationToken cancellationToken)
         {
-            var local = input.Exterior.ToArray();
-            var digest = LandFrameDigest.Compute("LOCAL", 0, 0, local.Select(p => (p.X, p.Y)).ToArray());
-            return Task.FromResult(new LandFrameResult(true, "VALID", local, """{"frameId":"00000000-0000-0000-0000-000000000000","crs":"LOCAL"}""",
+            LastLandFrameInput = input;
+            var pts = input.Exterior;
+            var open = pts.Count > 1 && pts[0].X == pts[^1].X && pts[0].Y == pts[^1].Y ? pts.Take(pts.Count - 1).ToArray() : pts.ToArray();
+            var digest = LandFrameDigest.Compute("LOCAL", 0, 0, open.Select(p => (p.X, p.Y)).ToArray());
+            return Task.FromResult(new LandFrameResult(true, "VALID", open, """{"frameId":"00000000-0000-0000-0000-000000000000","crs":"LOCAL"}""",
                 digest, [], "LOCAL", [0, 0]));
         }
 

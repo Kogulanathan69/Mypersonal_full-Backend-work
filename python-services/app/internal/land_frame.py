@@ -72,8 +72,22 @@ def _on_segment(p, a, b) -> bool:
     return -LINEAGE_TOLERANCE_M <= dot / length <= length + LINEAGE_TOLERANCE_M
 
 
+def _same_crs(previous_crs: str, current_crs: str) -> bool:
+    prev = previous_crs.strip()
+    curr = current_crs.strip()
+    if prev == curr:
+        return True
+    if prev.upper() == "LOCAL" and curr.upper() == "LOCAL":
+        return True
+    if prev.upper().startswith("EPSG:") and curr.upper().startswith("EPSG:"):
+        return prev.upper() == curr.upper()
+    return False
+
+
 def build_frame(source_crs: str, source_unit: str | None, calculation_crs: str | None, exterior: list,
-                previous_edges: list[dict] | None = None) -> dict:
+                previous_edges: list[dict] | None = None,
+                previous_crs: str | None = None,
+                previous_anchor: tuple[float, float] | list[float] | None = None) -> dict:
     if not isinstance(source_crs, str) or not source_crs.strip():
         raise LandGeometryError("SOURCE_CRS_REQUIRED")
     ring = [(float(p[0]), float(p[1])) for p in exterior]
@@ -124,14 +138,26 @@ def build_frame(source_crs: str, source_unit: str | None, calculation_crs: str |
     digest = geometry_digest(crs, anchor, open_local)
     frame_id = str(uuid.uuid5(EDGE_NAMESPACE, f"{FRAME_VERSION}|{crs}|{fmt(anchor[0])},{fmt(anchor[1])}"))
     canon = canonical_ring(open_local)
+    lineage_enabled = previous_crs is None or _same_crs(previous_crs, crs)
+    if previous_anchor is not None:
+        if len(previous_anchor) != 2 or not all(isinstance(v, (int, float)) and not isinstance(v, bool) and math.isfinite(float(v)) for v in previous_anchor):
+            raise LandGeometryError("INVALID_SOURCE_COORDINATE")
+        shift_x = float(previous_anchor[0]) - anchor[0]
+        shift_y = float(previous_anchor[1]) - anchor[1]
+    else:
+        shift_x = 0.0
+        shift_y = 0.0
+
     edges = []
     for a, b in zip(canon, canon[1:] + canon[:1]):
         parent = None
-        for previous in previous_edges or []:
-            pa, pb = tuple(previous["start"]), tuple(previous["end"])
-            if _on_segment(a, pa, pb) and _on_segment(b, pa, pb):
-                parent = previous["edgeId"]
-                break
+        if lineage_enabled:
+            for previous in previous_edges or []:
+                pa = (previous["start"][0] + shift_x, previous["start"][1] + shift_y)
+                pb = (previous["end"][0] + shift_x, previous["end"][1] + shift_y)
+                if _on_segment(a, pa, pb) and _on_segment(b, pa, pb):
+                    parent = previous["edgeId"]
+                    break
         bearing = (math.degrees(math.atan2(b[0] - a[0], b[1] - a[1])) + 360) % 360
         edges.append({"edgeId": edge_id(frame_id, a, b), "start": [a[0], a[1]], "end": [b[0], b[1]],
                       "lengthM": round(math.hypot(b[0] - a[0], b[1] - a[1]), 6), "gridBearingDeg": round(bearing, 6),
@@ -167,11 +193,18 @@ class LandFrameRequest(BaseModel):
     calculationCrs: str | None = Field(default=None, min_length=1, max_length=64)
     exterior: list[list[float]] = Field(min_length=3, max_length=1000)
     previousEdges: list[_PreviousEdge] = Field(default_factory=list, max_length=1000)
+    previousCrs: str | None = Field(default=None, min_length=1, max_length=64)
+    previousAnchor: list[float] | None = Field(default=None, min_length=2, max_length=2)
 
 
 def frame_from_request(request: LandFrameRequest) -> dict:
     if any(len(p) != 2 or not all(math.isfinite(v) for v in p) for p in request.exterior):
         raise LandGeometryError("INVALID_SOURCE_COORDINATE")
+    if request.previousAnchor is not None and not all(math.isfinite(v) for v in request.previousAnchor):
+        raise LandGeometryError("INVALID_SOURCE_COORDINATE")
+    if any(not all(math.isfinite(v) for v in (*e.start, *e.end)) for e in request.previousEdges):
+        raise LandGeometryError("INVALID_SOURCE_COORDINATE")
     return {"schemaVersion": "captain-land-frame/1",
             **build_frame(request.sourceCrs, request.sourceUnit, request.calculationCrs, request.exterior,
-                          [e.model_dump() for e in request.previousEdges])}
+                          [e.model_dump() for e in request.previousEdges],
+                          request.previousCrs, request.previousAnchor)}

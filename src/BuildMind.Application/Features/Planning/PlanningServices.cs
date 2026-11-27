@@ -129,8 +129,9 @@ public sealed class LandService(
         LandFrameResult frame;
         try
         {
+            var (previousEdges, previousCrs, previousAnchor) = PreviousFrame(current);
             frame = await compute.BuildLandFrameAsync(new LandFrameInput(geo?.SourceCrs ?? "LOCAL", geo is null ? "m" : geo.SourceUnit,
-                geo?.CalculationCrs, geo?.SourceExterior ?? ring!, PreviousEdges(current)), token).ConfigureAwait(false);
+                geo?.CalculationCrs, geo?.SourceExterior ?? ring!, previousEdges, previousCrs, previousAnchor), token).ConfigureAwait(false);
         }
         catch (DependencyFailureException failure) { return DependencyFailure<LandRevision>(failure); }
         if (!frame.Valid || frame.LocalExterior is null)
@@ -158,8 +159,22 @@ public sealed class LandService(
         if (!check.Valid || check.AreaM2 is not { } area || check.EdgeCount is not { } edges)
             return new(PlanningStatus.ValidationFailed, Code: check.Code);
 
+        var perimeter = 0d;
+        for (var i = 1; i < ring.Count; i++)
+        {
+            var dx = ring[i].X - ring[i - 1].X;
+            var dy = ring[i].Y - ring[i - 1].Y;
+            var segment = Math.Sqrt(dx * dx + dy * dy);
+            if (!double.IsFinite(segment) || segment <= 0)
+                return new(PlanningStatus.ValidationFailed, Code: "LAND_PERIMETER_INVALID");
+            perimeter += segment;
+        }
+        if (!double.IsFinite(perimeter) || perimeter <= 0)
+            return new(PlanningStatus.ValidationFailed, Code: "LAND_PERIMETER_INVALID");
+
         var revision = new LandRevision(id, projectId, (current?.RevisionNumber ?? 0) + 1, land, area, edges,
-            command.SurveyId, actor, PlanningClock.Now(time), frameJson, frame.GeometryDigest);
+            command.SurveyId, actor, PlanningClock.Now(time), frameJson, frame.GeometryDigest,
+            PerimeterM: perimeter);
         return await store.TryAppendAsync(revision, command.ExpectedCurrentLandRevisionId, version, token).ConfigureAwait(false) switch
         {
             ProtectedWriteStatus.Written => PlanningResult<LandRevision>.Ok(revision),
@@ -168,14 +183,25 @@ public sealed class LandService(
         };
     }
 
-    /// <summary>Edges of the current revision, for split lineage of the next one.</summary>
-    private static IReadOnlyList<LandEdge>? PreviousEdges(LandRevision? current)
+    /// <summary>Edges, CRS, and anchor of the current revision, for split lineage across anchor shifts.</summary>
+    private static (IReadOnlyList<LandEdge>? Edges, string? Crs, double[]? Anchor) PreviousFrame(LandRevision? current)
     {
-        if (current?.FrameJson is not { } json) return null;
+        if (current?.FrameJson is not { } json) return (null, null, null);
         using var document = System.Text.Json.JsonDocument.Parse(json);
-        return document.RootElement.TryGetProperty("edges", out var edges)
-            ? System.Text.Json.JsonSerializer.Deserialize<LandEdge[]>(edges.GetRawText(), new System.Text.Json.JsonSerializerOptions(System.Text.Json.JsonSerializerDefaults.Web))
+        var root = document.RootElement;
+        var edges = root.TryGetProperty("edges", out var edgesEl)
+            ? System.Text.Json.JsonSerializer.Deserialize<LandEdge[]>(edgesEl.GetRawText(), new System.Text.Json.JsonSerializerOptions(System.Text.Json.JsonSerializerDefaults.Web))
             : null;
+        string? crs = null;
+        double[]? anchor = null;
+        if (root.TryGetProperty("frame", out var frameEl) && frameEl.ValueKind == System.Text.Json.JsonValueKind.Object)
+        {
+            if (frameEl.TryGetProperty("crs", out var crsEl) && crsEl.ValueKind == System.Text.Json.JsonValueKind.String)
+                crs = crsEl.GetString();
+            if (frameEl.TryGetProperty("anchor", out var anchorEl) && anchorEl.ValueKind == System.Text.Json.JsonValueKind.Array && anchorEl.GetArrayLength() == 2)
+                anchor = [anchorEl[0].GetDouble(), anchorEl[1].GetDouble()];
+        }
+        return (edges, crs, anchor);
     }
 
     /// <summary>Coordinate transformation preview (V3 land workflow): no persistence.</summary>
@@ -188,8 +214,9 @@ public sealed class LandService(
         try
         {
             var current = await store.GetCurrentAsync(projectId, token).ConfigureAwait(false);
+            var (previousEdges, previousCrs, previousAnchor) = PreviousFrame(current);
             var frame = await compute.BuildLandFrameAsync(new LandFrameInput(geo.SourceCrs, geo.SourceUnit, geo.CalculationCrs, geo.SourceExterior,
-                PreviousEdges(current)), token).ConfigureAwait(false);
+                previousEdges, previousCrs, previousAnchor), token).ConfigureAwait(false);
             return frame.Valid ? PlanningResult<LandFrameResult>.Ok(frame) : new(PlanningStatus.ValidationFailed, Code: frame.Code);
         }
         catch (DependencyFailureException failure) { return DependencyFailure<LandFrameResult>(failure); }

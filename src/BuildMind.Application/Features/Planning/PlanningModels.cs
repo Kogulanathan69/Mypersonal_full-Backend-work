@@ -48,7 +48,10 @@ public enum ProtectedWriteStatus { Written, Denied, Conflict }
 /// <summary>Immutable, user-confirmed land boundary in a local metric frame. Survey link is provenance only.</summary>
 public sealed record LandRevision(
     Guid Id, Guid ProjectId, long RevisionNumber, MetricLandDto Land, double AreaM2, int EdgeCount,
-    Guid? SurveyId, Guid CreatedBy, DateTimeOffset CreatedAtUtc, string? FrameJson = null, string? GeometryDigest = null);
+    Guid? SurveyId, Guid CreatedBy, DateTimeOffset CreatedAtUtc, string? FrameJson = null, string? GeometryDigest = null,
+    double? PerimeterM = null,
+    BuildMind.Domain.ValueObjects.Land.LandLocation? Location = null,
+    BuildMind.Domain.ValueObjects.ReportedLandArea? ReportedArea = null);
 
 public enum GenerationJobStatus { Running, Succeeded, Failed }
 
@@ -214,7 +217,7 @@ public interface IProjectLifecycleReader
 public sealed record GeoreferenceInput(string SourceCrs, string? SourceUnit, string? CalculationCrs, IReadOnlyList<CoordinatePointDto> SourceExterior);
 
 public sealed record LandFrameInput(string SourceCrs, string? SourceUnit, string? CalculationCrs, IReadOnlyList<CoordinatePointDto> Exterior,
-    IReadOnlyList<LandEdge>? PreviousEdges);
+    IReadOnlyList<LandEdge>? PreviousEdges, string? PreviousCrs = null, double[]? PreviousAnchor = null);
 
 public sealed record LandEdge(Guid EdgeId, double[] Start, double[] End, double LengthM, double GridBearingDeg, string Role, Guid? ParentEdgeId);
 

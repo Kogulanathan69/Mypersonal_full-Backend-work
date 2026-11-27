@@ -62,6 +62,7 @@ public static class CaptainIntegrationInfrastructure
         services.TryAddScoped<IGenerationJobStore, MySqlGenerationJobStore>();
         services.TryAddScoped<IPlanCreationStore, MySqlPlanCreationStore>();
         services.TryAddTransient<IPlanningComputeClient, PlanningComputeClient>();
+        services.TryAddTransient<BuildMind.Application.Features.Land.Abstractions.ILandGeometryValidator, BuildMind.Infrastructure.Integration.Land.PythonLandGeometryValidator>();
         services.TryAddSingleton<IGenerationPolicyProvider, FileGenerationPolicyProvider>();
 
         // Phase 4: adapters for the existing M3 plan editor, revision and confirmation services.
