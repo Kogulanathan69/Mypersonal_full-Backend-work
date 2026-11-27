@@ -41,6 +41,10 @@ Docker must be running and accessible to the WSL user.
 
 The startup script prepares credentials, TLS certificates,
 Docker images, MySQL, database migrations and backend services.
+It then verifies the Development Swagger document exposes **actual feature routes**,
+including registration, login, projects, surveys, land, generation, Admin and Staff.
+If only `/health` is registered, startup fails with
+`INCOMPLETE_BACKEND_ROUTE_REGISTRATION` rather than claiming READY.
 
 The first startup may take several minutes or longer,
 depending on hardware and internet speed.
@@ -53,6 +57,20 @@ Expected completion message:
 
 Swagger:
 http://localhost:5182/swagger/index.html
+
+**Important:** If Swagger is open at `http://localhost:5080/swagger/index.html`
+and only lists `GET /health`, you have started a standalone default-configured
+API, **not** the configured portable integration stack. Stop that standalone
+process, then launch the portable stack with the command above and use port
+`5182`. Do not disable authentication to make routes appear.
+
+To verify feature registration explicitly, from the repository root run:
+
+    wsl -d Ubuntu-24.04 --exec python3 tools/portable/verify-api-routes.py
+
+Expected marker: `BUILDMIND_DEVELOPMENT_ROUTES_REGISTERED`.
+This checks that routes are registered, not that all protected workflows pass.
+Login and business-operation tests must still be performed.
 
 Local email testing:
 http://localhost:8027
