@@ -100,7 +100,8 @@ compose run --rm --no-deps -T \
             --no-build \
             --project src/BuildMind.Infrastructure \
             --startup-project src/BuildMind.API \
-            --output "$sql_file"
+            --output "$sql_file" >&2
+        # Only SQL goes to stdout; EF informational output stays on stderr.
         cat "$sql_file"
     ' sh "$current" > "$SQL_FILE"
 
