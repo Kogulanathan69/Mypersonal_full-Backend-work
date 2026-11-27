@@ -11,9 +11,18 @@ frontend integration, demonstrations and supervisor review.
 - Ubuntu-24.04 WSL distribution.
 - Docker Engine or Docker Desktop with WSL integration.
 - Docker Compose v2 or compatible newer version.
-- Git, Python 3, OpenSSL, flock and Linux libacl.
+- Git, Python 3, OpenSSL, flock and Linux libacl. Install the `acl` command-line package as well for `getfacl`/`setfacl` diagnostics.
+
+On Ubuntu 24.04 run:
+
+```bash
+sudo apt-get update
+sudo apt-get install -y python3 openssl util-linux libacl1 acl ca-certificates
+```
+
+The shared library `libacl1` alone does **not** install `getfacl` and `setfacl`.
 - Internet access for initial image and dependency downloads.
-- Access to the private BuildMind repository.
+- Network access to the BuildMind source repository.
 
 ## 1. Clone the repository
 
@@ -32,6 +41,10 @@ Docker must be running and accessible to the WSL user.
 
 The startup script prepares credentials, TLS certificates,
 Docker images, MySQL, database migrations and backend services.
+It then verifies the Development Swagger document exposes **actual feature routes**,
+including registration, login, projects, surveys, land, generation, Admin and Staff.
+If only `/health` is registered, startup fails with
+`INCOMPLETE_BACKEND_ROUTE_REGISTRATION` rather than claiming READY.
 
 The first startup may take several minutes or longer,
 depending on hardware and internet speed.
@@ -44,6 +57,20 @@ Expected completion message:
 
 Swagger:
 http://localhost:5182/swagger/index.html
+
+**Important:** If Swagger is open at `http://localhost:5080/swagger/index.html`
+and only lists `GET /health`, you have started a standalone default-configured
+API, **not** the configured portable integration stack. Stop that standalone
+process, then launch the portable stack with the command above and use port
+`5182`. Do not disable authentication to make routes appear.
+
+To verify feature registration explicitly, from the repository root run:
+
+    wsl -d Ubuntu-24.04 --exec python3 tools/portable/verify-api-routes.py
+
+Expected marker: `BUILDMIND_DEVELOPMENT_ROUTES_REGISTERED`.
+This checks that routes are registered, not that all protected workflows pass.
+Login and business-operation tests must still be performed.
 
 Local email testing:
 http://localhost:8027
@@ -78,6 +105,16 @@ Do not delete database volumes to resolve startup failures.
 If a migration fails, do not retry blindly.
 Review the migration failure and database state first.
 
+The migrator generates the SQL inside its container and streams it to a
+private host-side file; it does not write into a host-file bind mount.
+It waits up to 60 seconds for the migrator's own TLS database path.
+`MIGRATOR_TLS_CONNECTION_UNAVAILABLE_AFTER_60_SECONDS` means the connection
+never became ready, rather than that migration SQL was attempted.
+
+If `PREVIOUS_MIGRATION_REQUIRES_REVIEW` appears, review the actual MySQL
+migration history and `~/.local/share/buildmind-portable/migration-in-progress`
+before clearing that guard. Do not bypass it without verifying database state.
+
 ## 8. Security and data storage
 
 Local credentials and certificates are generated outside
@@ -100,7 +137,7 @@ Mailpit is for local email capture, not production email delivery.
 - STEP 8B remains ON HOLD.
 - External production integrations are not approved.
 - Production deployment remains NO-GO.
-- Fresh installation on an independent PC remains unverified.
+- Independent-PC acceptance requires the team lead to retest the corrected checkpoint; a developer-machine pass alone is not independent acceptance.
 - This setup uses one portable stack per Docker engine.
 - Certificate expiry and migration failures require review.
 

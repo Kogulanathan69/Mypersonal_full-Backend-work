@@ -35,6 +35,10 @@ bash "$TOOLS/migrate.sh"
 echo "[7/7] Starting backend services"
 bash "$TOOLS/compose.sh" up -d --no-build --wait --wait-timeout 300
 
+# Do not report READY when Swagger exposes only /health. Every implemented
+# Development module must actually be registered before QA handoff.
+python3 "$TOOLS/verify-api-routes.py"
+
 echo ""
 echo "BUILDMIND_PORTABLE_BACKEND_READY"
 echo "Swagger: http://localhost:${BM_API_PORT:-5182}/swagger/index.html"

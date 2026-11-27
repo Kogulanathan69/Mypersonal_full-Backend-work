@@ -32,7 +32,21 @@ if [[ -e "$MARKER" ]]; then
     exit 1
 fi
 
-mysql_query -e 'SELECT 1;' >/dev/null
+# Docker's health probe can report ready before the migrator's own TLS path
+# accepts connections. Probe that exact path with a finite deadline.
+ready=0
+for attempt in $(seq 1 30); do
+    if mysql_query -e 'SELECT 1;' >/dev/null 2>&1; then
+        ready=1
+        break
+    fi
+    sleep 2
+done
+if [[ "$ready" != "1" ]]; then
+    echo "MIGRATOR_TLS_CONNECTION_UNAVAILABLE_AFTER_60_SECONDS" >&2
+    mysql_query -e 'SELECT 1;' >/dev/null
+    exit 1
+fi
 echo "MIGRATOR_TLS_CONNECTION_PASS"
 
 history_exists="$(mysql_query -e "
@@ -69,18 +83,27 @@ fi
 
 echo "CURRENT_MIGRATION: $current"
 
+# Generate SQL in the migrator container's own writable filesystem.
+# Stream it directly to the host-side migration process; never bind-mount a
+# writable single file from WSL (Docker Desktop can reject those writes).
 SQL_FILE="$(mktemp "$STATE/migration.XXXXXX.sql")"
 trap 'rm -f "$SQL_FILE"' EXIT
 
 compose run --rm --no-deps -T \
-    -v "$SQL_FILE:/tmp/buildmind-migrations.sql" \
-    migrator migrations script "$current" \
-    --context BuildMindDbContext \
-    --configuration Release \
-    --no-build \
-    --project src/BuildMind.Infrastructure \
-    --startup-project src/BuildMind.API \
-    --output /tmp/buildmind-migrations.sql
+    --entrypoint sh migrator -ec '
+        set -eu
+        sql_file="$(mktemp /tmp/buildmind-migrations.XXXXXX.sql)"
+        trap '\''rm -f "$sql_file"'\'' EXIT
+        dotnet tool run dotnet-ef migrations script "$@" \
+            --context BuildMindDbContext \
+            --configuration Release \
+            --no-build \
+            --project src/BuildMind.Infrastructure \
+            --startup-project src/BuildMind.API \
+            --output "$sql_file" >&2
+        # Only SQL goes to stdout; EF informational output stays on stderr.
+        cat "$sql_file"
+    ' sh "$current" > "$SQL_FILE"
 
 if grep -Eiq '^[[:space:]]*(CREATE|ALTER|DROP|INSERT|UPDATE|DELETE|RENAME|TRUNCATE)[[:space:]]' "$SQL_FILE"; then
     touch "$MARKER"
