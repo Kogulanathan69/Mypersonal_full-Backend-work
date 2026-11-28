@@ -68,6 +68,7 @@ public sealed class BuildMindMigrationTests(ITestOutputHelper output)
             ["fk_land_edge_roles_land_revisions=RESTRICT", "fk_land_edge_roles_projects_project_id=RESTRICT", "fk_land_edge_roles_users_reviewed_by=RESTRICT"]),
         ("20261126173737_AddRequirementMutationReceipts", ["requirement_mutation_receipts"],
             ["fk_requirement_mutation_receipts_revision=RESTRICT"]),
+        ("20261127153155_AddLandMetadataAndConstraints", [], []),
     ];
 
     private static readonly string[] ExpectedMigrations = [.. M4Migrations, .. CaptainMigrations.Select(m => m.Migration)];
@@ -275,13 +276,13 @@ public sealed class BuildMindMigrationTests(ITestOutputHelper output)
         await using var context = CreateContext(database.ConnectionString);
         var migrator = context.GetService<IMigrator>();
 
-        Assert.Equal(previous, ExpectedMigrations[^2]);
-        Assert.Equal(latest, ExpectedMigrations[^1]);
-        Assert.Equal(17, ExpectedMigrations.Length);
+        Assert.Equal(previous, ExpectedMigrations[15]);
+        Assert.Equal(latest, ExpectedMigrations[16]);
+        Assert.Equal(18, ExpectedMigrations.Length);
 
         await migrator.MigrateAsync(latest);
 
-        Assert.Equal(ExpectedMigrations,
+        Assert.Equal(ExpectedMigrations[..17],
             await context.Database.GetAppliedMigrationsAsync());
         Assert.Equal(Tables, await FeatureTablesAsync(database));
 
@@ -337,7 +338,7 @@ public sealed class BuildMindMigrationTests(ITestOutputHelper output)
 
         await migrator.MigrateAsync(previous);
 
-        Assert.Equal(ExpectedMigrations[..^1],
+        Assert.Equal(ExpectedMigrations[..16],
             await context.Database.GetAppliedMigrationsAsync());
 
         Assert.Equal(baselineTables,
@@ -355,7 +356,7 @@ public sealed class BuildMindMigrationTests(ITestOutputHelper output)
 
         await migrator.MigrateAsync(latest);
 
-        Assert.Equal(ExpectedMigrations,
+        Assert.Equal(ExpectedMigrations[..17],
             await context.Database.GetAppliedMigrationsAsync());
 
         Assert.Equal(Tables,
@@ -390,8 +391,101 @@ public sealed class BuildMindMigrationTests(ITestOutputHelper output)
             await ListAsync(database,
                 "SELECT COUNT(*) FROM requirement_mutation_receipts;"));
 
+        Assert.Equal(
+            [ExpectedMigrations[17]],
+            await context.Database.GetPendingMigrationsAsync());
+        Assert.False(context.Database.HasPendingModelChanges());
+    }
+
+    [Fact]
+    public async Task M07_land_metadata_migration_upgrades_rolls_back_and_reapplies()
+    {
+        const string previous = "20261126173737_AddRequirementMutationReceipts";
+        const string latest = "20261127153155_AddLandMetadataAndConstraints";
+
+        await using var database = await DisposableMySqlDatabase.CreateAsync();
+        await using var context = CreateContext(database.ConnectionString);
+        var migrator = context.GetService<IMigrator>();
+
+        Assert.Equal(latest, ExpectedMigrations[^1]);
+        await migrator.MigrateAsync(previous);
+
+        var userId = Guid.NewGuid().ToString("D");
+        var projectId = Guid.NewGuid().ToString("D");
+        var legacyLandId = Guid.NewGuid().ToString("D");
+        await ExecuteAsync(database,
+            $"INSERT INTO users (id, email, normalized_email, password_hash, is_active, created_at_utc, token_version) VALUES ('{userId}', 'm2-upgrade@example.invalid', 'M2-UPGRADE@EXAMPLE.INVALID', 'synthetic-hash', 1, UTC_TIMESTAMP(6), 1);");
+        await ExecuteAsync(database,
+            $"INSERT INTO projects (id, owner_id, name, status, revision, authorization_version, created_at_utc, updated_at_utc) VALUES ('{projectId}', '{userId}', 'Legacy Land Project', 'Created', 1, 1, UTC_TIMESTAMP(6), UTC_TIMESTAMP(6));");
+        const string legacyLandJson = """{"schemaVersion":"metric-land/0.1-draft","coordinateSystem":{"type":"localCartesian","unit":"m","origin":{"x":0,"y":0},"xDirection":"right","yDirection":"up"},"boundary":{"exterior":[{"x":0,"y":0},{"x":12,"y":0},{"x":12,"y":10},{"x":0,"y":10},{"x":0,"y":0}],"holes":[]}}""";
+        await ExecuteAsync(database,
+            $"INSERT INTO land_revisions (id, project_id, revision_number, land_json, area_m2, edge_count, created_by, created_at_utc) VALUES ('{legacyLandId}', '{projectId}', 1, '{legacyLandJson}', 120, 4, '{userId}', UTC_TIMESTAMP(6));");
+
+        // Upgrade from 17 -> 18 must preserve the existing legacy land revision with null metadata.
+        await migrator.MigrateAsync(latest);
+        Assert.Equal(ExpectedMigrations, await context.Database.GetAppliedMigrationsAsync());
         Assert.Empty(await context.Database.GetPendingMigrationsAsync());
         Assert.False(context.Database.HasPendingModelChanges());
+
+        var store = new BuildMind.Infrastructure.Persistence.Repositories.Planning.MySqlLandRevisionStore(
+            context, new BuildMind.Infrastructure.Persistence.Transactions.TransactionRunner(
+                new BuildMind.Infrastructure.Persistence.Transactions.DbContextTransactionSource(context)));
+        var legacyLoaded = await store.GetAsync(Guid.Parse(projectId), Guid.Parse(legacyLandId), default);
+        Assert.NotNull(legacyLoaded);
+        Assert.Null(legacyLoaded!.PerimeterM);
+        Assert.Null(legacyLoaded.Location);
+        Assert.Null(legacyLoaded.ReportedArea);
+
+        // New metadata round-trips cleanly alongside constraints.
+        var surveyId = Guid.NewGuid();
+        var newLandId = Guid.NewGuid();
+        var nextRevision = new BuildMind.Application.Features.Planning.LandRevision(
+            newLandId,
+            Guid.Parse(projectId),
+            2,
+            new BuildMind.Application.Features.Generation.Contracts.MetricLandDto
+            {
+                SchemaVersion = "metric-land/0.1-draft",
+                CoordinateSystem = new BuildMind.Application.Features.PlanEditor.Contracts.CoordinateSystemDto { Type = "localCartesian", Unit = "m", Origin = new() { X = 0, Y = 0 }, XDirection = "right", YDirection = "up" },
+                Boundary = new BuildMind.Application.Features.Generation.Contracts.PolygonBoundaryDto { Exterior = [new() { X = 0, Y = 0 }, new() { X = 12, Y = 0 }, new() { X = 12, Y = 10 }, new() { X = 0, Y = 10 }, new() { X = 0, Y = 0 }] },
+            },
+            120,
+            4,
+            surveyId,
+            Guid.Parse(userId),
+            DateTimeOffset.UtcNow,
+            PerimeterM: 44,
+            Location: BuildMind.Domain.ValueObjects.Land.LandLocation.Create("Colombo", BuildMind.Domain.ValueObjects.Land.LandLocationSource.UserSelected, "LK-1100", 6.9271, 79.8612),
+            ReportedArea: new BuildMind.Domain.ValueObjects.ReportedLandArea(1500, BuildMind.Domain.ValueObjects.ReportedAreaUnit.FT2,
+                new BuildMind.Domain.ValueObjects.LandAreaSourceReference(surveyId, 1, "Lot A"), BuildMind.Domain.ValueObjects.ReportedAreaReviewStatus.Unreviewed));
+        Assert.Equal(BuildMind.Application.Features.Planning.ProtectedWriteStatus.Written,
+            await store.TryAppendAsync(nextRevision, Guid.Parse(legacyLandId), 1, default));
+
+        var loadedNew = await store.GetCurrentAsync(Guid.Parse(projectId), default);
+        Assert.NotNull(loadedNew);
+        Assert.Equal(44d, loadedNew!.PerimeterM);
+        Assert.Equal("Colombo", loadedNew.Location!.LocalityName);
+        Assert.Equal(BuildMind.Domain.ValueObjects.Land.LandLocationVerificationStatus.NotVerified, loadedNew.Location.VerificationStatus);
+        Assert.Equal(1500d, loadedNew.ReportedArea!.OriginalValue);
+        Assert.Equal(1500d * 0.09290304, loadedNew.ReportedArea.AreaM2!.Value, 6);
+
+        // Database check constraint must reject spoofed Verified location without provider/timestamp.
+        await Assert.ThrowsAsync<MySqlException>(() => ExecuteAsync(database,
+            $"INSERT INTO land_revisions (id, project_id, revision_number, land_json, area_m2, edge_count, created_by, created_at_utc, location_locality_name, location_source, location_verification_status) VALUES ('{Guid.NewGuid():D}', '{projectId}', 3, '{{}}', 100, 4, '{userId}', UTC_TIMESTAMP(6), 'Colombo', 'UserSelected', 'Verified');"));
+
+        // Rollback 18 -> 17 drops only the 16 metadata columns & 5 check constraints, preserving rows.
+        await migrator.MigrateAsync(previous);
+        Assert.Equal(ExpectedMigrations[..17], await context.Database.GetAppliedMigrationsAsync());
+        Assert.Null(await ColumnTypeAsync(database, "land_revisions", "perimeter_m"));
+        Assert.Null(await ColumnTypeAsync(database, "land_revisions", "location_locality_name"));
+        Assert.Null(await ColumnTypeAsync(database, "land_revisions", "reported_area_m2"));
+        Assert.Equal(new[] { legacyLandId, newLandId.ToString("D") }, await ListAsync(database, "SELECT id FROM land_revisions ORDER BY revision_number;"));
+
+        // Reapply 17 -> 18 cleanly.
+        await migrator.MigrateAsync(latest);
+        Assert.Equal(ExpectedMigrations, await context.Database.GetAppliedMigrationsAsync());
+        Assert.Equal("double", await ColumnTypeAsync(database, "land_revisions", "perimeter_m"));
+        Assert.Empty(await context.Database.GetPendingMigrationsAsync());
     }
 
     internal static BuildMindDbContext CreateContext(string connectionString)

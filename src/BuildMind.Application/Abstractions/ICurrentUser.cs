@@ -21,6 +21,9 @@ public interface ICurrentUser
     /// <summary>Roles of the authenticated identity; empty when unauthenticated. No role is ever assumed.</summary>
     IReadOnlySet<string> Roles { get; }
 
+    /// <summary>Server-issued token version claim (<c>tv</c>) when authenticated by JWT, or <c>null</c>.</summary>
+    long? TokenVersion => null;
+
     /// <summary>Returns the authenticated user identifier or throws <see cref="UnauthenticatedAccessException"/>.</summary>
     Guid GetRequiredUserId();
 }

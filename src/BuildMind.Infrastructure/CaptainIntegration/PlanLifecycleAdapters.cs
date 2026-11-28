@@ -46,7 +46,8 @@ internal static class ProtectedVersion
 }
 
 /// <summary>M3 <see cref="IPlanRevisionStore"/> over the existing plans/plan_revisions tables (immutable revisions, head CAS).</summary>
-internal sealed class MySqlPlanRevisionStore(BuildMindDbContext context, TransactionRunner transactions, IProjectAuthorizationPort authorization)
+internal sealed class MySqlPlanRevisionStore(BuildMindDbContext context, TransactionRunner transactions, IProjectAuthorizationPort authorization,
+    ICurrentUser? currentUser = null)
     : IPlanRevisionStore
 {
     public async Task<PlanRevisionSnapshot?> GetAsync(Guid projectId, Guid planId, Guid revisionId, CancellationToken token)
@@ -77,7 +78,7 @@ internal sealed class MySqlPlanRevisionStore(BuildMindDbContext context, Transac
         if (await ProtectedVersion.ReadAsync(authorization, proposed.ProjectId, proposed.CreatedBy, token).ConfigureAwait(false) is not { } version)
             return new(AppendRevisionStatus.Unauthorized);
         var status = await new ProtectedPlanningWriter(context, transactions).RunAsync(proposed.ProjectId, proposed.CreatedBy, version, async inner =>
-            await PlanHead.AppendAsync(context, expectedBaseRevisionId, proposed, inner).ConfigureAwait(false), token).ConfigureAwait(false);
+            await PlanHead.AppendAsync(context, expectedBaseRevisionId, proposed, inner).ConfigureAwait(false), token, currentUser?.TokenVersion).ConfigureAwait(false);
         return status switch
         {
             ProtectedWriteStatus.Written => new(AppendRevisionStatus.Created, proposed),
@@ -208,7 +209,8 @@ internal sealed class PlanEditorComputeClient(PythonServiceClient python, EditGe
 }
 
 /// <summary>Records server-issued evidence in the ledger (the only evidence revisions may cite).</summary>
-internal sealed class ValidationLedgerWriter(BuildMindDbContext context, TransactionRunner transactions, IProjectAuthorizationPort authorization)
+internal sealed class ValidationLedgerWriter(BuildMindDbContext context, TransactionRunner transactions, IProjectAuthorizationPort authorization,
+    ICurrentUser? currentUser = null)
 {
     public async Task<bool> RecordAsync(IssuedValidationEvidence evidence, Guid actor, CancellationToken token)
     {
@@ -219,7 +221,7 @@ internal sealed class ValidationLedgerWriter(BuildMindDbContext context, Transac
             context.Add(PlanValidationLedger.ToRecord(evidence));
             await context.SaveChangesAsync(inner).ConfigureAwait(false);
             return ProtectedWriteStatus.Written;
-        }, token).ConfigureAwait(false) == ProtectedWriteStatus.Written;
+        }, token, currentUser?.TokenVersion).ConfigureAwait(false) == ProtectedWriteStatus.Written;
     }
 }
 
@@ -284,7 +286,8 @@ internal sealed class LedgerValidationEvidenceVerifier(BuildMindDbContext contex
 }
 
 /// <summary>M3 candidate store + atomic transactions (protected write; candidate state CAS; head CAS; immutable append).</summary>
-internal sealed class MySqlCandidatePreviewStore(BuildMindDbContext context, TransactionRunner transactions, IProjectAuthorizationPort authorization)
+internal sealed class MySqlCandidatePreviewStore(BuildMindDbContext context, TransactionRunner transactions, IProjectAuthorizationPort authorization,
+    ICurrentUser? currentUser = null)
     : ICandidatePreviewStore, ICandidatePreviewTransaction
 {
     public async Task CreateAsync(CandidatePreviewSnapshot candidate, CancellationToken token)
@@ -307,7 +310,7 @@ internal sealed class MySqlCandidatePreviewStore(BuildMindDbContext context, Tra
             });
             await context.SaveChangesAsync(inner).ConfigureAwait(false);
             return ProtectedWriteStatus.Written;
-        }, token).ConfigureAwait(false);
+        }, token, currentUser?.TokenVersion).ConfigureAwait(false);
         if (status != ProtectedWriteStatus.Written)
             throw new InvalidOperationException($"Candidate was not stored ({status}).");
     }
@@ -399,7 +402,7 @@ internal sealed class MySqlCandidatePreviewStore(BuildMindDbContext context, Tra
                 return ProtectedWriteStatus.Conflict;
             }
             return ProtectedWriteStatus.Written;
-        }, token).ConfigureAwait(false);
+        }, token, currentUser?.TokenVersion).ConfigureAwait(false);
         return status switch
         {
             ProtectedWriteStatus.Written => success(expected with { Status = target }),
@@ -429,7 +432,8 @@ internal sealed class ConfiguredValidationFreshnessPolicy(IConfiguration configu
 /// Final confirmation: protected write; the exact revision must still be the head; one confirmation per plan. No
 /// project lifecycle transition is applied (no approved M1 lifecycle writer exists).
 /// </summary>
-internal sealed class MySqlFinalConfirmationTransaction(BuildMindDbContext context, TransactionRunner transactions, IProjectAuthorizationPort authorization)
+internal sealed class MySqlFinalConfirmationTransaction(BuildMindDbContext context, TransactionRunner transactions, IProjectAuthorizationPort authorization,
+    ICurrentUser? currentUser = null)
     : IFinalConfirmationTransaction
 {
     public async Task<ConfirmationResult> ConfirmAtomicallyAsync(PlanConfirmationSnapshot confirmation, PlanRevisionSnapshot exactRevision,
@@ -463,7 +467,7 @@ internal sealed class MySqlFinalConfirmationTransaction(BuildMindDbContext conte
             });
             await context.SaveChangesAsync(inner).ConfigureAwait(false);
             return ProtectedWriteStatus.Written;
-        }, token).ConfigureAwait(false);
+        }, token, currentUser?.TokenVersion).ConfigureAwait(false);
         return status switch
         {
             ProtectedWriteStatus.Written => new(ConfirmationStatus.Confirmed, confirmation),
@@ -501,7 +505,7 @@ internal sealed class MySqlPlanCatalog(BuildMindDbContext context) : IPlanCatalo
     }
 }
 
-internal sealed class MySqlPlanVersionAppendStore(BuildMindDbContext context, TransactionRunner transactions) : IPlanVersionAppendStore
+internal sealed class MySqlPlanVersionAppendStore(BuildMindDbContext context, TransactionRunner transactions, ICurrentUser? currentUser = null) : IPlanVersionAppendStore
 {
     public Task<ProtectedWriteStatus> TryAppendWithEvidenceAsync(PlanRevisionSnapshot revision, IssuedValidationEvidence evidence,
         long authorizationVersion, CancellationToken token)
@@ -515,7 +519,7 @@ internal sealed class MySqlPlanVersionAppendStore(BuildMindDbContext context, Tr
                 context.Add(PlanValidationLedger.ToRecord(evidence));
                 await context.SaveChangesAsync(inner).ConfigureAwait(false);
                 return await PlanHead.AppendAsync(context, parent, revision, inner).ConfigureAwait(false);
-            }, token);
+            }, token, currentUser?.TokenVersion);
     }
 }
 

@@ -1,6 +1,8 @@
+using System.Globalization;
 using System.Security.Claims;
 using BuildMind.Application.Abstractions;
 using BuildMind.Application.Abstractions.Errors;
+using BuildMind.Infrastructure.Identity;
 
 namespace BuildMind.API.Security;
 
@@ -29,6 +31,8 @@ public sealed class HttpContextCurrentUser(IHttpContextAccessor httpContextAcces
     public Guid? UserId => Resolve().UserId;
 
     public IReadOnlySet<string> Roles => Resolve().Roles;
+
+    public long? TokenVersion => Resolve().TokenVersion;
 
     public Guid GetRequiredUserId() => Resolve().UserId ?? throw new UnauthenticatedAccessException();
 
@@ -70,14 +74,21 @@ public sealed class HttpContextCurrentUser(IHttpContextAccessor httpContextAcces
             .Where(value => value.Length > 0)
             .ToHashSet(StringComparer.Ordinal);
 
-        return new ResolvedIdentity(userId, roles);
+        var tokenVersions = identity.FindAll(JwtAccessTokenIssuer.TokenVersionClaim).ToArray();
+        long? tokenVersion = tokenVersions.Length == 1
+            && long.TryParse(tokenVersions[0].Value, NumberStyles.None, CultureInfo.InvariantCulture, out var parsedVersion)
+            && parsedVersion >= 1
+            ? parsedVersion
+            : null;
+
+        return new ResolvedIdentity(userId, roles, tokenVersion);
     }
 
     private static bool IsSubjectClaim(Claim claim) =>
         SubjectClaimTypes.Contains(claim.Type, StringComparer.Ordinal);
 
-    internal sealed record ResolvedIdentity(Guid? UserId, IReadOnlySet<string> Roles)
+    internal sealed record ResolvedIdentity(Guid? UserId, IReadOnlySet<string> Roles, long? TokenVersion)
     {
-        public static ResolvedIdentity Anonymous { get; } = new(null, NoRoles);
+        public static ResolvedIdentity Anonymous { get; } = new(null, NoRoles, null);
     }
 }

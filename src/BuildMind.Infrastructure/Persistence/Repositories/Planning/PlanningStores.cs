@@ -1,4 +1,5 @@
 using System.Text.Json;
+using BuildMind.Application.Abstractions;
 using BuildMind.Application.Features.Generation.Contracts;
 using BuildMind.Application.Features.PlanEditor.Contracts;
 using BuildMind.Application.Features.PlanEditor.Versioning;
@@ -22,13 +23,13 @@ namespace BuildMind.Infrastructure.Persistence.Repositories.Planning;
 internal sealed class ProtectedPlanningWriter(BuildMindDbContext context, TransactionRunner transactions)
 {
     public async Task<ProtectedWriteStatus> RunAsync(Guid projectId, Guid actor, long version,
-        Func<CancellationToken, Task<ProtectedWriteStatus>> write, CancellationToken token)
+        Func<CancellationToken, Task<ProtectedWriteStatus>> write, CancellationToken token, long? expectedTokenVersion = null)
     {
         try
         {
             return await transactions.ExecuteAsync(async inner =>
             {
-                if (!await new ProjectMutationAuthorization(context).LockAndCheckAsync(projectId, actor, version, inner).ConfigureAwait(false))
+                if (!await new ProjectMutationAuthorization(context).LockAndCheckAsync(projectId, actor, version, inner, expectedTokenVersion).ConfigureAwait(false))
                     throw new Rejected(ProtectedWriteStatus.Denied);
                 var status = await write(inner).ConfigureAwait(false);
                 if (status != ProtectedWriteStatus.Written)
@@ -60,7 +61,7 @@ internal static class PlanningJson
         ?? throw new InvalidDataException("Stored planning JSON is empty.");
 }
 
-internal sealed class MySqlLandRevisionStore(BuildMindDbContext context, TransactionRunner transactions) : ILandRevisionStore
+internal sealed class MySqlLandRevisionStore(BuildMindDbContext context, TransactionRunner transactions, ICurrentUser? currentUser = null) : ILandRevisionStore
 {
     public async Task<LandRevision?> GetCurrentAsync(Guid projectId, CancellationToken token)
     {
@@ -110,7 +111,7 @@ internal sealed class MySqlLandRevisionStore(BuildMindDbContext context, Transac
             });
             await context.SaveChangesAsync(inner).ConfigureAwait(false);
             return ProtectedWriteStatus.Written;
-        }, token);
+        }, token, currentUser?.TokenVersion);
 
     private static LandRevision ToModel(LandRevisionRecord row)
     {
@@ -147,7 +148,7 @@ internal sealed class MySqlLandRevisionStore(BuildMindDbContext context, Transac
     }
 }
 
-internal sealed class MySqlGenerationJobStore(BuildMindDbContext context, TransactionRunner transactions) : IGenerationJobStore
+internal sealed class MySqlGenerationJobStore(BuildMindDbContext context, TransactionRunner transactions, ICurrentUser? currentUser = null) : IGenerationJobStore
 {
     public async Task<GenerationJob?> FindByKeyAsync(Guid projectId, Guid actorId, string idempotencyKey, CancellationToken token)
     {
@@ -197,7 +198,7 @@ internal sealed class MySqlGenerationJobStore(BuildMindDbContext context, Transa
             });
             await context.SaveChangesAsync(inner).ConfigureAwait(false);
             return ProtectedWriteStatus.Written;
-        }, token);
+        }, token, currentUser?.TokenVersion);
 
     public Task<ProtectedWriteStatus> TryCompleteAsync(GenerationJob completed, IReadOnlyList<GenerationCandidate> candidates,
         long authorizationVersion, CancellationToken token) =>
@@ -228,7 +229,7 @@ internal sealed class MySqlGenerationJobStore(BuildMindDbContext context, Transa
             }
             await context.SaveChangesAsync(inner).ConfigureAwait(false);
             return ProtectedWriteStatus.Written;
-        }, token);
+        }, token, currentUser?.TokenVersion);
 
     private static GenerationJob ToModel(GenerationJobRecord row) => new(row.Id, row.ProjectId, row.RequestedBy, row.IdempotencyKey,
         row.LandRevisionId, row.RequirementsRevisionId, Enum.Parse<GenerationJobStatus>(row.Status), row.Outcome, row.ReasonCode,
@@ -236,7 +237,7 @@ internal sealed class MySqlGenerationJobStore(BuildMindDbContext context, Transa
         PlanningJson.Read<DiagnosticDto[]>(row.DiagnosticsJson), row.EvidencePackId);
 }
 
-internal sealed class MySqlPlanCreationStore(BuildMindDbContext context, TransactionRunner transactions) : IPlanCreationStore
+internal sealed class MySqlPlanCreationStore(BuildMindDbContext context, TransactionRunner transactions, ICurrentUser? currentUser = null) : IPlanCreationStore
 {
     public Task<ProtectedWriteStatus> TryCreateAsync(PlanRevisionSnapshot firstRevision, IssuedValidationEvidence evidence,
         long authorizationVersion, CancellationToken token)
@@ -260,7 +261,7 @@ internal sealed class MySqlPlanCreationStore(BuildMindDbContext context, Transac
                     .Where(p => p.ProjectId == firstRevision.ProjectId && p.PlanId == firstRevision.PlanId && p.HeadRevisionId == null)
                     .ExecuteUpdateAsync(s => s.SetProperty(p => p.HeadRevisionId, firstRevision.RevisionId), inner).ConfigureAwait(false);
                 return ProtectedWriteStatus.Written;
-            }, token);
+            }, token, currentUser?.TokenVersion);
     }
 }
 

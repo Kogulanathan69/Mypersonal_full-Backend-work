@@ -164,6 +164,38 @@ public sealed class PlanningServiceTests
         Assert.Equal(1, result.Value.VersionNumber);
     }
 
+    [Fact]
+    public async Task Manual_plan_creation_requires_valid_geometry_and_persists_server_validated_revision()
+    {
+        var harness = new Harness();
+        var save = new PlanSaveService(harness.Access, harness.Jobs, harness.Lands, harness.Requirements, harness.Policies,
+            harness.Compute, harness.Plans, TimeProvider.System);
+        var geometry = new PlanGeometryDto
+        {
+            SchemaVersion = GeometrySchemaInfo.DraftVersion,
+            ProjectId = Project,
+            PlanId = Guid.NewGuid(),
+            LandRevisionId = harness.Lands.Current!.Id,
+            RequirementsRevisionId = harness.Requirements.Current!.Id,
+            CoordinateSystem = harness.Lands.Current.Land.CoordinateSystem,
+            Floors = [new FloorDto { Id = Guid.NewGuid(), Level = 0, Rooms = [], Walls = [], Openings = [] }],
+        };
+
+        harness.Compute.PlanValid = false;
+        var rejected = await save.CreateManualPlanAsync(Project, new CreateManualPlanCommand(geometry, "Manual draft"), default);
+        Assert.Equal(PlanningStatus.ValidationFailed, rejected.Status);
+        Assert.Equal("MANUAL_PLAN_VALIDATION_FAILED", rejected.Code);
+        Assert.Null(harness.Plans.Created);
+
+        harness.Compute.PlanValid = true;
+        var created = await save.CreateManualPlanAsync(Project, new CreateManualPlanCommand(geometry, "Manual draft"), default);
+        Assert.Equal(PlanningStatus.Success, created.Status);
+        Assert.NotNull(harness.Plans.Created);
+        Assert.Equal(1, created.Value!.VersionNumber);
+        Assert.Equal("Manual draft", created.Value.ChangeSummary);
+        Assert.NotEqual(geometry.PlanId, created.Value.PlanId);
+    }
+
     private static GenerationPolicy Policy() => new("synthetic-policy", "DEVELOPMENT ONLY",
         new Dictionary<string, RoomDimensionsDto>
         {

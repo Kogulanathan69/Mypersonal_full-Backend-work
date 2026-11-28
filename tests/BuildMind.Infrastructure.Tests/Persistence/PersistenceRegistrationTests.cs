@@ -61,6 +61,7 @@ public sealed class PersistenceRegistrationTests
             ["fk_land_edge_roles_land_revisions", "fk_land_edge_roles_projects_project_id", "fk_land_edge_roles_users_reviewed_by"]),
         ("20261126173737_AddRequirementMutationReceipts", ["requirement_mutation_receipts"],
             ["fk_requirement_mutation_receipts_revision"]),
+        ("20261127153155_AddLandMetadataAndConstraints", [], []),
     ];
 
     internal static readonly string[] ApprovedTables =

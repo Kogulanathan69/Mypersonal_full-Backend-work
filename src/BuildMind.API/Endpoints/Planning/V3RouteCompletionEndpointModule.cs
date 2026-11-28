@@ -96,6 +96,7 @@ public sealed class V3RouteCompletionEndpointModule : IApiEndpointModule
         project.MapGet("/generation-jobs/{jobId}/alternatives", AlternativesAsync).WithName("GetGenerationAlternatives");
         project.MapPost("/generation-jobs/{jobId}/select", SelectAsync).WithName("SelectGenerationAlternative").Accepts<SelectAlternativeHttpRequest>("application/json").Produces(201);
         project.MapPost("/plans", CreatePlanAsync).WithName("CreatePlanFromAlternative").Accepts<SelectAlternativeHttpRequest>("application/json").Produces(201);
+        project.MapPost("/plans/manual", CreateManualPlanAsync).WithName("CreateManualPlan").Accepts<CreateManualPlanHttpRequest>("application/json").Produces(201);
         project.MapPost("/plans/{planId}/edits/validate", ValidateEditAsync).WithName("ValidatePlanEdit").Accepts<PlanEditRequestDto>("application/json").Produces(200);
         project.MapPost("/plans/{planId}/ai-edit/proposals", AiProposalAsync).WithName("ProposeAiPlanEdit").RequireExpensiveOperationLimit().Accepts<AiProposalHttpRequest>("application/json").Produces(201);
         project.MapPost("/plans/{planId}/versions", SaveVersionAsync).WithName("SavePlanVersion").Accepts<SaveVersionHttpRequest>("application/json").Produces(201);
@@ -155,6 +156,20 @@ public sealed class V3RouteCompletionEndpointModule : IApiEndpointModule
 
     private static Task<IResult> CreatePlanAsync(string projectId, HttpContext context, PlanSaveService plans, CancellationToken token) =>
         SaveSelectedAsync(projectId, null, context, plans, token);
+
+    private static async Task<IResult> CreateManualPlanAsync(string projectId, HttpContext context, PlanSaveService plans,
+        CancellationToken token)
+    {
+        NoStore(context);
+        if (!P.TryId(projectId, out var project)) return P.Invalid("projectId");
+        if (!context.Request.HasJsonContentType()) return Problem(415, "UNSUPPORTED_MEDIA_TYPE");
+        CreateManualPlanHttpRequest? request;
+        try { request = await context.Request.ReadFromJsonAsync<CreateManualPlanHttpRequest>(PlanEditorJson.StrictOptions, token); }
+        catch (Exception e) when (e is JsonException or NotSupportedException) { return P.Invalid("request"); }
+        if (request is null || request.Geometry is null) return P.Invalid("geometry");
+        var result = await plans.CreateManualPlanAsync(project, new CreateManualPlanCommand(request.Geometry, request.ChangeSummary), token);
+        return P.Map(result, P.Revision, created: true);
+    }
 
     private static async Task<IResult> SaveSelectedAsync(string projectId, string? routeJobId, HttpContext context,
         PlanSaveService plans, CancellationToken token)
@@ -290,6 +305,9 @@ public sealed class V3RouteCompletionEndpointModule : IApiEndpointModule
 }
 
 public sealed record SelectAlternativeHttpRequest(Guid? JobId, Guid? AlternativeId, string? ChangeSummary);
+public sealed record CreateManualPlanHttpRequest(
+    [property: JsonPropertyName("geometry")] PlanGeometryDto? Geometry,
+    [property: JsonPropertyName("changeSummary")] string? ChangeSummary);
 /// <remarks>Read with the M3 strict (case-sensitive) options, so names are explicit.</remarks>
 public sealed record SaveVersionHttpRequest(
     [property: JsonPropertyName("expectedBaseRevisionId")] Guid? ExpectedBaseRevisionId,

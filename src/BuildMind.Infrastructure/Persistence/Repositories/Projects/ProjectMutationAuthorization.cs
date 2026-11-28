@@ -1,13 +1,17 @@
 using BuildMind.Domain.Entities;
+using BuildMind.Infrastructure.Persistence.Repositories.Identity;
 using Microsoft.EntityFrameworkCore;
 
 namespace BuildMind.Infrastructure.Persistence.Repositories.Projects;
 
-/// <summary>Isolated M4 building block. Call before acquiring feature-head locks in the same transaction.</summary>
+/// <summary>
+/// Isolated M4 building block. Acquires row locks in fixed global hierarchy order (<c>users</c> -> <c>projects</c>)
+/// before acquiring feature-head locks in the same transaction.
+/// </summary>
 internal sealed class ProjectMutationAuthorization(BuildMindDbContext context)
 {
     public async Task<bool> LockAndCheckAsync(Guid projectId, Guid trustedActorId, long expectedVersion,
-        CancellationToken cancellationToken)
+        CancellationToken cancellationToken, long? expectedTokenVersion = null)
     {
         cancellationToken.ThrowIfCancellationRequested();
         if (projectId == Guid.Empty || trustedActorId == Guid.Empty || !ProjectAuthorizationPolicy.IsValid(expectedVersion))
@@ -15,6 +19,20 @@ internal sealed class ProjectMutationAuthorization(BuildMindDbContext context)
 
         if (context.Database.CurrentTransaction is null)
             throw new InvalidOperationException("Project mutation authorization requires an active database transaction.");
+
+        // Global lock order: users row before projects row, preventing deadlocks with session/account mutations.
+        if (expectedTokenVersion is { } tokenVersion)
+        {
+            if (!await new M1MutationSessionGuard(context)
+                .LockAndCheckAsync(trustedActorId, tokenVersion, cancellationToken).ConfigureAwait(false))
+                return false;
+        }
+        else
+        {
+            var account = await SessionSql.LockAccountAsync(context, trustedActorId, cancellationToken).ConfigureAwait(false);
+            if (account is not { IsActive: true })
+                return false;
+        }
 
         // Execute a locking read on the project primary key. Do not compose LINQ over the SQL:
         // the FOR UPDATE clause must apply to the project row in the current transaction.

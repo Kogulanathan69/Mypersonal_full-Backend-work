@@ -117,7 +117,8 @@ public static class CaptainIntegrationInfrastructure
             });
         services.TryAddScoped<AiProposalRejectionContext>();
         services.TryAddScoped(p => new LandEdgeRoleService(p.GetRequiredService<BuildMind.Infrastructure.Persistence.BuildMindDbContext>(),
-            p.GetRequiredService<BuildMind.Infrastructure.Persistence.Transactions.TransactionRunner>(), p.GetService<TimeProvider>() ?? TimeProvider.System));
+            p.GetRequiredService<BuildMind.Infrastructure.Persistence.Transactions.TransactionRunner>(), p.GetService<TimeProvider>() ?? TimeProvider.System,
+            p.GetService<BuildMind.Application.Abstractions.ICurrentUser>()));
         services.TryAddScoped(p => new CaptainReadModels(p.GetRequiredService<BuildMind.Infrastructure.Persistence.BuildMindDbContext>(),
             p.GetService<TimeProvider>() ?? TimeProvider.System, new SurveyBlobReader(p.GetRequiredService<IConfiguration>())));
 

@@ -1493,9 +1493,81 @@ namespace BuildMind.Infrastructure.Persistence.Migrations
                         .HasColumnName("land_json")
                         .HasAnnotation("MySQL:Charset", "utf8mb4");
 
+                    b.Property<double?>("LocationLatitude")
+                        .HasColumnType("double")
+                        .HasColumnName("location_latitude");
+
+                    b.Property<string>("LocationLocalityId")
+                        .HasMaxLength(100)
+                        .HasColumnType("varchar(100)")
+                        .HasColumnName("location_locality_id");
+
+                    b.Property<string>("LocationLocalityName")
+                        .HasMaxLength(200)
+                        .HasColumnType("varchar(200)")
+                        .HasColumnName("location_locality_name");
+
+                    b.Property<double?>("LocationLongitude")
+                        .HasColumnType("double")
+                        .HasColumnName("location_longitude");
+
+                    b.Property<string>("LocationSource")
+                        .HasMaxLength(32)
+                        .HasColumnType("varchar(32)")
+                        .HasColumnName("location_source");
+
+                    b.Property<string>("LocationVerificationProvider")
+                        .HasMaxLength(100)
+                        .HasColumnType("varchar(100)")
+                        .HasColumnName("location_verification_provider");
+
+                    b.Property<string>("LocationVerificationStatus")
+                        .HasMaxLength(32)
+                        .HasColumnType("varchar(32)")
+                        .HasColumnName("location_verification_status");
+
+                    b.Property<DateTime?>("LocationVerifiedAtUtc")
+                        .HasColumnType("datetime(6)")
+                        .HasColumnName("location_verified_at_utc");
+
+                    b.Property<double?>("PerimeterM")
+                        .HasColumnType("double")
+                        .HasColumnName("perimeter_m");
+
                     b.Property<Guid>("ProjectId")
                         .HasColumnType("char(36)")
                         .HasColumnName("project_id");
+
+                    b.Property<double?>("ReportedAreaM2")
+                        .HasColumnType("double")
+                        .HasColumnName("reported_area_m2");
+
+                    b.Property<double?>("ReportedAreaOriginalValue")
+                        .HasColumnType("double")
+                        .HasColumnName("reported_area_original_value");
+
+                    b.Property<string>("ReportedAreaReviewStatus")
+                        .HasMaxLength(32)
+                        .HasColumnType("varchar(32)")
+                        .HasColumnName("reported_area_review_status");
+
+                    b.Property<Guid?>("ReportedAreaSourceFileId")
+                        .HasColumnType("char(36)")
+                        .HasColumnName("reported_area_source_file_id");
+
+                    b.Property<int?>("ReportedAreaSourcePageNumber")
+                        .HasColumnType("int")
+                        .HasColumnName("reported_area_source_page_number");
+
+                    b.Property<string>("ReportedAreaSourceReferenceText")
+                        .HasMaxLength(500)
+                        .HasColumnType("varchar(500)")
+                        .HasColumnName("reported_area_source_reference_text");
+
+                    b.Property<string>("ReportedAreaUnit")
+                        .HasMaxLength(16)
+                        .HasColumnType("varchar(16)")
+                        .HasColumnName("reported_area_unit");
 
                     b.Property<long>("RevisionNumber")
                         .HasColumnType("bigint")
@@ -1515,7 +1587,18 @@ namespace BuildMind.Infrastructure.Persistence.Migrations
                         .IsUnique()
                         .HasDatabaseName("ux_land_revisions_project_id_revision_number");
 
-                    b.ToTable("land_revisions", (string)null);
+                    b.ToTable("land_revisions", null, t =>
+                        {
+                            t.HasCheckConstraint("ck_land_revisions_area", "area_m2 > 0 AND (perimeter_m IS NULL OR perimeter_m > 0)");
+
+                            t.HasCheckConstraint("ck_land_revisions_edge_count", "edge_count >= 3");
+
+                            t.HasCheckConstraint("ck_land_revisions_location", "(\r\n    location_locality_id IS NULL\r\n    AND location_locality_name IS NULL\r\n    AND location_latitude IS NULL\r\n    AND location_longitude IS NULL\r\n    AND location_source IS NULL\r\n    AND location_verification_status IS NULL\r\n    AND location_verification_provider IS NULL\r\n    AND location_verified_at_utc IS NULL\r\n)\r\nOR\r\n(\r\n    location_locality_name IS NOT NULL\r\n    AND CHAR_LENGTH(TRIM(location_locality_name)) BETWEEN 1 AND 200\r\n    AND (location_locality_id IS NULL OR CHAR_LENGTH(TRIM(location_locality_id)) BETWEEN 1 AND 100)\r\n    AND location_source IN ('UserSelected', 'SurveyDocument', 'GeocodingProvider')\r\n    AND location_verification_status IN ('NotVerified', 'Verified')\r\n    AND (\r\n        (location_latitude IS NULL AND location_longitude IS NULL)\r\n        OR (location_latitude IS NOT NULL AND location_longitude IS NOT NULL\r\n            AND location_latitude BETWEEN -90 AND 90 AND location_longitude BETWEEN -180 AND 180)\r\n    )\r\n    AND (\r\n        (location_verification_status = 'NotVerified' AND location_verification_provider IS NULL AND location_verified_at_utc IS NULL)\r\n        OR (location_verification_status = 'Verified' AND location_source = 'GeocodingProvider'\r\n            AND location_verification_provider IS NOT NULL\r\n            AND CHAR_LENGTH(TRIM(location_verification_provider)) BETWEEN 1 AND 100\r\n            AND location_verified_at_utc IS NOT NULL)\r\n    )\r\n)");
+
+                            t.HasCheckConstraint("ck_land_revisions_reported_area", "(\r\n    reported_area_original_value IS NULL\r\n    AND reported_area_unit IS NULL\r\n    AND reported_area_m2 IS NULL\r\n    AND reported_area_source_file_id IS NULL\r\n    AND reported_area_source_page_number IS NULL\r\n    AND reported_area_source_reference_text IS NULL\r\n    AND reported_area_review_status IS NULL\r\n)\r\nOR\r\n(\r\n    reported_area_original_value IS NOT NULL\r\n    AND reported_area_original_value > 0\r\n    AND reported_area_unit IN ('M2', 'FT2', 'Unknown')\r\n    AND reported_area_source_file_id IS NOT NULL\r\n    AND reported_area_review_status IN ('Unreviewed', 'ManualReviewRequired', 'ManuallyReviewed')\r\n    AND (\r\n        (reported_area_unit = 'Unknown' AND reported_area_m2 IS NULL)\r\n        OR (reported_area_unit IN ('M2', 'FT2') AND reported_area_m2 IS NOT NULL AND reported_area_m2 > 0)\r\n    )\r\n    AND (reported_area_source_page_number IS NULL OR reported_area_source_page_number > 0)\r\n)");
+
+                            t.HasCheckConstraint("ck_land_revisions_revision_number", "revision_number > 0");
+                        });
                 });
 
             modelBuilder.Entity("BuildMind.Infrastructure.Persistence.Records.Planning.PlanConfirmationRecord", b =>

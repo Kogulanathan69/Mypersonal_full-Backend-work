@@ -62,6 +62,7 @@ services:
       - "2"
     environment:
       BUILDMIND_PY_AUTH: required
+      BUILDMIND_PY_INTERNAL_TOKENS_FILE: /run/bm/secrets/python-internal.token
     volumes:
       - ${BM_STATE}/pki/python-server.key:/run/bm/pki/python-server.key:ro
       - ${BM_STATE}/pki/python-server.crt:/run/bm/pki/python-server.crt:ro

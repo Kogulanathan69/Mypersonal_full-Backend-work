@@ -269,3 +269,11 @@ def test_edit_preview_requires_token_and_strict_json():
     duplicate = client().post("/internal/v1/plans/edit-preview", content='{"schemaVersion":"a","schemaVersion":"b"}',
                               headers={"Content-Type": "application/json", AUTH_HEADER: TOKEN})
     assert duplicate.status_code == 422
+
+
+def test_vastu_ranking_remains_internal_nonblocking_and_hidden_from_response():
+    response = run(client(), generation_input())
+    assert response.status_code == 200
+    text = response.text.lower()
+    assert "vastu" not in text
+    assert len(response.json()["alternatives"]) == 3

@@ -645,6 +645,7 @@ public sealed class RagRegulatoryEvidenceProvider(
 }
 
 public sealed record SaveCandidateCommand(string? ChangeSummary);
+public sealed record CreateManualPlanCommand(PlanGeometryDto? Geometry, string? ChangeSummary);
 
 /// <summary>Saves one generated candidate as a new plan (revision 1) after server-side re-validation.</summary>
 public sealed class PlanSaveService(
@@ -702,6 +703,70 @@ public sealed class PlanSaveService(
             candidate.Geometry.SchemaVersion, candidate.GeometryJson, candidate.GeometryHash, land.Id, requirement.Id,
             evidence.Reference, null, actor, now,
             command.ChangeSummary ?? $"Saved generated alternative {candidate.Ordinal + 1} (preliminary)");
+        return await plans.TryCreateAsync(revision, evidence, version, token).ConfigureAwait(false) switch
+        {
+            ProtectedWriteStatus.Written => PlanningResult<PlanRevisionSnapshot>.Ok(revision),
+            ProtectedWriteStatus.Conflict => new(PlanningStatus.Conflict, Code: "PLAN_ALREADY_SAVED"),
+            _ => new(PlanningStatus.NotFound),
+        };
+    }
+
+    /// <summary>Creates a new manual 2D draft floor plan (revision 1) after full server-side geometry and requirement validation.</summary>
+    public async Task<PlanningResult<PlanRevisionSnapshot>> CreateManualPlanAsync(
+        Guid projectId, CreateManualPlanCommand command, CancellationToken token)
+    {
+        ArgumentNullException.ThrowIfNull(command);
+        var (status, actor, version) = await access.AuthorizeAsync(projectId, token).ConfigureAwait(false);
+        if (status != PlanningStatus.Success) return new(status);
+        if (command.ChangeSummary is { Length: > 500 })
+            return new(PlanningStatus.ValidationFailed, Code: "CHANGE_SUMMARY_TOO_LONG");
+        if (command.Geometry is null || command.Geometry.Floors is null || command.Geometry.Floors.Count == 0)
+            return new(PlanningStatus.ValidationFailed, Code: "MANUAL_PLAN_GEOMETRY_REQUIRED");
+        if (command.Geometry.Floors.Count != 1 || command.Geometry.Floors.Any(f => f.Level != 0))
+            return new(PlanningStatus.ValidationFailed, Code: "FLOOR_SCOPE_UNSUPPORTED");
+
+        var land = await lands.GetCurrentAsync(projectId, token).ConfigureAwait(false);
+        var requirement = await requirements.GetCurrentAsync(projectId, token).ConfigureAwait(false);
+        if (land is null || requirement is null)
+            return new(PlanningStatus.InputsMissing, Code: land is null ? "LAND_REVISION_MISSING" : "REQUIREMENTS_REVISION_MISSING");
+
+        if ((command.Geometry.ProjectId != Guid.Empty && command.Geometry.ProjectId != projectId)
+            || (command.Geometry.LandRevisionId != Guid.Empty && command.Geometry.LandRevisionId != land.Id)
+            || (command.Geometry.RequirementsRevisionId != Guid.Empty && command.Geometry.RequirementsRevisionId != requirement.Id))
+            return new(PlanningStatus.StaleInputs, Code: "STALE_INPUT_REVISIONS");
+
+        var planId = Guid.NewGuid();
+        var normalized = new PlanGeometryDto
+        {
+            SchemaVersion = GeometrySchemaInfo.DraftVersion,
+            ProjectId = projectId,
+            PlanId = planId,
+            LandRevisionId = land.Id,
+            RequirementsRevisionId = requirement.Id,
+            CoordinateSystem = land.Land.CoordinateSystem,
+            Floors = command.Geometry.Floors,
+        };
+        var geometryJson = JsonSerializer.Serialize(normalized, PlanEditorJson.StrictOptions);
+        var geometryHash = PlanRevisionService.ComputeGeometryHash(geometryJson);
+
+        var policy = policies.Get();
+        var synthetic = policy is { EvidenceMode: PlanningSchemas.EvidenceModeSynthetic, SyntheticSetbackM: not null };
+        var check = await ValidateAsync(compute, land, requirement, normalized, geometryJson, geometryHash,
+            synthetic ? policy!.SyntheticSetbackM : null, token).ConfigureAwait(false);
+        if (check.Status != PlanningStatus.Success) return new(check.Status, Code: check.Code);
+        if (!check.Value!.GeometryValid || check.Value.RequirementsMatch != true)
+            return new(PlanningStatus.ValidationFailed, Code: "MANUAL_PLAN_VALIDATION_FAILED", Diagnostics: check.Value.Diagnostics);
+
+        var now = PlanningClock.Now(time);
+        var evidence = IssueEvidence(projectId, planId, geometryHash, check.Value,
+            synthetic ? PlanningSchemas.SyntheticEvidenceStatus : PlanningSchemas.UnverifiedEvidenceStatus, now);
+        if (evidence.Reference.HasBlockingIssues)
+            return new(PlanningStatus.ValidationFailed, Code: "MANUAL_PLAN_VALIDATION_FAILED", Diagnostics: check.Value.Diagnostics);
+
+        var revision = new PlanRevisionSnapshot(Guid.NewGuid(), planId, projectId, null, 1,
+            normalized.SchemaVersion, geometryJson, geometryHash, land.Id, requirement.Id,
+            evidence.Reference, null, actor, now,
+            string.IsNullOrWhiteSpace(command.ChangeSummary) ? "Manual 2D draft floor plan" : command.ChangeSummary.Trim());
         return await plans.TryCreateAsync(revision, evidence, version, token).ConfigureAwait(false) switch
         {
             ProtectedWriteStatus.Written => PlanningResult<PlanRevisionSnapshot>.Ok(revision),

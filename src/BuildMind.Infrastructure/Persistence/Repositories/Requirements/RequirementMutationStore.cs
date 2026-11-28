@@ -1,4 +1,5 @@
 using System.Security.Cryptography;
+using BuildMind.Application.Abstractions;
 using BuildMind.Application.Features.Requirements.Abstractions;
 using BuildMind.Application.Features.Requirements.Contracts;
 using BuildMind.Domain.Entities;
@@ -11,7 +12,7 @@ using Microsoft.EntityFrameworkCore;
 namespace BuildMind.Infrastructure.Persistence.Repositories.Requirements;
 
 internal sealed class RequirementMutationStore(BuildMindDbContext context, TransactionRunner transactions,
-    RequirementRevisionRepository revisions) : IRequirementMutationStore
+    RequirementRevisionRepository revisions, ICurrentUser? currentUser = null) : IRequirementMutationStore
 {
     public Task<RequirementMutationResult> ObserveAsync(RequirementMutationScope scope, RequirementMutation? mutation,
         CancellationToken token) => ExecuteAsync(scope, mutation, null, token);
@@ -31,7 +32,7 @@ internal sealed class RequirementMutationStore(BuildMindDbContext context, Trans
             return await transactions.ExecuteAsync<RequirementMutationResult>(async lockedToken =>
             {
                 if (!await new ProjectMutationAuthorization(context).LockAndCheckAsync(scope.ProjectId, scope.ActorId,
-                        scope.Version, lockedToken))
+                        scope.Version, lockedToken, currentUser?.TokenVersion))
                     return new(RequirementMutationStatus.Denied);
                 var receipt = await context.Set<RequirementMutationReceiptRecord>().AsNoTracking().SingleOrDefaultAsync(
                     r => r.ProjectId == scope.ProjectId && r.ActorId == scope.ActorId && r.OperationId == scope.OperationId,

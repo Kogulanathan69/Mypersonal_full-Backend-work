@@ -65,12 +65,12 @@ internal sealed class RequirementRevisionRepository(BuildMindDbContext context, 
     // The existing application port remains unchanged until the cross-owner write contract is approved.
     internal Task<RequirementSaveResult> TrySaveAuthorizedAtomicallyAsync(
         Guid trustedActorId, long expectedAuthorizationVersion, Guid? expectedRevisionId,
-        RequirementRevision proposedRevision, CancellationToken cancellationToken) =>
-        SaveCoreAsync(expectedRevisionId, proposedRevision, (trustedActorId, expectedAuthorizationVersion), cancellationToken);
+        RequirementRevision proposedRevision, CancellationToken cancellationToken, long? expectedTokenVersion = null) =>
+        SaveCoreAsync(expectedRevisionId, proposedRevision, (trustedActorId, expectedAuthorizationVersion, expectedTokenVersion), cancellationToken);
 
     private async Task<RequirementSaveResult> SaveCoreAsync(
         Guid? expectedRevisionId, RequirementRevision proposedRevision,
-        (Guid Actor, long Version)? authorization, CancellationToken cancellationToken)
+        (Guid Actor, long Version, long? TokenVersion)? authorization, CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(proposedRevision);
         if (expectedRevisionId == Guid.Empty)
@@ -94,7 +94,7 @@ internal sealed class RequirementRevisionRepository(BuildMindDbContext context, 
                     // In the protected path the project row is locked before observing or changing the head.
                     var projectAccessible = authorization is { } access
                         ? await new ProjectMutationAuthorization(context)
-                            .LockAndCheckAsync(projectId, access.Actor, access.Version, token).ConfigureAwait(false)
+                            .LockAndCheckAsync(projectId, access.Actor, access.Version, token, access.TokenVersion).ConfigureAwait(false)
                         : await context.Set<ProjectRecord>().AsNoTracking()
                             .AnyAsync(p => p.Id == projectId, token).ConfigureAwait(false);
                     if (!projectAccessible)

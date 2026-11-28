@@ -44,6 +44,8 @@
     <!-- BM-INT-01: deterministic synthetic geometry for live validation. -->
     <None Update="Fixtures/bm-int-01-synthetic-geometry.json"
           CopyToOutputDirectory="PreserveNewest" />
+    <None Update="xunit.runner.json"
+          CopyToOutputDirectory="PreserveNewest" />
   </ItemGroup>
 
 </Project>
