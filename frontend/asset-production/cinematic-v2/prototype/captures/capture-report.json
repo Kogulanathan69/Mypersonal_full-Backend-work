@@ -1,0 +1,483 @@
+{
+  "createdAt": "2026-11-25T18:31:32.851Z",
+  "contextLoss": {
+    "supported": true,
+    "lost": true,
+    "restored": true
+  },
+  "jobs": [
+    {
+      "name": "shot-02-blueprint",
+      "shot": "SHOT-02",
+      "mode": "blueprint",
+      "quality": "standard",
+      "viewport": [
+        1280,
+        720
+      ],
+      "file": "shot-02-blueprint.png",
+      "bytes": 145801,
+      "sha256": "812c99032c4bef04bbebf437eac1edbdf0f7f9c8a2b4c9677551e7ea1437f4f7",
+      "errors": [],
+      "metrics": {
+        "ready": true,
+        "shot": "SHOT-02",
+        "mode": "blueprint",
+        "quality": "standard",
+        "resolution": [
+          1280,
+          720
+        ],
+        "pixelRatio": 1,
+        "sampledFrames": 248,
+        "fps": 49.4,
+        "frameMs": {
+          "avg": 16.66,
+          "min": 15.3,
+          "max": 18.3
+        },
+        "renderer": "ANGLE (Intel, Intel(R) HD Graphics 520 (0x00001916) Direct3D11 vs_5_0 ps_5_0, D3D11)",
+        "vendor": "Google Inc. (Intel)",
+        "webgl2": true,
+        "drawCalls": 259,
+        "triangles": 2958,
+        "geometries": 134,
+        "textures": 2,
+        "estimatedTextureMemoryBytes": 786432,
+        "shadowMap": false,
+        "toneMapping": "ACESFilmic",
+        "geometryVersion": "BM-CV2-RES-001"
+      }
+    },
+    {
+      "name": "shot-03-wireframe",
+      "shot": "SHOT-03",
+      "mode": "wireframe",
+      "quality": "standard",
+      "viewport": [
+        1280,
+        720
+      ],
+      "file": "shot-03-wireframe.png",
+      "bytes": 151698,
+      "sha256": "91f138be7c78b22894e69a073f01fa1b3e777c30b3b354207f141b1c3533a4d6",
+      "errors": [],
+      "metrics": {
+        "ready": true,
+        "shot": "SHOT-03",
+        "mode": "wireframe",
+        "quality": "standard",
+        "resolution": [
+          1280,
+          720
+        ],
+        "pixelRatio": 1,
+        "sampledFrames": 276,
+        "fps": 55,
+        "frameMs": {
+          "avg": 16.85,
+          "min": 12.4,
+          "max": 33.5
+        },
+        "renderer": "ANGLE (Intel, Intel(R) HD Graphics 520 (0x00001916) Direct3D11 vs_5_0 ps_5_0, D3D11)",
+        "vendor": "Google Inc. (Intel)",
+        "webgl2": true,
+        "drawCalls": 346,
+        "triangles": 30,
+        "geometries": 222,
+        "textures": 2,
+        "estimatedTextureMemoryBytes": 786432,
+        "shadowMap": false,
+        "toneMapping": "ACESFilmic",
+        "geometryVersion": "BM-CV2-RES-001"
+      }
+    },
+    {
+      "name": "shot-04-wireframe",
+      "shot": "SHOT-04",
+      "mode": "wireframe",
+      "quality": "standard",
+      "viewport": [
+        1280,
+        720
+      ],
+      "file": "shot-04-wireframe.png",
+      "bytes": 138662,
+      "sha256": "73683c18318cd8143b3f4bd038f480c07c8b88ed8d1252c79a93eb9f7f020a26",
+      "errors": [],
+      "metrics": {
+        "ready": true,
+        "shot": "SHOT-04",
+        "mode": "wireframe",
+        "quality": "standard",
+        "resolution": [
+          1280,
+          720
+        ],
+        "pixelRatio": 1,
+        "sampledFrames": 269,
+        "fps": 53.7,
+        "frameMs": {
+          "avg": 17.1,
+          "min": 15.7,
+          "max": 50.1
+        },
+        "renderer": "ANGLE (Intel, Intel(R) HD Graphics 520 (0x00001916) Direct3D11 vs_5_0 ps_5_0, D3D11)",
+        "vendor": "Google Inc. (Intel)",
+        "webgl2": true,
+        "drawCalls": 346,
+        "triangles": 30,
+        "geometries": 222,
+        "textures": 2,
+        "estimatedTextureMemoryBytes": 786432,
+        "shadowMap": false,
+        "toneMapping": "ACESFilmic",
+        "geometryVersion": "BM-CV2-RES-001"
+      }
+    },
+    {
+      "name": "shot-04-material",
+      "shot": "SHOT-04",
+      "mode": "material",
+      "quality": "standard",
+      "viewport": [
+        1280,
+        720
+      ],
+      "file": "shot-04-material.png",
+      "bytes": 133239,
+      "sha256": "44ae8e532346f39fa401c9d4a7c94e107d60dc5b98dc256a8f85cc493e0d2df2",
+      "errors": [],
+      "metrics": {
+        "ready": true,
+        "shot": "SHOT-04",
+        "mode": "material",
+        "quality": "standard",
+        "resolution": [
+          1280,
+          720
+        ],
+        "pixelRatio": 1,
+        "sampledFrames": 153,
+        "fps": 30.6,
+        "frameMs": {
+          "avg": 16.99,
+          "min": 15.4,
+          "max": 33.6
+        },
+        "renderer": "ANGLE (Intel, Intel(R) HD Graphics 520 (0x00001916) Direct3D11 vs_5_0 ps_5_0, D3D11)",
+        "vendor": "Google Inc. (Intel)",
+        "webgl2": true,
+        "drawCalls": 451,
+        "triangles": 9810,
+        "geometries": 153,
+        "textures": 7,
+        "estimatedTextureMemoryBytes": 4980736,
+        "shadowMap": true,
+        "toneMapping": "ACESFilmic",
+        "geometryVersion": "BM-CV2-RES-001"
+      }
+    },
+    {
+      "name": "shot-05-exterior-1920",
+      "shot": "SHOT-05",
+      "mode": "material",
+      "quality": "high",
+      "viewport": [
+        1920,
+        1080
+      ],
+      "file": "shot-05-exterior-1920.png",
+      "bytes": 192782,
+      "sha256": "462ba4c5a90483140a1915950e00203588df3742e76a6431f140a858aa0fad8a",
+      "errors": [],
+      "metrics": {
+        "ready": true,
+        "shot": "SHOT-05",
+        "mode": "material",
+        "quality": "high",
+        "resolution": [
+          1920,
+          1080
+        ],
+        "pixelRatio": 1,
+        "sampledFrames": 190,
+        "fps": 38,
+        "frameMs": {
+          "avg": 23.15,
+          "min": 15.1,
+          "max": 133.5
+        },
+        "renderer": "ANGLE (Intel, Intel(R) HD Graphics 520 (0x00001916) Direct3D11 vs_5_0 ps_5_0, D3D11)",
+        "vendor": "Google Inc. (Intel)",
+        "webgl2": true,
+        "drawCalls": 451,
+        "triangles": 9810,
+        "geometries": 153,
+        "textures": 7,
+        "estimatedTextureMemoryBytes": 17563648,
+        "shadowMap": true,
+        "toneMapping": "ACESFilmic",
+        "geometryVersion": "BM-CV2-RES-001"
+      }
+    },
+    {
+      "name": "shot-05-exterior-1280",
+      "shot": "SHOT-05",
+      "mode": "material",
+      "quality": "standard",
+      "viewport": [
+        1280,
+        720
+      ],
+      "file": "shot-05-exterior-1280.png",
+      "bytes": 128168,
+      "sha256": "9e71af1e378325d3359f8fbe4bff6734aa24ed569aebe9dc0112d2d40b0a1397",
+      "errors": [],
+      "metrics": {
+        "ready": true,
+        "shot": "SHOT-05",
+        "mode": "material",
+        "quality": "standard",
+        "resolution": [
+          1280,
+          720
+        ],
+        "pixelRatio": 1,
+        "sampledFrames": 247,
+        "fps": 49.4,
+        "frameMs": {
+          "avg": 17.68,
+          "min": 14.1,
+          "max": 33.9
+        },
+        "renderer": "ANGLE (Intel, Intel(R) HD Graphics 520 (0x00001916) Direct3D11 vs_5_0 ps_5_0, D3D11)",
+        "vendor": "Google Inc. (Intel)",
+        "webgl2": true,
+        "drawCalls": 451,
+        "triangles": 9810,
+        "geometries": 153,
+        "textures": 7,
+        "estimatedTextureMemoryBytes": 4980736,
+        "shadowMap": true,
+        "toneMapping": "ACESFilmic",
+        "geometryVersion": "BM-CV2-RES-001"
+      }
+    },
+    {
+      "name": "shot-06-approach",
+      "shot": "SHOT-06",
+      "mode": "material",
+      "quality": "standard",
+      "viewport": [
+        1280,
+        720
+      ],
+      "file": "shot-06-approach.png",
+      "bytes": 170830,
+      "sha256": "96664c5610cd98d0d45bba95d860f698f3e7ab9fd7349d19791c285b1331cacb",
+      "errors": [],
+      "metrics": {
+        "ready": true,
+        "shot": "SHOT-06",
+        "mode": "material",
+        "quality": "standard",
+        "resolution": [
+          1280,
+          720
+        ],
+        "pixelRatio": 1,
+        "sampledFrames": 270,
+        "fps": 53.9,
+        "frameMs": {
+          "avg": 16.73,
+          "min": 15.2,
+          "max": 33.1
+        },
+        "renderer": "ANGLE (Intel, Intel(R) HD Graphics 520 (0x00001916) Direct3D11 vs_5_0 ps_5_0, D3D11)",
+        "vendor": "Google Inc. (Intel)",
+        "webgl2": true,
+        "drawCalls": 303,
+        "triangles": 6058,
+        "geometries": 152,
+        "textures": 5,
+        "estimatedTextureMemoryBytes": 4980736,
+        "shadowMap": true,
+        "toneMapping": "ACESFilmic",
+        "geometryVersion": "BM-CV2-RES-001"
+      }
+    },
+    {
+      "name": "shot-07-interior",
+      "shot": "SHOT-07",
+      "mode": "material",
+      "quality": "standard",
+      "viewport": [
+        1280,
+        720
+      ],
+      "file": "shot-07-interior.png",
+      "bytes": 236828,
+      "sha256": "442ea36f151a799a2d30a0b98ef0c9dc2e5212155352e4bbe5a8fb08635ea727",
+      "errors": [],
+      "metrics": {
+        "ready": true,
+        "shot": "SHOT-07",
+        "mode": "material",
+        "quality": "standard",
+        "resolution": [
+          1280,
+          720
+        ],
+        "pixelRatio": 1,
+        "sampledFrames": 261,
+        "fps": 52.1,
+        "frameMs": {
+          "avg": 16.86,
+          "min": 13.2,
+          "max": 33.6
+        },
+        "renderer": "ANGLE (Intel, Intel(R) HD Graphics 520 (0x00001916) Direct3D11 vs_5_0 ps_5_0, D3D11)",
+        "vendor": "Google Inc. (Intel)",
+        "webgl2": true,
+        "drawCalls": 300,
+        "triangles": 5486,
+        "geometries": 152,
+        "textures": 7,
+        "estimatedTextureMemoryBytes": 4980736,
+        "shadowMap": true,
+        "toneMapping": "ACESFilmic",
+        "geometryVersion": "BM-CV2-RES-001"
+      }
+    },
+    {
+      "name": "shot-08-interior",
+      "shot": "SHOT-08",
+      "mode": "material",
+      "quality": "standard",
+      "viewport": [
+        1280,
+        720
+      ],
+      "file": "shot-08-interior.png",
+      "bytes": 265422,
+      "sha256": "8fa75a2b873142b505ff32a78bd76fc73f2ab6f4c4bfa8af54dca5359c293ff0",
+      "errors": [],
+      "metrics": {
+        "ready": true,
+        "shot": "SHOT-08",
+        "mode": "material",
+        "quality": "standard",
+        "resolution": [
+          1280,
+          720
+        ],
+        "pixelRatio": 1,
+        "sampledFrames": 246,
+        "fps": 49.1,
+        "frameMs": {
+          "avg": 17.48,
+          "min": 14.6,
+          "max": 51.8
+        },
+        "renderer": "ANGLE (Intel, Intel(R) HD Graphics 520 (0x00001916) Direct3D11 vs_5_0 ps_5_0, D3D11)",
+        "vendor": "Google Inc. (Intel)",
+        "webgl2": true,
+        "drawCalls": 354,
+        "triangles": 6718,
+        "geometries": 153,
+        "textures": 7,
+        "estimatedTextureMemoryBytes": 4980736,
+        "shadowMap": true,
+        "toneMapping": "ACESFilmic",
+        "geometryVersion": "BM-CV2-RES-001"
+      }
+    },
+    {
+      "name": "shot-05-mobile",
+      "shot": "SHOT-05",
+      "mode": "material",
+      "quality": "low",
+      "viewport": [
+        390,
+        844
+      ],
+      "file": "shot-05-mobile.png",
+      "bytes": 57185,
+      "sha256": "fe37733ce2b03e6a331de5cc10090ac079ad1af67cc1968139940477de3b6017",
+      "errors": [],
+      "metrics": {
+        "ready": true,
+        "shot": "SHOT-05",
+        "mode": "material",
+        "quality": "low",
+        "resolution": [
+          390,
+          844
+        ],
+        "pixelRatio": 1,
+        "sampledFrames": 135,
+        "fps": 26.9,
+        "frameMs": {
+          "avg": 16.79,
+          "min": 15.7,
+          "max": 33.3
+        },
+        "renderer": "ANGLE (Intel, Intel(R) HD Graphics 520 (0x00001916) Direct3D11 vs_5_0 ps_5_0, D3D11)",
+        "vendor": "Google Inc. (Intel)",
+        "webgl2": true,
+        "drawCalls": 250,
+        "triangles": 4262,
+        "geometries": 126,
+        "textures": 5,
+        "estimatedTextureMemoryBytes": 786432,
+        "shadowMap": false,
+        "toneMapping": "ACESFilmic",
+        "geometryVersion": "BM-CV2-RES-001"
+      }
+    },
+    {
+      "name": "shot-05-static",
+      "shot": "SHOT-05",
+      "mode": "material",
+      "quality": "low",
+      "viewport": [
+        1280,
+        720
+      ],
+      "file": "shot-05-static.png",
+      "bytes": 100784,
+      "sha256": "6f1b1c1746e934f36bb81ce8be11d1f7aa0504074aa886cf13ebbbc686cc3dd9",
+      "errors": [],
+      "metrics": {
+        "ready": true,
+        "shot": "SHOT-05",
+        "mode": "material",
+        "quality": "low",
+        "resolution": [
+          1280,
+          720
+        ],
+        "pixelRatio": 1,
+        "sampledFrames": 267,
+        "fps": 53.3,
+        "frameMs": {
+          "avg": 16.67,
+          "min": 15.7,
+          "max": 17.5
+        },
+        "renderer": "ANGLE (Intel, Intel(R) HD Graphics 520 (0x00001916) Direct3D11 vs_5_0 ps_5_0, D3D11)",
+        "vendor": "Google Inc. (Intel)",
+        "webgl2": true,
+        "drawCalls": 304,
+        "triangles": 6702,
+        "geometries": 153,
+        "textures": 5,
+        "estimatedTextureMemoryBytes": 786432,
+        "shadowMap": false,
+        "toneMapping": "ACESFilmic",
+        "geometryVersion": "BM-CV2-RES-001"
+      }
+    }
+  ]
+}

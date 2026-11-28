@@ -1,0 +1,618 @@
+/* Small shared utilities. Owner: F — Foundation. Prefer Angular components in shared/ui. */
+
+/* Standard card surface used by bm-card and layouts. */
+@utility surface-card {
+  background-color: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-card);
+}
+
+/* Subtle architectural grid used behind hero areas and the editor. */
+@utility blueprint-grid {
+  background-image:
+    linear-gradient(color-mix(in srgb, var(--color-border) 45%, transparent) 1px, transparent 1px),
+    linear-gradient(
+      90deg,
+      color-mix(in srgb, var(--color-border) 45%, transparent) 1px,
+      transparent 1px
+    );
+  background-size: 32px 32px;
+}
+
+/* Gold hairline used under page titles, echoing the reference screens. */
+@utility gold-rule {
+  background-image: linear-gradient(90deg, var(--color-accent), transparent);
+  height: 2px;
+  border-radius: var(--radius-pill);
+}
+
+/* CDK dialog backdrop in brand colours (overrides the CDK default grey). */
+.bm-dialog-backdrop {
+  background-color: color-mix(in srgb, var(--color-bg-deep) 78%, transparent);
+}
+
+/* Public marketing composition primitives. Authenticated screens do not use these classes. */
+.mk-shell {
+  width: min(calc(100% - (2 * var(--spacing-mk-gutter))), var(--container-mk-content));
+  margin-inline: auto;
+}
+
+.mk-shell-wide {
+  width: min(calc(100% - (2 * var(--spacing-mk-gutter))), var(--container-mk-wide));
+  margin-inline: auto;
+}
+
+/* Approved warm architectural direction for the cinematic hero only. */
+.mk-cinematic-warm {
+  --color-mk-navy: var(--color-mk-paper);
+  --color-mk-surface: var(--color-mk-paper-raised);
+  --color-mk-surface-2: color-mix(in srgb, var(--color-mk-paper) 88%, var(--color-mk-limestone));
+  --color-mk-line: var(--color-mk-paper-line);
+  --color-mk-cyan: var(--color-mk-blueprint);
+  --color-mk-white: var(--color-mk-ink);
+  --color-mk-muted: var(--color-mk-ink-muted);
+  --color-mk-gold: var(--color-mk-aperture);
+}
+
+.mk-public-header bm-brand-logo a {
+  color: var(--color-mk-white);
+}
+
+.mk-public-header bm-brand-logo a > span > span:last-child {
+  color: var(--color-mk-muted);
+}
+
+/* Final static homepage: editorial copy and a licensed architectural photograph share one field. */
+.bm-static-hero {
+  position: relative;
+  isolation: isolate;
+  min-height: clamp(43rem, calc(100svh - 4rem), 58rem);
+  overflow: hidden;
+  background: var(--color-mk-cinema);
+  color: var(--color-mk-white);
+}
+
+.bm-static-hero__image,
+.bm-static-hero__shade {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+}
+
+.bm-static-hero__image {
+  z-index: -2;
+  object-fit: cover;
+  object-position: 62% center;
+}
+
+.bm-static-hero__shade {
+  z-index: -1;
+  background:
+    linear-gradient(90deg, var(--color-mk-cinema) 0 20%, transparent 78%),
+    linear-gradient(
+      90deg,
+      color-mix(in srgb, var(--color-mk-cinema) 95%, transparent) 0 35%,
+      transparent 68%
+    ),
+    linear-gradient(
+      0deg,
+      color-mix(in srgb, var(--color-mk-cinema) 82%, transparent),
+      transparent 38%
+    );
+}
+
+.bm-static-hero__content {
+  display: flex;
+  width: min(calc(100% - (2 * var(--spacing-mk-gutter))), var(--container-mk-wide));
+  min-height: inherit;
+  margin-inline: auto;
+  padding-block: clamp(4.5rem, 9vh, 7.5rem) 2.5rem;
+  flex-direction: column;
+  justify-content: center;
+}
+
+.bm-static-hero__kicker,
+.bm-planning-journey__label {
+  color: var(--color-mk-gold);
+  font-size: 0.69rem;
+  font-weight: 700;
+  letter-spacing: 0.23em;
+  text-transform: uppercase;
+}
+
+.bm-static-hero__title {
+  max-width: 42rem;
+  margin-top: 1.25rem;
+  font-family: var(--font-mk-display);
+  font-size: clamp(3.4rem, 6.1vw, 6.75rem);
+  font-weight: 400;
+  line-height: 0.92;
+  letter-spacing: -0.045em;
+  text-wrap: balance;
+}
+
+.bm-static-hero__title span,
+.bm-static-hero__title em {
+  display: block;
+}
+
+.bm-static-hero__title em {
+  color: var(--color-mk-gold);
+  font-weight: 400;
+}
+
+.bm-static-hero__copy {
+  max-width: 34rem;
+  margin-top: 1.75rem;
+  color: color-mix(in srgb, var(--color-mk-white) 82%, transparent);
+  font-size: clamp(0.98rem, 1.25vw, 1.1rem);
+  line-height: 1.75;
+}
+
+.bm-static-hero__actions {
+  display: flex;
+  margin-top: 2rem;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 0.8rem;
+}
+
+.bm-static-hero__primary,
+.bm-static-hero__secondary {
+  display: inline-flex;
+  min-height: 3.25rem;
+  padding-inline: 1.35rem;
+  align-items: center;
+  justify-content: center;
+  gap: 0.65rem;
+  border-radius: var(--radius-pill);
+  font-size: 0.86rem;
+  font-weight: 700;
+  text-decoration: none;
+  transition:
+    transform 160ms ease,
+    background-color 160ms ease;
+}
+
+.bm-static-hero__primary {
+  background: var(--color-mk-gold);
+  color: var(--color-mk-ink);
+}
+
+.bm-static-hero__secondary {
+  border: 1px solid color-mix(in srgb, var(--color-mk-white) 52%, transparent);
+  color: var(--color-mk-white);
+}
+
+.bm-static-hero__primary:hover,
+.bm-static-hero__secondary:hover {
+  transform: translateY(-2px);
+}
+
+.bm-static-hero__secondary:hover {
+  background: color-mix(in srgb, var(--color-mk-white) 10%, transparent);
+}
+
+.bm-static-hero__play {
+  font-size: 0.68rem;
+}
+
+.bm-static-hero__highlights {
+  display: grid;
+  width: min(100%, 67rem);
+  margin-top: auto;
+  padding-top: clamp(3rem, 8vh, 6rem);
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+}
+
+.bm-static-hero__highlights li {
+  display: flex;
+  min-height: 3.25rem;
+  padding-inline: 1.15rem;
+  align-items: center;
+  gap: 0.8rem;
+  border-left: 1px solid color-mix(in srgb, var(--color-mk-white) 20%, transparent);
+  color: var(--color-mk-gold);
+}
+
+.bm-static-hero__highlights li:first-child {
+  padding-left: 0;
+  border-left: 0;
+}
+
+.bm-static-hero__highlights span {
+  display: flex;
+  color: color-mix(in srgb, var(--color-mk-white) 68%, transparent);
+  font-size: 0.71rem;
+  line-height: 1.45;
+  flex-direction: column;
+}
+
+.bm-static-hero__highlights strong {
+  color: var(--color-mk-white);
+  font-size: 0.8rem;
+  letter-spacing: 0.01em;
+}
+
+.bm-static-hero__credit {
+  margin-top: 1.45rem;
+  color: color-mix(in srgb, var(--color-mk-white) 56%, transparent);
+  font-size: 0.65rem;
+}
+
+.bm-planning-journey {
+  position: relative;
+  padding: clamp(4.5rem, 7vw, 6.5rem) 0 clamp(4rem, 6vw, 5.5rem);
+  border-top: 1px solid var(--color-mk-charcoal-line);
+  background: var(--color-mk-charcoal);
+  color: var(--color-mk-chalk);
+}
+
+.bm-planning-journey__inner {
+  width: min(calc(100% - (2 * var(--spacing-mk-gutter))), var(--container-mk-content));
+  margin-inline: auto;
+  text-align: center;
+}
+
+.bm-planning-journey h2 {
+  max-width: 49rem;
+  margin: 0.85rem auto 0;
+  font-family: var(--font-mk-display);
+  font-size: clamp(2.15rem, 4vw, 4rem);
+  font-weight: 400;
+  line-height: 1.06;
+  letter-spacing: -0.035em;
+  color: var(--color-mk-chalk);
+}
+
+.bm-planning-journey ol {
+  display: grid;
+  margin-top: clamp(2.75rem, 5vw, 4.25rem);
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+}
+
+.bm-planning-journey li {
+  position: relative;
+  display: flex;
+  padding-inline: 0.75rem;
+  align-items: center;
+  flex-direction: column;
+  gap: 0.7rem;
+  border-left: 1px solid var(--color-mk-charcoal-line);
+}
+
+.bm-planning-journey li:first-child {
+  border-left: 0;
+}
+
+.bm-planning-journey__icon {
+  display: grid;
+  width: 2.75rem;
+  height: 2.75rem;
+  place-items: center;
+  border-bottom: 1px solid var(--color-mk-champagne);
+  color: var(--color-mk-champagne);
+}
+
+.bm-planning-journey__number {
+  color: var(--color-mk-silver);
+  font-size: 0.65rem;
+  letter-spacing: 0.2em;
+}
+
+.bm-planning-journey li strong {
+  color: var(--color-mk-chalk);
+  font-size: 0.84rem;
+}
+
+.bm-planning-journey__arrow {
+  position: absolute;
+  top: 0.85rem;
+  right: -0.4rem;
+  color: var(--color-mk-champagne);
+}
+
+.bm-planning-journey__note {
+  margin-top: 3rem;
+  color: var(--color-mk-silver);
+  font-size: 0.72rem;
+}
+
+@media (max-width: 63.99rem) {
+  .bm-static-hero__shade {
+    background:
+      linear-gradient(
+        90deg,
+        color-mix(in srgb, var(--color-mk-cinema) 94%, transparent),
+        transparent 92%
+      ),
+      linear-gradient(
+        0deg,
+        color-mix(in srgb, var(--color-mk-cinema) 88%, transparent),
+        transparent 52%
+      );
+  }
+
+  .bm-static-hero__highlights {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    row-gap: 1.25rem;
+  }
+
+  .bm-planning-journey ol {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    row-gap: 2.5rem;
+  }
+}
+
+@media (max-width: 39.99rem) {
+  .bm-static-hero {
+    min-height: 52rem;
+  }
+
+  .bm-static-hero__image {
+    object-position: 68% center;
+  }
+
+  .bm-static-hero__shade {
+    background:
+      linear-gradient(
+        90deg,
+        color-mix(in srgb, var(--color-mk-cinema) 91%, transparent),
+        color-mix(in srgb, var(--color-mk-cinema) 38%, transparent)
+      ),
+      linear-gradient(0deg, var(--color-mk-cinema), transparent 52%);
+  }
+
+  .bm-static-hero__content {
+    padding-block: 3.5rem 1.5rem;
+    justify-content: flex-start;
+  }
+
+  .bm-static-hero__title {
+    font-size: clamp(3rem, 14vw, 4.4rem);
+  }
+
+  .bm-static-hero__actions {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .bm-static-hero__primary,
+  .bm-static-hero__secondary {
+    width: 100%;
+  }
+
+  .bm-static-hero__highlights {
+    margin-top: auto;
+    padding-top: 2.25rem;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .bm-static-hero__highlights li,
+  .bm-static-hero__highlights li:first-child {
+    padding-inline: 0.65rem;
+    border-left: 1px solid color-mix(in srgb, var(--color-mk-white) 20%, transparent);
+  }
+
+  .bm-static-hero__credit {
+    line-height: 1.45;
+  }
+
+  .bm-planning-journey ol {
+    grid-template-columns: 1fr;
+  }
+
+  .bm-planning-journey li,
+  .bm-planning-journey li:first-child {
+    padding-block: 0.5rem;
+    border-left: 0;
+  }
+
+  .bm-planning-journey__arrow {
+    top: auto;
+    right: auto;
+    bottom: -1.75rem;
+    transform: rotate(90deg);
+  }
+}
+
+/* One continuous editorial field: live copy and architecture share the viewport. */
+.mk-cinematic-stage {
+  background:
+    radial-gradient(
+      circle at 78% 22%,
+      color-mix(in srgb, var(--color-mk-blueprint) 16%, transparent),
+      transparent 34%
+    ),
+    linear-gradient(
+      112deg,
+      var(--color-mk-paper) 0 34%,
+      color-mix(in srgb, var(--color-mk-paper) 84%, transparent) 52%,
+      transparent 72%
+    );
+}
+
+.mk-cinematic-media {
+  mask-image: linear-gradient(90deg, transparent 0, black 22%, black 100%);
+}
+
+.mk-architectural-icon {
+  display: grid;
+  width: 2.25rem;
+  height: 2.25rem;
+  place-items: center;
+  border: 1px solid color-mix(in srgb, var(--color-mk-ink) 24%, transparent);
+  border-radius: 50%;
+  color: var(--color-mk-ink);
+}
+
+@media (max-width: 63.99rem) {
+  .mk-cinematic-media {
+    mask-image: linear-gradient(180deg, transparent 0, black 12%, black 100%);
+  }
+}
+
+.mk-editorial {
+  --color-mk-navy: var(--color-mk-charcoal);
+  --color-mk-surface: var(--color-mk-charcoal-2);
+  --color-mk-surface-2: var(--color-mk-charcoal-surface);
+  --color-mk-line: var(--color-mk-charcoal-line);
+  --color-mk-cyan: var(--color-mk-champagne);
+  --color-mk-white: var(--color-mk-chalk);
+  --color-mk-muted: var(--color-mk-silver);
+  --color-mk-gold: var(--color-mk-champagne);
+
+  position: relative;
+  background: var(--color-mk-charcoal);
+  color: var(--color-mk-chalk);
+}
+
+.mk-editorial::before {
+  display: none;
+}
+
+.mk-editorial > * {
+  display: block;
+  background: var(--color-mk-charcoal);
+}
+
+.mk-editorial > :nth-child(even),
+.mk-editorial bm-closing-sections > section:nth-child(even) {
+  background: var(--color-mk-charcoal-2);
+}
+
+.mk-editorial section {
+  border-color: var(--color-mk-charcoal-line);
+}
+
+.mk-editorial :is(.rounded-xl, .rounded-2xl) {
+  border-radius: var(--radius-sm);
+  box-shadow: none;
+}
+
+.mk-editorial :focus-visible {
+  outline-color: var(--color-mk-champagne);
+}
+
+body:has(bm-home-page) footer {
+  --color-mk-white: var(--color-mk-chalk);
+  --color-mk-muted: var(--color-mk-silver);
+  --color-mk-line: var(--color-mk-charcoal-line);
+
+  border-color: var(--color-mk-charcoal-line);
+  background: var(--color-mk-charcoal-2);
+}
+
+/* Architectural product demonstrations: chalk drawing sheets inside the charcoal editorial field. */
+.bm-plan-drawing {
+  overflow: hidden;
+  border: 1px solid var(--color-mk-charcoal-line);
+  background: var(--color-mk-chalk);
+}
+
+.bm-plan-paper {
+  fill: var(--color-mk-chalk);
+}
+
+.bm-plan-grid {
+  fill: none;
+  stroke: color-mix(in srgb, var(--color-mk-ink) 8%, transparent);
+  stroke-width: 0.65;
+}
+
+.bm-plan-content {
+  transform-origin: center;
+}
+
+.bm-plan-walls {
+  fill: var(--color-mk-ink);
+  stroke: var(--color-mk-ink);
+  stroke-width: 10;
+  stroke-linecap: square;
+  stroke-linejoin: miter;
+}
+
+.bm-plan-windows {
+  fill: none;
+  stroke: var(--color-mk-blueprint);
+  stroke-width: 8;
+  stroke-linecap: butt;
+}
+
+.bm-plan-doors {
+  fill: none;
+  stroke: var(--color-mk-aperture);
+  stroke-width: 2;
+}
+
+.bm-plan-furniture {
+  fill: color-mix(in srgb, var(--color-mk-limestone) 35%, transparent);
+  stroke: color-mix(in srgb, var(--color-mk-ink) 72%, transparent);
+  stroke-width: 1.5;
+}
+
+.bm-plan-labels {
+  fill: var(--color-mk-ink);
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.05em;
+}
+
+.bm-plan-annotation {
+  fill: var(--color-mk-ink-muted);
+  stroke: var(--color-mk-ink-muted);
+  stroke-width: 1;
+  font-size: 10px;
+  letter-spacing: 0.08em;
+}
+
+.bm-plan-room-hit rect {
+  fill: transparent;
+  stroke: transparent;
+  stroke-width: 3;
+  cursor: pointer;
+  outline: none;
+}
+
+.bm-plan-room-hit:hover rect,
+.bm-plan-room-hit:focus-visible rect {
+  fill: color-mix(in srgb, var(--color-mk-blueprint) 12%, transparent);
+  stroke: var(--color-mk-blueprint);
+}
+
+.bm-plan-room-hit rect.is-selected {
+  fill: color-mix(in srgb, var(--color-mk-aperture) 18%, transparent);
+  stroke: var(--color-mk-aperture);
+}
+
+.bm-demo-toolbar {
+  display: flex;
+  min-height: 2.75rem;
+  padding: 0.45rem 0.65rem;
+  align-items: center;
+  gap: 0.4rem;
+  border: 1px solid var(--color-mk-charcoal-line);
+  border-bottom: 0;
+  background: var(--color-mk-charcoal-2);
+}
+
+.bm-demo-tool {
+  display: inline-flex;
+  min-width: 2.1rem;
+  height: 2rem;
+  padding-inline: 0.55rem;
+  align-items: center;
+  justify-content: center;
+  gap: 0.35rem;
+  border: 1px solid var(--color-mk-charcoal-line);
+  color: var(--color-mk-silver);
+  font-size: 0.72rem;
+}
+
+.bm-demo-tool:hover,
+.bm-demo-tool[aria-pressed='true'] {
+  border-color: var(--color-mk-champagne);
+  color: var(--color-mk-champagne);
+}

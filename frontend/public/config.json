@@ -1,0 +1,15 @@
+{
+  "$comment": "Runtime configuration. PLACEHOLDERS ONLY. Never put secrets here. Backend URLs are left empty until verified contracts and environments exist.",
+  "api": {
+    "mainBaseUrl": "",
+    "requestTimeoutMs": 30000
+  },
+  "map": {
+    "provider": "none",
+    "publicToken": ""
+  },
+  "features": {
+    "upperFloors": false,
+    "exportFormats": ["pdf"]
+  }
+}

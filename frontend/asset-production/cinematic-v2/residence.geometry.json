@@ -1,0 +1,47 @@
+{
+  "schemaVersion": 1,
+  "geometryVersion": "BM-CV2-RES-001",
+  "source": "src/app/features/public/home/cinematic/house-model-data.ts",
+  "units": "metres",
+  "coordinateSystem": { "handedness": "right", "east": "+x", "up": "+y", "south": "+z" },
+  "disclaimer": "Illustrative marketing residence only; not construction, engineering, regulatory, or customer-specific output.",
+  "parcel": [[-15,-10],[13,-11.5],[16,3],[11.5,11],[-12,10.5],[-16.5,0.5]],
+  "buildable": [[-12.5,-7.5],[10.5,-8.7],[12.8,2.6],[9.2,8.3],[-10.2,7.9],[-13.6,0.6]],
+  "footprint": { "x0": -8, "z0": -4.5, "x1": 8, "z1": 4.5 },
+  "floorHeight": 3.2,
+  "wallHeight": 3.0,
+  "rooms": [
+    {"name":"Living","x0":-8,"z0":-4.5,"x1":-1,"z1":1},
+    {"name":"Kitchen & dining","x0":-1,"z0":-4.5,"x1":4,"z1":1},
+    {"name":"Bedroom","x0":4,"z0":-4.5,"x1":8,"z1":-1},
+    {"name":"Bath","x0":4,"z0":-1,"x1":8,"z1":1},
+    {"name":"Bedroom","x0":4,"z0":1,"x1":8,"z1":4.5},
+    {"name":"Entrance & stair","x0":-1,"z0":1,"x1":4,"z1":4.5},
+    {"name":"Verandah","x0":-8,"z0":1,"x1":-1,"z1":4.5}
+  ],
+  "walls": [
+    {"id":"G-N","a":[-8,-4.5],"b":[8,-4.5],"thickness":0.22,"baseY":0,"height":3,"level":0,"openings":[["window",1.2,5.6,0.9,2.3],["window",8.2,10.6,0.9,2.3],["window",12.8,14.8,0.9,2.3]]},
+    {"id":"G-E","a":[8,-4.5],"b":[8,4.5],"thickness":0.22,"baseY":0,"height":3,"level":0,"openings":[["window",1,2.8,0.9,2.3],["window",6.2,8,0.9,2.3]]},
+    {"id":"G-S","a":[8,4.5],"b":[-1,4.5],"thickness":0.22,"baseY":0,"height":3,"level":0,"openings":[["window",1,2.8,0.9,2.3],["door",5.6,7,0,2.2]]},
+    {"id":"G-W","a":[-8,1],"b":[-8,-4.5],"thickness":0.22,"baseY":0,"height":3,"level":0,"openings":[["window",1,4.5,0.9,2.3]]},
+    {"id":"G-GLAZING","a":[-1,1],"b":[-8,1],"thickness":0.12,"baseY":0,"height":3,"level":0,"openings":[["door",0.6,6.4,0,2.2]]},
+    {"id":"G-I1","a":[-1,-4.5],"b":[-1,1],"thickness":0.12,"baseY":0,"height":3,"level":0,"openings":[["door",3.6,5.2,0,2.2]]},
+    {"id":"G-I2","a":[4,-4.5],"b":[4,4.5],"thickness":0.12,"baseY":0,"height":3,"level":0,"openings":[["door",2,2.9,0,2.2],["door",6,6.9,0,2.2]]},
+    {"id":"G-I3","a":[4,-1],"b":[8,-1],"thickness":0.12,"baseY":0,"height":3,"level":0,"openings":[]},
+    {"id":"G-I4","a":[4,1],"b":[8,1],"thickness":0.12,"baseY":0,"height":3,"level":0,"openings":[]},
+    {"id":"G-I5","a":[-1,1],"b":[-1,4.5],"thickness":0.12,"baseY":0,"height":3,"level":0,"openings":[]},
+    {"id":"U-N","a":[-3,-3.5],"b":[9.5,-3.5],"thickness":0.22,"baseY":3.2,"height":3,"level":1,"openings":[["window",1.5,6,0.9,2.3],["window",7.5,11,0.9,2.3]]},
+    {"id":"U-E","a":[9.5,-3.5],"b":[9.5,4],"thickness":0.22,"baseY":3.2,"height":3,"level":1,"openings":[["window",1,6.5,0.4,2.6]]},
+    {"id":"U-S","a":[9.5,4],"b":[-3,4],"thickness":0.22,"baseY":3.2,"height":3,"level":1,"openings":[["window",1,11.5,0.1,2.7]]},
+    {"id":"U-W","a":[-3,4],"b":[-3,-3.5],"thickness":0.22,"baseY":3.2,"height":3,"level":1,"openings":[["window",1.5,6,0.1,2.7]]}
+  ],
+  "slabs": [
+    {"id":"ROOF-LOWER","x0":-8.6,"z0":-5.1,"x1":8.6,"z1":5.6,"y":3,"thickness":0.25,"level":0},
+    {"id":"ROOF-UPPER","x0":-4.2,"z0":-4.6,"x1":10.8,"z1":5.4,"y":6.25,"thickness":0.3,"level":1}
+  ],
+  "louvres": {"x0":-2.4,"x1":3.4,"z":4.35,"baseY":3.3,"height":2.9,"count":18},
+  "pool": {"x0":-13,"z0":2,"x1":-9.2,"z1":7.4},
+  "trees": [[-13.5,-6.5],[10.5,-8.2],[13.6,1.2],[9.6,8.4],[-14.4,-1.6],[2,-9.2]],
+  "pathStones": [[2.6,5.6],[2.3,6.7],[2.7,7.8],[2.4,8.9],[2.8,10]],
+  "stair": {"status":"reserved-volume","room":"Entrance & stair","bounds":{"x0":-1,"z0":1,"x1":4,"z1":4.5},"productionNote":"Detailed flight geometry requires architectural approval before final modelling."}
+}

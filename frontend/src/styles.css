@@ -1,0 +1,5 @@
+/* Global stylesheet entry. Owner: F — Foundation. */
+@import 'tailwindcss';
+@import './styles/tokens.css';
+@import './styles/base.css';
+@import './styles/components.css';
