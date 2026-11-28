@@ -6,6 +6,7 @@ using BuildMind.Application.Features.PlanEditor.Integration;
 using BuildMind.Application.Features.PlanEditor.Versioning;
 using BuildMind.Application.Features.Planning;
 using BuildMind.Application.Features.Requirements.Abstractions;
+using BuildMind.Application.Features.Survey.Abstractions;
 using BuildMind.Domain.Entities;
 using BuildMind.Domain.ValueObjects;
 
@@ -163,6 +164,38 @@ public sealed class PlanningServiceTests
         Assert.Equal(1, result.Value.VersionNumber);
     }
 
+    [Fact]
+    public async Task Manual_plan_creation_requires_valid_geometry_and_persists_server_validated_revision()
+    {
+        var harness = new Harness();
+        var save = new PlanSaveService(harness.Access, harness.Jobs, harness.Lands, harness.Requirements, harness.Policies,
+            harness.Compute, harness.Plans, TimeProvider.System);
+        var geometry = new PlanGeometryDto
+        {
+            SchemaVersion = GeometrySchemaInfo.DraftVersion,
+            ProjectId = Project,
+            PlanId = Guid.NewGuid(),
+            LandRevisionId = harness.Lands.Current!.Id,
+            RequirementsRevisionId = harness.Requirements.Current!.Id,
+            CoordinateSystem = harness.Lands.Current.Land.CoordinateSystem,
+            Floors = [new FloorDto { Id = Guid.NewGuid(), Level = 0, Rooms = [], Walls = [], Openings = [] }],
+        };
+
+        harness.Compute.PlanValid = false;
+        var rejected = await save.CreateManualPlanAsync(Project, new CreateManualPlanCommand(geometry, "Manual draft"), default);
+        Assert.Equal(PlanningStatus.ValidationFailed, rejected.Status);
+        Assert.Equal("MANUAL_PLAN_VALIDATION_FAILED", rejected.Code);
+        Assert.Null(harness.Plans.Created);
+
+        harness.Compute.PlanValid = true;
+        var created = await save.CreateManualPlanAsync(Project, new CreateManualPlanCommand(geometry, "Manual draft"), default);
+        Assert.Equal(PlanningStatus.Success, created.Status);
+        Assert.NotNull(harness.Plans.Created);
+        Assert.Equal(1, created.Value!.VersionNumber);
+        Assert.Equal("Manual draft", created.Value.ChangeSummary);
+        Assert.NotEqual(geometry.PlanId, created.Value.PlanId);
+    }
+
     private static GenerationPolicy Policy() => new("synthetic-policy", "DEVELOPMENT ONLY",
         new Dictionary<string, RoomDimensionsDto>
         {
@@ -217,6 +250,112 @@ public sealed class PlanningServiceTests
             Task.FromResult(authorized
                 ? new ProjectAuthorizationResult(ProjectAuthorizationStatus.Authorized, new ProjectAuthorizationSnapshot(projectId, actorId, new AuthorizationVersion(3)))
                 : new ProjectAuthorizationResult(ProjectAuthorizationStatus.Denied));
+    }
+
+    [Fact]
+    public async Task Land_submit_computes_perimeter_and_forwards_previous_frame_anchor()
+    {
+        var lands = new FakeLands
+        {
+            Current = Land() with
+            {
+                FrameJson = """{"frame":{"frameId":"00000000-0000-0000-0000-000000000000","crs":"EPSG:5235","anchor":[500100,500200]},"edges":[{"edgeId":"11111111-1111-1111-1111-111111111111","start":[0,0],"end":[12,0],"lengthM":12,"gridBearingDeg":90,"role":"UNASSIGNED","parentEdgeId":null}]}""",
+            },
+        };
+        var compute = new FakeCompute();
+        var access = new PlanningAccess(new User(), new Authorization(true));
+        var service = new LandService(access, lands, compute, new FakeSurveys(), TimeProvider.System);
+        var exterior = new[]
+        {
+            new CoordinatePointDto { X = 0, Y = 0 },
+            new CoordinatePointDto { X = 12, Y = 0 },
+            new CoordinatePointDto { X = 12, Y = 10 },
+            new CoordinatePointDto { X = 0, Y = 10 },
+        };
+
+        var result = await service.SubmitAsync(Project, new SubmitLandCommand(exterior, lands.Current.Id, null), CancellationToken.None);
+
+        Assert.Equal(PlanningStatus.Success, result.Status);
+        Assert.Equal(44d, result.Value!.PerimeterM);
+        Assert.NotNull(compute.LastLandFrameInput);
+        Assert.Equal("EPSG:5235", compute.LastLandFrameInput!.PreviousCrs);
+        Assert.NotNull(compute.LastLandFrameInput.PreviousAnchor);
+        Assert.Equal([500100d, 500200d], compute.LastLandFrameInput.PreviousAnchor!);
+        Assert.Single(compute.LastLandFrameInput.PreviousEdges!);
+    }
+
+    [Fact]
+    public async Task Land_submit_accepts_user_selected_location_and_project_owned_reported_area_without_spoofed_verification()
+    {
+        var surveyId = Guid.NewGuid();
+        var surveys = new FakeSurveys();
+        surveys.AddOwned(Project, surveyId, Actor);
+        var reviews = new FakeSurveyReviews();
+        var lands = new FakeLands();
+        var service = new LandService(new PlanningAccess(new User(), new Authorization(true)), lands, new FakeCompute(), surveys, TimeProvider.System, reviews);
+        var exterior = new[]
+        {
+            new CoordinatePointDto { X = 0, Y = 0 },
+            new CoordinatePointDto { X = 12, Y = 0 },
+            new CoordinatePointDto { X = 12, Y = 10 },
+            new CoordinatePointDto { X = 0, Y = 10 },
+        };
+
+        // Client cannot claim geocoding verification or manually reviewed status without review evidence.
+        var verifiedSpoof = await service.SubmitAsync(Project, new SubmitLandCommand(exterior, null, surveyId,
+            Location: new LandLocationInput("LK-1100", "Colombo", 6.9271, 79.8612, "GeocodingProvider", "Verified", "Nominatim", DateTimeOffset.UtcNow)), CancellationToken.None);
+        Assert.Equal(PlanningStatus.ValidationFailed, verifiedSpoof.Status);
+        Assert.Equal("LAND_LOCATION_VERIFICATION_FORBIDDEN", verifiedSpoof.Code);
+
+        var unreviewedClaim = await service.SubmitAsync(Project, new SubmitLandCommand(exterior, null, surveyId,
+            ReportedArea: new ReportedLandAreaInput(1500, "FT2", surveyId, 1, "Lot A", "ManuallyReviewed")), CancellationToken.None);
+        Assert.Equal(PlanningStatus.ValidationFailed, unreviewedClaim.Status);
+        Assert.Equal("REPORTED_AREA_REVIEW_EVIDENCE_REQUIRED", unreviewedClaim.Code);
+
+        var foreignSurvey = await service.SubmitAsync(Project, new SubmitLandCommand(exterior, null, null,
+            ReportedArea: new ReportedLandAreaInput(1500, "FT2", Guid.NewGuid(), 1, "Foreign")), CancellationToken.None);
+        Assert.Equal(PlanningStatus.ValidationFailed, foreignSurvey.Status);
+        Assert.Equal("REPORTED_AREA_SURVEY_NOT_FOUND", foreignSurvey.Code);
+
+        // With valid review evidence and unverified user-selected location, both persist distinctly from calculated AreaM2.
+        reviews.AddReview(surveyId);
+        var valid = await service.SubmitAsync(Project, new SubmitLandCommand(exterior, null, surveyId,
+            Location: new LandLocationInput("LK-1100", "Colombo", 6.9271, 79.8612, "UserSelected"),
+            ReportedArea: new ReportedLandAreaInput(1500, "FT2", surveyId, 1, "Lot A", "ManuallyReviewed")), CancellationToken.None);
+        Assert.Equal(PlanningStatus.Success, valid.Status);
+        Assert.Equal(120d, valid.Value!.AreaM2);
+        Assert.Equal(44d, valid.Value.PerimeterM);
+        Assert.NotNull(valid.Value.Location);
+        Assert.Equal("Colombo", valid.Value.Location!.LocalityName);
+        Assert.Equal(BuildMind.Domain.ValueObjects.Land.LandLocationVerificationStatus.NotVerified, valid.Value.Location.VerificationStatus);
+        Assert.NotNull(valid.Value.ReportedArea);
+        Assert.Equal(1500d, valid.Value.ReportedArea!.OriginalValue);
+        Assert.Equal(1500d * 0.09290304, valid.Value.ReportedArea.AreaM2!.Value, 6);
+        Assert.Equal(ReportedAreaReviewStatus.ManuallyReviewed, valid.Value.ReportedArea.ReviewStatus);
+    }
+
+    private sealed class FakeSurveys : ISurveyRepository
+    {
+        private readonly Dictionary<(Guid ProjectId, Guid SurveyId), Survey> _items = [];
+        public void AddOwned(Guid projectId, Guid surveyId, Guid actor) =>
+            _items[(projectId, surveyId)] = Survey.CreateQueued(surveyId, projectId, actor, Guid.NewGuid(), "survey.pdf", "application/pdf", 1024, new string('a', 64), DateTimeOffset.UtcNow);
+        public Task<Survey?> GetAsync(Guid projectId, Guid surveyId, CancellationToken cancellationToken) =>
+            Task.FromResult(_items.GetValueOrDefault((projectId, surveyId)));
+        public Task<Survey?> AddAsync(Survey survey, CancellationToken cancellationToken) =>
+            Task.FromResult<Survey?>(survey);
+        public Task<bool> UpdateAsync(Survey survey, long expectedStateVersion, CancellationToken cancellationToken) =>
+            Task.FromResult(false);
+    }
+
+    private sealed class FakeSurveyReviews : ISurveyReviewStore
+    {
+        private readonly Dictionary<Guid, List<SurveyReviewRevision>> _bySurvey = [];
+        public void AddReview(Guid surveyId) => _bySurvey[surveyId] =
+            [new SurveyReviewRevision(Guid.NewGuid(), Guid.NewGuid(), surveyId, 1, Actor, DateTimeOffset.UtcNow, [], "ok")];
+        public Task<IReadOnlyList<SurveyReviewRevision>> ListAsync(Guid projectId, Guid surveyId, CancellationToken token) =>
+            Task.FromResult<IReadOnlyList<SurveyReviewRevision>>(_bySurvey.GetValueOrDefault(surveyId) ?? []);
+        public Task<ProtectedWriteStatus> AppendAsync(SurveyReviewRevision revision, Guid projectId, long authorizationVersion, CancellationToken token) =>
+            Task.FromResult(ProtectedWriteStatus.Written);
     }
 
     private sealed class FakePolicies : IGenerationPolicyProvider { public GenerationPolicy? Get() => Policy(); }
@@ -285,12 +424,15 @@ public sealed class PlanningServiceTests
         public string Outcome { get; set; } = GenerationOutcomes.Success;
         public Exception? Failure { get; set; }
         public bool PlanValid { get; set; } = true;
+        public LandFrameInput? LastLandFrameInput { get; private set; }
 
         public Task<LandFrameResult> BuildLandFrameAsync(LandFrameInput input, CancellationToken cancellationToken)
         {
-            var local = input.Exterior.ToArray();
-            var digest = LandFrameDigest.Compute("LOCAL", 0, 0, local.Select(p => (p.X, p.Y)).ToArray());
-            return Task.FromResult(new LandFrameResult(true, "VALID", local, """{"frameId":"00000000-0000-0000-0000-000000000000","crs":"LOCAL"}""",
+            LastLandFrameInput = input;
+            var pts = input.Exterior;
+            var open = pts.Count > 1 && pts[0].X == pts[^1].X && pts[0].Y == pts[^1].Y ? pts.Take(pts.Count - 1).ToArray() : pts.ToArray();
+            var digest = LandFrameDigest.Compute("LOCAL", 0, 0, open.Select(p => (p.X, p.Y)).ToArray());
+            return Task.FromResult(new LandFrameResult(true, "VALID", open, """{"frameId":"00000000-0000-0000-0000-000000000000","crs":"LOCAL"}""",
                 digest, [], "LOCAL", [0, 0]));
         }
 

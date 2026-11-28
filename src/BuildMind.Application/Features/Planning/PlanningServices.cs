@@ -12,6 +12,8 @@ using BuildMind.Application.Features.PlanEditor.Versioning;
 using BuildMind.Application.Features.Requirements.Abstractions;
 using BuildMind.Application.Features.Survey.Abstractions;
 using BuildMind.Domain.Entities;
+using BuildMind.Domain.ValueObjects;
+using BuildMind.Domain.ValueObjects.Land;
 
 namespace BuildMind.Application.Features.Planning;
 
@@ -54,12 +56,30 @@ public static class DeterministicIds
     }
 }
 
+public sealed record LandLocationInput(
+    string? LocalityId,
+    string? LocalityName,
+    double? Latitude = null,
+    double? Longitude = null,
+    string? Source = null,
+    string? VerificationStatus = null,
+    string? VerificationProvider = null,
+    DateTimeOffset? VerifiedAtUtc = null);
+
+public sealed record ReportedLandAreaInput(
+    double? OriginalValue,
+    string? Unit,
+    Guid? SourceFileId,
+    int? SourcePageNumber = null,
+    string? SourceReferenceText = null,
+    string? ReviewStatus = null);
+
 public sealed record SubmitLandCommand(IReadOnlyList<CoordinatePointDto>? Exterior, Guid? ExpectedCurrentLandRevisionId, Guid? SurveyId,
-    GeoreferenceInput? Georeference = null);
+    GeoreferenceInput? Georeference = null, LandLocationInput? Location = null, ReportedLandAreaInput? ReportedArea = null);
 
 public sealed class LandService(
     PlanningAccess access, ILandRevisionStore store, IPlanningComputeClient compute, ISurveyRepository surveys,
-    TimeProvider time)
+    TimeProvider time, ISurveyReviewStore? surveyReviews = null)
 {
     public const int MaxVertices = 129;
     public const double MaxCoordinateM = 1_000_000;
@@ -105,6 +125,12 @@ public sealed class LandService(
         if (command.SurveyId is { } surveyId
             && (surveyId == Guid.Empty || await surveys.GetAsync(projectId, surveyId, token).ConfigureAwait(false) is null))
             return new(PlanningStatus.ValidationFailed, Code: "SURVEY_NOT_FOUND");
+        var (location, locationError) = ValidateLocation(command.SurveyId, command.Location);
+        if (locationError is not null)
+            return new(PlanningStatus.ValidationFailed, Code: locationError);
+        var (reportedArea, areaError) = await ValidateReportedAreaAsync(projectId, command.ReportedArea, token).ConfigureAwait(false);
+        if (areaError is not null)
+            return new(PlanningStatus.ValidationFailed, Code: areaError);
 
         var current = await store.GetCurrentAsync(projectId, token).ConfigureAwait(false);
         if (current?.Id != command.ExpectedCurrentLandRevisionId)
@@ -129,8 +155,9 @@ public sealed class LandService(
         LandFrameResult frame;
         try
         {
+            var (previousEdges, previousCrs, previousAnchor) = PreviousFrame(current);
             frame = await compute.BuildLandFrameAsync(new LandFrameInput(geo?.SourceCrs ?? "LOCAL", geo is null ? "m" : geo.SourceUnit,
-                geo?.CalculationCrs, geo?.SourceExterior ?? ring!, PreviousEdges(current)), token).ConfigureAwait(false);
+                geo?.CalculationCrs, geo?.SourceExterior ?? ring!, previousEdges, previousCrs, previousAnchor), token).ConfigureAwait(false);
         }
         catch (DependencyFailureException failure) { return DependencyFailure<LandRevision>(failure); }
         if (!frame.Valid || frame.LocalExterior is null)
@@ -158,8 +185,22 @@ public sealed class LandService(
         if (!check.Valid || check.AreaM2 is not { } area || check.EdgeCount is not { } edges)
             return new(PlanningStatus.ValidationFailed, Code: check.Code);
 
+        var perimeter = 0d;
+        for (var i = 1; i < ring.Count; i++)
+        {
+            var dx = ring[i].X - ring[i - 1].X;
+            var dy = ring[i].Y - ring[i - 1].Y;
+            var segment = Math.Sqrt(dx * dx + dy * dy);
+            if (!double.IsFinite(segment) || segment <= 0)
+                return new(PlanningStatus.ValidationFailed, Code: "LAND_PERIMETER_INVALID");
+            perimeter += segment;
+        }
+        if (!double.IsFinite(perimeter) || perimeter <= 0)
+            return new(PlanningStatus.ValidationFailed, Code: "LAND_PERIMETER_INVALID");
+
         var revision = new LandRevision(id, projectId, (current?.RevisionNumber ?? 0) + 1, land, area, edges,
-            command.SurveyId, actor, PlanningClock.Now(time), frameJson, frame.GeometryDigest);
+            command.SurveyId, actor, PlanningClock.Now(time), frameJson, frame.GeometryDigest,
+            PerimeterM: perimeter, Location: location, ReportedArea: reportedArea);
         return await store.TryAppendAsync(revision, command.ExpectedCurrentLandRevisionId, version, token).ConfigureAwait(false) switch
         {
             ProtectedWriteStatus.Written => PlanningResult<LandRevision>.Ok(revision),
@@ -168,14 +209,106 @@ public sealed class LandService(
         };
     }
 
-    /// <summary>Edges of the current revision, for split lineage of the next one.</summary>
-    private static IReadOnlyList<LandEdge>? PreviousEdges(LandRevision? current)
+    private static (LandLocation? Location, string? ErrorCode) ValidateLocation(Guid? surveyId, LandLocationInput? input)
     {
-        if (current?.FrameJson is not { } json) return null;
+        if (input is null) return (null, null);
+        if (!string.IsNullOrWhiteSpace(input.VerificationStatus)
+            && !string.Equals(input.VerificationStatus.Trim(), nameof(LandLocationVerificationStatus.NotVerified), StringComparison.Ordinal))
+            return (null, "LAND_LOCATION_VERIFICATION_FORBIDDEN");
+        if (!string.IsNullOrWhiteSpace(input.VerificationProvider) || input.VerifiedAtUtc is not null)
+            return (null, "LAND_LOCATION_VERIFICATION_FORBIDDEN");
+        if (string.Equals(input.Source?.Trim(), nameof(LandLocationSource.GeocodingProvider), StringComparison.Ordinal))
+            return (null, "LAND_LOCATION_SOURCE_FORBIDDEN");
+
+        var source = LandLocationSource.UserSelected;
+        if (!string.IsNullOrWhiteSpace(input.Source))
+        {
+            if (!Enum.TryParse<LandLocationSource>(input.Source.Trim(), ignoreCase: false, out source) || !Enum.IsDefined(source))
+                return (null, "LAND_LOCATION_INVALID");
+            if (source == LandLocationSource.SurveyDocument && (surveyId is null || surveyId == Guid.Empty))
+                return (null, "SURVEY_NOT_FOUND");
+        }
+
+        try
+        {
+            var location = LandLocation.Create(
+                input.LocalityName ?? string.Empty,
+                source,
+                input.LocalityId,
+                input.Latitude,
+                input.Longitude,
+                LandLocationVerificationStatus.NotVerified,
+                verificationProvider: null,
+                verifiedAtUtc: null);
+            return (location, null);
+        }
+        catch (ArgumentException)
+        {
+            return (null, "LAND_LOCATION_INVALID");
+        }
+    }
+
+    private async Task<(ReportedLandArea? ReportedArea, string? ErrorCode)> ValidateReportedAreaAsync(
+        Guid projectId, ReportedLandAreaInput? input, CancellationToken token)
+    {
+        if (input is null) return (null, null);
+        if (input.SourceFileId is not { } sourceFileId || sourceFileId == Guid.Empty)
+            return (null, "REPORTED_AREA_SURVEY_NOT_FOUND");
+        if (await surveys.GetAsync(projectId, sourceFileId, token).ConfigureAwait(false) is null)
+            return (null, "REPORTED_AREA_SURVEY_NOT_FOUND");
+        if (input.OriginalValue is not { } originalValue)
+            return (null, "LAND_REPORTED_AREA_INVALID");
+        if (string.IsNullOrWhiteSpace(input.Unit)
+            || !Enum.TryParse<ReportedAreaUnit>(input.Unit.Trim(), ignoreCase: false, out var unit)
+            || !Enum.IsDefined(unit))
+            return (null, "LAND_REPORTED_AREA_INVALID");
+
+        var reviewStatus = ReportedAreaReviewStatus.Unreviewed;
+        if (!string.IsNullOrWhiteSpace(input.ReviewStatus))
+        {
+            if (!Enum.TryParse<ReportedAreaReviewStatus>(input.ReviewStatus.Trim(), ignoreCase: false, out reviewStatus)
+                || !Enum.IsDefined(reviewStatus))
+                return (null, "LAND_REPORTED_AREA_INVALID");
+            if (reviewStatus == ReportedAreaReviewStatus.ManuallyReviewed)
+            {
+                var reviews = surveyReviews is null
+                    ? []
+                    : await surveyReviews.ListAsync(projectId, sourceFileId, token).ConfigureAwait(false);
+                if (reviews.Count == 0)
+                    return (null, "REPORTED_AREA_REVIEW_EVIDENCE_REQUIRED");
+            }
+        }
+
+        try
+        {
+            var source = new LandAreaSourceReference(sourceFileId, input.SourcePageNumber, input.SourceReferenceText?.Trim());
+            return (new ReportedLandArea(originalValue, unit, source, reviewStatus), null);
+        }
+        catch (ArgumentException)
+        {
+            return (null, "LAND_REPORTED_AREA_INVALID");
+        }
+    }
+
+    /// <summary>Edges, CRS, and anchor of the current revision, for split lineage across anchor shifts.</summary>
+    private static (IReadOnlyList<LandEdge>? Edges, string? Crs, double[]? Anchor) PreviousFrame(LandRevision? current)
+    {
+        if (current?.FrameJson is not { } json) return (null, null, null);
         using var document = System.Text.Json.JsonDocument.Parse(json);
-        return document.RootElement.TryGetProperty("edges", out var edges)
-            ? System.Text.Json.JsonSerializer.Deserialize<LandEdge[]>(edges.GetRawText(), new System.Text.Json.JsonSerializerOptions(System.Text.Json.JsonSerializerDefaults.Web))
+        var root = document.RootElement;
+        var edges = root.TryGetProperty("edges", out var edgesEl)
+            ? System.Text.Json.JsonSerializer.Deserialize<LandEdge[]>(edgesEl.GetRawText(), new System.Text.Json.JsonSerializerOptions(System.Text.Json.JsonSerializerDefaults.Web))
             : null;
+        string? crs = null;
+        double[]? anchor = null;
+        if (root.TryGetProperty("frame", out var frameEl) && frameEl.ValueKind == System.Text.Json.JsonValueKind.Object)
+        {
+            if (frameEl.TryGetProperty("crs", out var crsEl) && crsEl.ValueKind == System.Text.Json.JsonValueKind.String)
+                crs = crsEl.GetString();
+            if (frameEl.TryGetProperty("anchor", out var anchorEl) && anchorEl.ValueKind == System.Text.Json.JsonValueKind.Array && anchorEl.GetArrayLength() == 2)
+                anchor = [anchorEl[0].GetDouble(), anchorEl[1].GetDouble()];
+        }
+        return (edges, crs, anchor);
     }
 
     /// <summary>Coordinate transformation preview (V3 land workflow): no persistence.</summary>
@@ -188,8 +321,9 @@ public sealed class LandService(
         try
         {
             var current = await store.GetCurrentAsync(projectId, token).ConfigureAwait(false);
+            var (previousEdges, previousCrs, previousAnchor) = PreviousFrame(current);
             var frame = await compute.BuildLandFrameAsync(new LandFrameInput(geo.SourceCrs, geo.SourceUnit, geo.CalculationCrs, geo.SourceExterior,
-                PreviousEdges(current)), token).ConfigureAwait(false);
+                previousEdges, previousCrs, previousAnchor), token).ConfigureAwait(false);
             return frame.Valid ? PlanningResult<LandFrameResult>.Ok(frame) : new(PlanningStatus.ValidationFailed, Code: frame.Code);
         }
         catch (DependencyFailureException failure) { return DependencyFailure<LandFrameResult>(failure); }
@@ -511,6 +645,7 @@ public sealed class RagRegulatoryEvidenceProvider(
 }
 
 public sealed record SaveCandidateCommand(string? ChangeSummary);
+public sealed record CreateManualPlanCommand(PlanGeometryDto? Geometry, string? ChangeSummary);
 
 /// <summary>Saves one generated candidate as a new plan (revision 1) after server-side re-validation.</summary>
 public sealed class PlanSaveService(
@@ -568,6 +703,70 @@ public sealed class PlanSaveService(
             candidate.Geometry.SchemaVersion, candidate.GeometryJson, candidate.GeometryHash, land.Id, requirement.Id,
             evidence.Reference, null, actor, now,
             command.ChangeSummary ?? $"Saved generated alternative {candidate.Ordinal + 1} (preliminary)");
+        return await plans.TryCreateAsync(revision, evidence, version, token).ConfigureAwait(false) switch
+        {
+            ProtectedWriteStatus.Written => PlanningResult<PlanRevisionSnapshot>.Ok(revision),
+            ProtectedWriteStatus.Conflict => new(PlanningStatus.Conflict, Code: "PLAN_ALREADY_SAVED"),
+            _ => new(PlanningStatus.NotFound),
+        };
+    }
+
+    /// <summary>Creates a new manual 2D draft floor plan (revision 1) after full server-side geometry and requirement validation.</summary>
+    public async Task<PlanningResult<PlanRevisionSnapshot>> CreateManualPlanAsync(
+        Guid projectId, CreateManualPlanCommand command, CancellationToken token)
+    {
+        ArgumentNullException.ThrowIfNull(command);
+        var (status, actor, version) = await access.AuthorizeAsync(projectId, token).ConfigureAwait(false);
+        if (status != PlanningStatus.Success) return new(status);
+        if (command.ChangeSummary is { Length: > 500 })
+            return new(PlanningStatus.ValidationFailed, Code: "CHANGE_SUMMARY_TOO_LONG");
+        if (command.Geometry is null || command.Geometry.Floors is null || command.Geometry.Floors.Count == 0)
+            return new(PlanningStatus.ValidationFailed, Code: "MANUAL_PLAN_GEOMETRY_REQUIRED");
+        if (command.Geometry.Floors.Count != 1 || command.Geometry.Floors.Any(f => f.Level != 0))
+            return new(PlanningStatus.ValidationFailed, Code: "FLOOR_SCOPE_UNSUPPORTED");
+
+        var land = await lands.GetCurrentAsync(projectId, token).ConfigureAwait(false);
+        var requirement = await requirements.GetCurrentAsync(projectId, token).ConfigureAwait(false);
+        if (land is null || requirement is null)
+            return new(PlanningStatus.InputsMissing, Code: land is null ? "LAND_REVISION_MISSING" : "REQUIREMENTS_REVISION_MISSING");
+
+        if ((command.Geometry.ProjectId != Guid.Empty && command.Geometry.ProjectId != projectId)
+            || (command.Geometry.LandRevisionId != Guid.Empty && command.Geometry.LandRevisionId != land.Id)
+            || (command.Geometry.RequirementsRevisionId != Guid.Empty && command.Geometry.RequirementsRevisionId != requirement.Id))
+            return new(PlanningStatus.StaleInputs, Code: "STALE_INPUT_REVISIONS");
+
+        var planId = Guid.NewGuid();
+        var normalized = new PlanGeometryDto
+        {
+            SchemaVersion = GeometrySchemaInfo.DraftVersion,
+            ProjectId = projectId,
+            PlanId = planId,
+            LandRevisionId = land.Id,
+            RequirementsRevisionId = requirement.Id,
+            CoordinateSystem = land.Land.CoordinateSystem,
+            Floors = command.Geometry.Floors,
+        };
+        var geometryJson = JsonSerializer.Serialize(normalized, PlanEditorJson.StrictOptions);
+        var geometryHash = PlanRevisionService.ComputeGeometryHash(geometryJson);
+
+        var policy = policies.Get();
+        var synthetic = policy is { EvidenceMode: PlanningSchemas.EvidenceModeSynthetic, SyntheticSetbackM: not null };
+        var check = await ValidateAsync(compute, land, requirement, normalized, geometryJson, geometryHash,
+            synthetic ? policy!.SyntheticSetbackM : null, token).ConfigureAwait(false);
+        if (check.Status != PlanningStatus.Success) return new(check.Status, Code: check.Code);
+        if (!check.Value!.GeometryValid || check.Value.RequirementsMatch != true)
+            return new(PlanningStatus.ValidationFailed, Code: "MANUAL_PLAN_VALIDATION_FAILED", Diagnostics: check.Value.Diagnostics);
+
+        var now = PlanningClock.Now(time);
+        var evidence = IssueEvidence(projectId, planId, geometryHash, check.Value,
+            synthetic ? PlanningSchemas.SyntheticEvidenceStatus : PlanningSchemas.UnverifiedEvidenceStatus, now);
+        if (evidence.Reference.HasBlockingIssues)
+            return new(PlanningStatus.ValidationFailed, Code: "MANUAL_PLAN_VALIDATION_FAILED", Diagnostics: check.Value.Diagnostics);
+
+        var revision = new PlanRevisionSnapshot(Guid.NewGuid(), planId, projectId, null, 1,
+            normalized.SchemaVersion, geometryJson, geometryHash, land.Id, requirement.Id,
+            evidence.Reference, null, actor, now,
+            string.IsNullOrWhiteSpace(command.ChangeSummary) ? "Manual 2D draft floor plan" : command.ChangeSummary.Trim());
         return await plans.TryCreateAsync(revision, evidence, version, token).ConfigureAwait(false) switch
         {
             ProtectedWriteStatus.Written => PlanningResult<PlanRevisionSnapshot>.Ok(revision),

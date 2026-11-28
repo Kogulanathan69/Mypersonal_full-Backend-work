@@ -23,6 +23,9 @@ public sealed class RequirementMutationMigrationLiveTests
         const string latest =
             "20261126173737_AddRequirementMutationReceipts";
 
+        const string currentHead =
+            "20261127153155_AddLandMetadataAndConstraints";
+
         await using var db = await SchemaAsync();
 
         var (owner, project) = await SeedAsync(db);
@@ -90,9 +93,10 @@ public sealed class RequirementMutationMigrationLiveTests
             migrationHistory = (await observer.Database
                 .GetAppliedMigrationsAsync()).ToArray();
 
-            Assert.Equal(17, migrationHistory.Length);
-            Assert.Equal(previous, migrationHistory[^2]);
-            Assert.Equal(latest, migrationHistory[^1]);
+            Assert.Equal(18, migrationHistory.Length);
+            Assert.Equal(previous, migrationHistory[^3]);
+            Assert.Equal(latest, migrationHistory[^2]);
+            Assert.Equal(currentHead, migrationHistory[^1]);
 
             var receipts = await observer
                 .Set<RequirementMutationReceiptRecord>()
@@ -114,7 +118,7 @@ public sealed class RequirementMutationMigrationLiveTests
             await rollback.GetService<IMigrator>()
                 .MigrateAsync(previous);
 
-            Assert.Equal(migrationHistory[..^1],
+            Assert.Equal(migrationHistory[..^2],
                 await rollback.Database.GetAppliedMigrationsAsync());
 
             var receiptTableCount = await rollback.Database
@@ -136,7 +140,7 @@ public sealed class RequirementMutationMigrationLiveTests
         await using (var reapply = Context(db))
         {
             await reapply.GetService<IMigrator>()
-                .MigrateAsync(latest);
+                .MigrateAsync(currentHead);
 
             Assert.Equal(migrationHistory,
                 await reapply.Database.GetAppliedMigrationsAsync());

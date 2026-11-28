@@ -396,8 +396,10 @@ public sealed class RequirementMutationLiveTests
 
                 var sql = commands.SingleOrDefault() ?? "";
 
-                if (sql.Contains("projects",
-                        StringComparison.OrdinalIgnoreCase) &&
+                if ((sql.Contains("users",
+                        StringComparison.OrdinalIgnoreCase) ||
+                     sql.Contains("projects",
+                        StringComparison.OrdinalIgnoreCase)) &&
                     sql.Contains("FOR UPDATE",
                         StringComparison.OrdinalIgnoreCase))
                     break;

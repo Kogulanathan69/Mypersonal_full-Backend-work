@@ -35,6 +35,8 @@ internal sealed class PlanningComputeClient(PythonServiceClient python) : IPlann
             schemaVersion = "captain-land-frame/1", sourceCrs = input.SourceCrs, sourceUnit = input.SourceUnit, calculationCrs = input.CalculationCrs,
             exterior = input.Exterior.Select(p => new[] { p.X, p.Y }).ToArray(),
             previousEdges = (input.PreviousEdges ?? []).Select(e => new { edgeId = e.EdgeId.ToString("D"), start = e.Start, end = e.End }).ToArray(),
+            previousCrs = input.PreviousCrs,
+            previousAnchor = input.PreviousAnchor,
         }, (_, _) => true, token).ConfigureAwait(false);
         try
         {

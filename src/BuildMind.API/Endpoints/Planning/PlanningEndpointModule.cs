@@ -55,7 +55,8 @@ public sealed class PlanningEndpointModule : IApiEndpointModule
         if (request.Exterior is null && request.Georeference is null) return Invalid("exterior");
         var result = await service.SubmitAsync(project, new SubmitLandCommand(
             request.Exterior?.Select(p => p is null ? null! : new CoordinatePointDto { X = p.X, Y = p.Y }).ToArray(),
-            request.ExpectedCurrentLandRevisionId, request.SurveyId, ToGeoreference(request.Georeference)), token);
+            request.ExpectedCurrentLandRevisionId, request.SurveyId, ToGeoreference(request.Georeference),
+            ToLocation(request.Location), ToReportedArea(request.ReportedArea)), token);
         return Map(result, Land, created: true);
     }
 
@@ -130,11 +131,30 @@ public sealed class PlanningEndpointModule : IApiEndpointModule
         : new GeoreferenceInput(g.SourceCrs ?? "", g.SourceUnit, g.CalculationCrs,
             (g.SourceExterior ?? []).Select(p => p is null ? null! : new CoordinatePointDto { X = p.X, Y = p.Y }).ToArray());
 
+    private static LandLocationInput? ToLocation(LandLocationHttpInput? l) => l is null ? null
+        : new LandLocationInput(l.LocalityId, l.LocalityName, l.Latitude, l.Longitude, l.Source,
+            l.VerificationStatus, l.VerificationProvider, l.VerifiedAtUtc);
+
+    private static ReportedLandAreaInput? ToReportedArea(ReportedLandAreaHttpInput? a) => a is null ? null
+        : new ReportedLandAreaInput(a.OriginalValue, a.Unit, a.SourceFileId, a.SourcePageNumber, a.SourceReferenceText, a.ReviewStatus);
+
     internal static object Land(LandRevision land) => new
     {
         landRevisionId = land.Id, land.ProjectId, land.RevisionNumber, exterior = land.Land.Boundary.Exterior,
-        coordinateSystem = land.Land.CoordinateSystem, areaM2 = land.AreaM2, land.EdgeCount, land.SurveyId, land.CreatedAtUtc,
-        geometryDigest = land.GeometryDigest,
+        coordinateSystem = land.Land.CoordinateSystem, areaM2 = land.AreaM2, perimeterM = land.PerimeterM,
+        land.EdgeCount, land.SurveyId, land.CreatedAtUtc, geometryDigest = land.GeometryDigest,
+        location = land.Location is { State: BuildMind.Domain.ValueObjects.Land.LandLocationState.Provided } loc ? new
+        {
+            loc.LocalityId, loc.LocalityName, loc.Latitude, loc.Longitude,
+            source = loc.Source?.ToString(), verificationStatus = loc.VerificationStatus.ToString(),
+            loc.VerificationProvider, loc.VerifiedAtUtc,
+        } : null,
+        reportedArea = land.ReportedArea is { } rep ? new
+        {
+            rep.OriginalValue, unit = rep.Unit.ToString(), areaM2 = rep.AreaM2,
+            sourceFileId = rep.Source.FileId, sourcePageNumber = rep.Source.PageNumber,
+            sourceReferenceText = rep.Source.ReferenceText, reviewStatus = rep.ReviewStatus.ToString(),
+        } : null,
         provenance = "User-confirmed boundary in a local metric frame; not a cadastral survey verification.",
     };
 
@@ -192,8 +212,12 @@ public sealed class PlanningEndpointModule : IApiEndpointModule
 }
 
 public sealed record PointHttpInput(double X, double Y);
+public sealed record LandLocationHttpInput(string? LocalityId, string? LocalityName, double? Latitude = null, double? Longitude = null,
+    string? Source = null, string? VerificationStatus = null, string? VerificationProvider = null, DateTimeOffset? VerifiedAtUtc = null);
+public sealed record ReportedLandAreaHttpInput(double? OriginalValue, string? Unit, Guid? SourceFileId, int? SourcePageNumber = null,
+    string? SourceReferenceText = null, string? ReviewStatus = null);
 public sealed record PutLandHttpRequest(PointHttpInput?[]? Exterior, Guid? ExpectedCurrentLandRevisionId, Guid? SurveyId,
-    GeoreferenceHttpInput? Georeference = null);
+    GeoreferenceHttpInput? Georeference = null, LandLocationHttpInput? Location = null, ReportedLandAreaHttpInput? ReportedArea = null);
 
 /// <summary>Explicit source CRS (EPSG code or LOCAL), unit for LOCAL (m|ft), optional projected calculation CRS.</summary>
 public sealed record GeoreferenceHttpInput(string? SourceCrs, string? SourceUnit, string? CalculationCrs, PointHttpInput?[]? SourceExterior);

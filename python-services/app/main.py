@@ -23,6 +23,8 @@ from app.internal.plan_validation import PlanValidationRequest, validate_plan
 from app.internal.exact_plan_validation import ExactPlanValidationRequest, GeometryBindingError, validate_exact_plan
 from app.internal.land_frame import LandFrameRequest, frame_from_request
 from app.geometry.land.validation import LandGeometryError
+from app.geometry.land.contracts import LandGeometryValidationRequest
+from app.geometry.land.routes import validate_land_geometry
 from app.internal.survey_extract import IntegrityRejected, SurveyExtractRequest
 from app.internal.survey_extract import extract as extract_survey
 from app.validation.boundary import ContractJsonError, parse_contract_json
@@ -124,6 +126,11 @@ def create_app(auth: InternalAuth = REQUIRED_WITHOUT_TOKENS) -> FastAPI:
     @application.get("/health")
     def health() -> dict[str, str]:
         return {"service": "buildmind-python", "status": "ok"}
+
+    @application.post("/geometry/land/validate")
+    async def m2_land_validate(request: Request):
+        parsed = await body(request, LandGeometryValidationRequest)
+        return await run_in_threadpool(validate_land_geometry, parsed)
 
     @application.post("/internal/v1/land/validate")
     async def land_validate(request: Request):

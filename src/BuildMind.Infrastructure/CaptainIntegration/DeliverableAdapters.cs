@@ -1,4 +1,5 @@
 using System.Text.Json;
+using BuildMind.Application.Abstractions;
 using BuildMind.Application.Features.ArchitectRequests.Services;
 using BuildMind.Application.Features.PlanEditor.Integration;
 using BuildMind.Application.Features.PlanEditor.Versioning;
@@ -67,7 +68,8 @@ internal sealed class PrivateReportArtifactStore(IConfiguration configuration)
 /// <summary>Captain binding for the M5 report generation and read boundary candidates (Development profile only).</summary>
 internal sealed class CaptainReportBoundary(
     BuildMindDbContext context, TransactionRunner transactions, IProjectAuthorizationPort authorization,
-    IPlanRevisionStore revisions, IRequirementRevisionRepository requirements, PrivateReportArtifactStore artifacts, TimeProvider time)
+    IPlanRevisionStore revisions, IRequirementRevisionRepository requirements, PrivateReportArtifactStore artifacts, TimeProvider time,
+    ICurrentUser? currentUser = null)
     : IReportGenerationBoundaryCandidate, IReportReadBoundaryCandidate
 {
     public const string SnapshotSchema = "captain-report-snapshot/1";
@@ -122,7 +124,7 @@ internal sealed class CaptainReportBoundary(
             });
             await context.SaveChangesAsync(inner).ConfigureAwait(false);
             return ProtectedWriteStatus.Written;
-        }, token).ConfigureAwait(false);
+        }, token, currentUser?.TokenVersion).ConfigureAwait(false);
         return status switch
         {
             ProtectedWriteStatus.Written => new(ReportAcceptanceStatus.Accepted, pending),
@@ -161,7 +163,7 @@ internal sealed class CaptainReportBoundary(
             await Notify.AddAsync(context, actor, "REPORT_READY", "Your preliminary report is ready", "A preliminary PDF report was generated.",
                 $"/projects/{pending.ProjectId}/reports/{pending.Id}", $"report-ready:{pending.Id}", now, inner).ConfigureAwait(false);
             return ProtectedWriteStatus.Written;
-        }, token).ConfigureAwait(false);
+        }, token, currentUser?.TokenVersion).ConfigureAwait(false);
         if (status == ProtectedWriteStatus.Written)
             return new(ReportPublicationStatus.Published, ready.Artifact);
         artifacts.TryDelete(artifact.ArtifactId); // the CAS did not publish it: remove the unreferenced private file
@@ -179,7 +181,7 @@ internal sealed class CaptainReportBoundary(
                 .Where(r => r.Id == pending.Id && r.StateVersion == 1 && r.Status == nameof(ReportStatus.Pending))
                 .ExecuteUpdateAsync(s => s.SetProperty(r => r.StateVersion, 2L).SetProperty(r => r.Status, nameof(ReportStatus.Failed))
                     .SetProperty(r => r.FailureCode, safeCode).SetProperty(r => r.FailedAtUtc, now), inner).ConfigureAwait(false) == 1
-                ? ProtectedWriteStatus.Written : ProtectedWriteStatus.Conflict, token).ConfigureAwait(false) == ProtectedWriteStatus.Written;
+                ? ProtectedWriteStatus.Written : ProtectedWriteStatus.Conflict, token, currentUser?.TokenVersion).ConfigureAwait(false) == ProtectedWriteStatus.Written;
     }
 
     public async Task<ReportReadReceipt> ReadAsync(Guid actor, Guid projectId, Guid reportId, bool download, int maximumBytes, CancellationToken token)
@@ -244,7 +246,8 @@ internal sealed class CaptainReportBoundary(
 /// </summary>
 internal sealed class CaptainArchitectBoundary(
     BuildMindDbContext context, TransactionRunner transactions, IProjectAuthorizationPort authorization,
-    CaptainReportBoundary reports, PrivateReportArtifactStore artifacts, IConfiguration configuration)
+    CaptainReportBoundary reports, PrivateReportArtifactStore artifacts, IConfiguration configuration,
+    ICurrentUser? currentUser = null)
     : IArchitectWorkflowBoundaryCandidate
 {
     public const string RecipientsFileKey = "CaptainIntegration:ArchitectRecipientsFile";
@@ -291,7 +294,7 @@ internal sealed class CaptainArchitectBoundary(
                     "A customer shared a preliminary report with you for review.", $"/architect/requests/{consent.RequestId}",
                     $"architect-request:{consent.RequestId}", proposed.RequestedAtUtc, inner).ConfigureAwait(false);
             return ProtectedWriteStatus.Written;
-        }, token).ConfigureAwait(false);
+        }, token, currentUser?.TokenVersion).ConfigureAwait(false);
         return status switch
         {
             ProtectedWriteStatus.Written => new(ArchitectBoundaryStatus.Accepted, actor, proposed),
@@ -345,7 +348,7 @@ internal sealed class CaptainArchitectBoundary(
                     "The customer withdrew consent; the shared report is no longer accessible.", null, $"architect-withdrawn:{request}",
                     withdrawn.WithdrawnAtUtc!.Value, inner).ConfigureAwait(false);
             return ProtectedWriteStatus.Written;
-        }, token).ConfigureAwait(false);
+        }, token, currentUser?.TokenVersion).ConfigureAwait(false);
         return status switch
         {
             ProtectedWriteStatus.Written => new(ArchitectBoundaryStatus.Accepted, actor, withdrawn, previous),

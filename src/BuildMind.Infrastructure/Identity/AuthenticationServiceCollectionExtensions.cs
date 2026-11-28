@@ -44,6 +44,7 @@ public static class AuthenticationServiceCollectionExtensions
         services.TryAddScoped<IUserSecurityStateReader>(
             provider => provider.GetRequiredService<IUserSessionStore>());
         services.TryAddScoped<IRefreshTokenStore, RefreshTokenStore>();
+        services.TryAddScoped<M1MutationSessionGuard>();
 
         // STEP 05 decision 7: reset-token persistence is ready, but PasswordRecoveryService and its endpoints stay
         // unregistered until an approved IPasswordResetEmailSender exists.

@@ -15,8 +15,13 @@ public sealed record SurveySummaryDto(Guid SurveyId, string OriginalFileName, st
 public sealed record SurveyListDto(IReadOnlyList<SurveySummaryDto> Items);
 public sealed record SurveyFileDto(byte[]? Content, string? FailureCode, string MediaType, string OriginalFileName, string Sha256Hash);
 
+public sealed record LandLocationDto(string? LocalityId, string? LocalityName, double? Latitude, double? Longitude, string? Source,
+    string VerificationStatus, string? VerificationProvider, DateTimeOffset? VerifiedAtUtc);
+public sealed record ReportedLandAreaDto(double OriginalValue, string Unit, double? AreaM2, Guid SourceFileId, int? SourcePageNumber,
+    string? SourceReferenceText, string ReviewStatus);
 public sealed record LandRevisionSummaryDto(Guid LandRevisionId, long RevisionNumber, double AreaM2, int EdgeCount, Guid? SurveyId,
-    string? GeometryDigest, bool Georeferenced, bool IsCurrent, DateTimeOffset CreatedAtUtc);
+    string? GeometryDigest, bool Georeferenced, bool IsCurrent, DateTimeOffset CreatedAtUtc,
+    double? PerimeterM = null, LandLocationDto? Location = null, ReportedLandAreaDto? ReportedArea = null);
 public sealed record LandRevisionListDto(IReadOnlyList<LandRevisionSummaryDto> Items);
 public sealed record LandRevisionDetailDto(LandRevisionSummaryDto Revision, JsonElement Land, JsonElement? Frame);
 
@@ -201,7 +206,15 @@ public sealed class CaptainReadModels
     }
 
     private static LandRevisionSummaryDto Land(LandRevisionRecord l, bool current) =>
-        new(l.Id, l.RevisionNumber, l.AreaM2, l.EdgeCount, l.SurveyId, l.GeometryDigest, l.FrameJson is not null, current, l.CreatedAtUtc);
+        new(l.Id, l.RevisionNumber, l.AreaM2, l.EdgeCount, l.SurveyId, l.GeometryDigest, l.FrameJson is not null, current, l.CreatedAtUtc,
+            l.PerimeterM,
+            l.LocationLocalityName is null ? null : new LandLocationDto(l.LocationLocalityId, l.LocationLocalityName, l.LocationLatitude,
+                l.LocationLongitude, l.LocationSource, l.LocationVerificationStatus ?? "NotVerified", l.LocationVerificationProvider,
+                l.LocationVerifiedAtUtc),
+            l.ReportedAreaOriginalValue is null || l.ReportedAreaUnit is null || l.ReportedAreaSourceFileId is null ? null
+                : new ReportedLandAreaDto(l.ReportedAreaOriginalValue.Value, l.ReportedAreaUnit, l.ReportedAreaM2,
+                    l.ReportedAreaSourceFileId.Value, l.ReportedAreaSourcePageNumber, l.ReportedAreaSourceReferenceText,
+                    l.ReportedAreaReviewStatus ?? "Unreviewed"));
 
     private static RequirementRevisionSummaryDto Requirement(RequirementRevisionRecord r, bool current) =>
         new(r.Id, r.RevisionNumber, r.SchemaVersion, r.CatalogueVersion, current, r.CreatedAtUtc);

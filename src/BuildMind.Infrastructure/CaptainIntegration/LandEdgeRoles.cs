@@ -1,4 +1,5 @@
 using System.Text.Json;
+using BuildMind.Application.Abstractions;
 using BuildMind.Application.Features.Planning;
 using BuildMind.Infrastructure.Persistence;
 using BuildMind.Infrastructure.Persistence.Records.Planning;
@@ -29,12 +30,14 @@ public sealed class LandEdgeRoleService
     private readonly BuildMindDbContext _context;
     private readonly TransactionRunner _transactions;
     private readonly TimeProvider _time;
+    private readonly ICurrentUser? _currentUser;
 
-    internal LandEdgeRoleService(BuildMindDbContext context, TransactionRunner transactions, TimeProvider time)
+    internal LandEdgeRoleService(BuildMindDbContext context, TransactionRunner transactions, TimeProvider time, ICurrentUser? currentUser = null)
     {
         _context = context;
         _transactions = transactions;
         _time = time;
+        _currentUser = currentUser;
     }
 
     public async Task<LandEdgeListDto?> GetAsync(Guid projectId, CancellationToken token)
@@ -93,7 +96,7 @@ public sealed class LandEdgeRoleService
                 await _context.SaveChangesAsync(inner).ConfigureAwait(false);
             }
             return ProtectedWriteStatus.Written;
-        }, token).ConfigureAwait(false);
+        }, token, _currentUser?.TokenVersion).ConfigureAwait(false);
         return status switch
         {
             ProtectedWriteStatus.Written => EdgeRoleWriteStatus.Written,

@@ -1,3 +1,4 @@
+using BuildMind.Application.Abstractions;
 using BuildMind.Application.Features.PlanEditor.Integration;
 using BuildMind.Application.Features.Survey.Abstractions;
 using BuildMind.Domain.Entities;
@@ -23,7 +24,8 @@ namespace BuildMind.Infrastructure.Persistence.Repositories.Survey;
 internal sealed class SurveyRepository(
     BuildMindDbContext context,
     TransactionRunner transactions,
-    IProjectAuthorizationPort authorization) : ISurveyRepository
+    IProjectAuthorizationPort authorization,
+    ICurrentUser? currentUser = null) : ISurveyRepository
 {
     public async Task<SurveyEntity?> GetAsync(Guid projectId, Guid surveyId, CancellationToken cancellationToken)
     {
@@ -54,7 +56,7 @@ internal sealed class SurveyRepository(
             return await transactions.ExecuteAsync(async token =>
             {
                 var allowed = await new ProjectMutationAuthorization(context)
-                    .LockAndCheckAsync(survey.ProjectId, survey.UploadedBy, snapshot.Version.Value, token)
+                    .LockAndCheckAsync(survey.ProjectId, survey.UploadedBy, snapshot.Version.Value, token, currentUser?.TokenVersion)
                     .ConfigureAwait(false);
                 if (!allowed)
                     throw new SurveyWriteRejected();

@@ -200,6 +200,27 @@ def _alternative(request: GenerationInput, ordinal: int, candidate, validated_at
     }
 
 
+def _vastu_score(rooms, bounds: tuple[float, float, float, float]) -> float:
+    """Internal non-blocking compass preference heuristic for ordering distinct candidates. Never blocks or is shown."""
+    min_x, min_y, max_x, max_y = bounds
+    span_x = max(max_x - min_x, 1e-6)
+    span_y = max(max_y - min_y, 1e-6)
+    score = 0.0
+    for room in rooms:
+        x0, y0, x1, y1 = room.bounds
+        nx = ((x0 + x1) * 0.5 - min_x) / span_x
+        ny = ((y0 + y1) * 0.5 - min_y) / span_y
+        if room.room_type == "kitchen":
+            score += nx + (1.0 - ny)
+        elif room.room_type == "livingRoom":
+            score += nx + ny
+        elif room.room_type == "bedroom":
+            score += (1.0 - nx) + (1.0 - ny)
+        elif room.room_type == "bathroom":
+            score += (1.0 - nx) * 0.5 + (1.0 - ny) * 0.5
+    return score
+
+
 def run_generation(run: GenerationRunRequest) -> dict:
     request = run.input
     evidence = request.regulatoryEvidence
@@ -245,8 +266,15 @@ def run_generation(run: GenerationRunRequest) -> dict:
         return _failure(request, _D04_OUTCOME.get(generation.status, "NEEDS_REVIEW"), generation.code)
 
     validated_at = datetime.now(timezone.utc).isoformat(timespec="microseconds").replace("+00:00", "Z")
+    xs = [float(p.x) for p in request.land.boundary.exterior]
+    ys = [float(p.y) for p in request.land.boundary.exterior]
+    bounds = (min(xs), min(ys), max(xs), max(ys)) if xs and ys else (0.0, 0.0, 1.0, 1.0)
+    ranked = sorted(
+        enumerate(generation.candidates),
+        key=lambda item: (-_vastu_score(item[1].rooms, bounds), item[0]),
+    )
     alternatives = [_alternative(request, index, candidate, validated_at)
-                    for index, candidate in enumerate(generation.candidates)]
+                    for index, (_, candidate) in enumerate(ranked)]
     if any(alternative is None for alternative in alternatives):
         # Truthful failure: never return a layout whose rooms cannot all be reached.
         return _failure(request, "INFEASIBLE", "PHYSICAL_ACCESS_UNSATISFIABLE")

@@ -8,6 +8,22 @@ internal sealed class LandRevisionRecord
     public long RevisionNumber { get; init; }
     public required string LandJson { get; init; }
     public double AreaM2 { get; init; }
+    public double? PerimeterM { get; init; }
+    public string? LocationLocalityId { get; init; }
+    public string? LocationLocalityName { get; init; }
+    public double? LocationLatitude { get; init; }
+    public double? LocationLongitude { get; init; }
+    public string? LocationSource { get; init; }
+    public string? LocationVerificationStatus { get; init; }
+    public string? LocationVerificationProvider { get; init; }
+    public DateTimeOffset? LocationVerifiedAtUtc { get; init; }
+    public double? ReportedAreaOriginalValue { get; init; }
+    public string? ReportedAreaUnit { get; init; }
+    public double? ReportedAreaM2 { get; init; }
+    public Guid? ReportedAreaSourceFileId { get; init; }
+    public int? ReportedAreaSourcePageNumber { get; init; }
+    public string? ReportedAreaSourceReferenceText { get; init; }
+    public string? ReportedAreaReviewStatus { get; init; }
     public int EdgeCount { get; init; }
     public Guid? SurveyId { get; init; }
     public Guid CreatedBy { get; init; }

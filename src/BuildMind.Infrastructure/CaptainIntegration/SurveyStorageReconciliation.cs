@@ -1,3 +1,4 @@
+using BuildMind.Application.Abstractions;
 using BuildMind.Application.Features.Planning;
 using BuildMind.Application.Features.Survey.Abstractions;
 using BuildMind.Infrastructure.Persistence.Repositories.Planning;
@@ -81,7 +82,7 @@ internal sealed class SurveyStorageReconciler(BuildMindDbContext context, IConfi
     }
 }
 
-internal sealed class MySqlSurveyReviewStore(BuildMindDbContext context, TransactionRunner transactions) : ISurveyReviewStore
+internal sealed class MySqlSurveyReviewStore(BuildMindDbContext context, TransactionRunner transactions, ICurrentUser? currentUser = null) : ISurveyReviewStore
 {
     private static readonly System.Text.Json.JsonSerializerOptions Json = new(System.Text.Json.JsonSerializerDefaults.Web);
 
@@ -106,5 +107,5 @@ internal sealed class MySqlSurveyReviewStore(BuildMindDbContext context, Transac
             try { await context.SaveChangesAsync(inner).ConfigureAwait(false); }
             catch (DbUpdateException) { return ProtectedWriteStatus.Conflict; } // unique (extraction, version)
             return ProtectedWriteStatus.Written;
-        }, token);
+        }, token, currentUser?.TokenVersion);
 }

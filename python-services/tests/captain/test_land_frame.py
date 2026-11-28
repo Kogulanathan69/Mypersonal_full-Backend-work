@@ -100,4 +100,36 @@ def test_golden_digest_for_cross_runtime_parity():
     assert geometry_digest("EPSG:5235", GOLDEN_ANCHOR, GOLDEN_RING) == GOLDEN_DIGEST
 
 
+def test_projected_anchor_shift_preserves_parent_edge_lineage():
+    # Moving/splitting an edge near the bottom-left shifts the floored projected anchor (500123, 500456) -> (500121, 500454).
+    # Unedited edges and split children on the shifted anchor must still preserve their parentEdgeId.
+    ring = [[500123.7, 500456.2], [500141.3, 500456.2], [500141.3, 500470.9], [500123.7, 500470.9]]
+    before = build_frame("EPSG:5235", None, None, ring)
+    previous = [{"edgeId": e["edgeId"], "start": e["start"], "end": e["end"]} for e in before["edges"]]
+    shifted = [[500121.4, 500454.3], [500141.3, 500456.2], [500141.3, 500463.0], [500141.3, 500470.9], [500123.7, 500470.9]]
+    after = build_frame(
+        "EPSG:5235", None, None, shifted,
+        previous_edges=previous,
+        previous_crs=before["frame"]["crs"],
+        previous_anchor=before["frame"]["anchor"],
+    )
+    assert before["frame"]["anchor"] == [500123, 500456]
+    assert after["frame"]["anchor"] == [500121, 500454]
+
+    top_prev = next(e["edgeId"] for e in before["edges"] if abs(e["start"][1] - e["end"][1]) < 1e-6 and e["start"][1] > 10)
+    top_after = next(e for e in after["edges"] if abs(e["start"][1] - e["end"][1]) < 1e-6 and e["start"][1] > 15)
+    assert top_after["parentEdgeId"] == top_prev
+
+    right_prev = next(e["edgeId"] for e in before["edges"] if abs(e["start"][0] - e["end"][0]) < 1e-6 and e["start"][0] > 10)
+    right_children = [e for e in after["edges"] if abs(e["start"][0] - e["end"][0]) < 1e-6 and e["start"][0] > 15]
+    assert len(right_children) == 2 and all(c["parentEdgeId"] == right_prev for c in right_children)
+
+
+def test_different_previous_crs_disables_cross_crs_lineage():
+    before = build_frame("LOCAL", "m", None, square(0, 0, 10))
+    previous = [{"edgeId": e["edgeId"], "start": e["start"], "end": e["end"]} for e in before["edges"]]
+    after = build_frame("LOCAL", "m", None, square(0, 0, 10), previous_edges=previous, previous_crs="EPSG:5235", previous_anchor=[0, 0])
+    assert all(e["parentEdgeId"] is None for e in after["edges"])
+
+
 GOLDEN_DIGEST = "c8293eff3a26fb435e77c5e28da5da25f821fb5bfb8ed019bcaf7aa0a60922a4"

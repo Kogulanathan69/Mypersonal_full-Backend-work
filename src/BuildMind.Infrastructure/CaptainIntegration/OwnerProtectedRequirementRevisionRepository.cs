@@ -49,7 +49,7 @@ internal sealed class OwnerProtectedRequirementRevisionRepository(
             return new RequirementSaveResult(RequirementSaveStatus.ProjectNotFound);
 
         return await inner.TrySaveAuthorizedAtomicallyAsync(
-            actor, snapshot.Version.Value, expectedRevisionId, proposedRevision, cancellationToken)
+            actor, snapshot.Version.Value, expectedRevisionId, proposedRevision, cancellationToken, currentUser.TokenVersion)
             .ConfigureAwait(false);
     }
 }
