@@ -1,0 +1,11 @@
+import { chromium } from 'playwright';
+import { writeFile } from 'node:fs/promises';
+import path from 'node:path';
+import { fileURLToPath } from 'node:url';
+const here=path.dirname(fileURLToPath(import.meta.url));
+const browser=await chromium.launch({headless:true,executablePath:'C:/Program Files/Google/Chrome/Application/chrome.exe'});
+const page=await browser.newPage({viewport:{width:640,height:360}});
+await page.goto('http://127.0.0.1:4310/asset-production/cinematic-v2/prototype/?shot=SHOT-05&mode=material&quality=low');
+await page.waitForFunction(()=>document.documentElement.dataset.ready==='true',{timeout:15000});
+const result=await page.evaluate(()=>{const source=document.querySelector('canvas');const c=document.createElement('canvas');c.width=320;c.height=180;c.getContext('2d').drawImage(source,0,0,c.width,c.height);const test=(mime,quality)=>{const value=c.toDataURL(mime,quality);return {requested:mime,actual:value.slice(5,value.indexOf(';')),encodedBytesApprox:Math.round((value.length-value.indexOf(',')-1)*.75)};};return {png:test('image/png'),jpeg:test('image/jpeg',.82),webp:test('image/webp',.82)};});
+await browser.close();await writeFile(path.join(here,'captures','format-probe.json'),JSON.stringify(result,null,2));console.log(JSON.stringify(result,null,2));

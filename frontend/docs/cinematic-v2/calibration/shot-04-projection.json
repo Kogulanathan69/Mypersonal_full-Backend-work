@@ -1,0 +1,227 @@
+{
+  "generatedAt": "2026-11-27T09:56:35.876Z",
+  "shot": "SHOT-04",
+  "frame": [
+    640,
+    360
+  ],
+  "sensorFit": "HORIZONTAL",
+  "sensorWidthMm": 36,
+  "verticalFovDegrees": 32.26880217111643,
+  "landmarkCount": 12,
+  "rmsDeviationPixels": 3.8701213228781695e-14,
+  "maximumDeviationPixels": 1.1457157353758233e-13,
+  "normalizedRms": 5.270473548007362e-17,
+  "acceptance": {
+    "rmsPixels": 2,
+    "maximumPixels": 4,
+    "mathematicalProjectionPass": true
+  },
+  "limitation": "Projection-matrix equivalence only; it does not establish rendered silhouette alignment.",
+  "landmarks": [
+    {
+      "id": "lower-nw",
+      "source": [
+        -8.6,
+        3.25,
+        -5.1
+      ],
+      "three": [
+        114.35906215761912,
+        177.90402771611355
+      ],
+      "blender": [
+        114.35906215761909,
+        177.90402771611355
+      ],
+      "deviationPixels": 2.842170943040401e-14
+    },
+    {
+      "id": "lower-ne",
+      "source": [
+        8.6,
+        3.25,
+        -5.1
+      ],
+      "three": [
+        357.3899138086379,
+        138.72502537577083
+      ],
+      "blender": [
+        357.3899138086379,
+        138.72502537577083
+      ],
+      "deviationPixels": 0
+    },
+    {
+      "id": "lower-se",
+      "source": [
+        8.6,
+        3.25,
+        5.6
+      ],
+      "three": [
+        504.8486326438808,
+        159.86223200650065
+      ],
+      "blender": [
+        504.8486326438808,
+        159.86223200650065
+      ],
+      "deviationPixels": 0
+    },
+    {
+      "id": "lower-sw",
+      "source": [
+        -8.6,
+        3.25,
+        5.6
+      ],
+      "three": [
+        259.7982693518103,
+        223.68763477617514
+      ],
+      "blender": [
+        259.7982693518103,
+        223.68763477617517
+      ],
+      "deviationPixels": 2.842170943040401e-14
+    },
+    {
+      "id": "upper-nw",
+      "source": [
+        -4.2,
+        6.55,
+        -4.6
+      ],
+      "three": [
+        196.25889075253235,
+        102.09592619856133
+      ],
+      "blender": [
+        196.2588907525323,
+        102.09592619856133
+      ],
+      "deviationPixels": 5.684341886080802e-14
+    },
+    {
+      "id": "upper-ne",
+      "source": [
+        10.8,
+        6.55,
+        -4.6
+      ],
+      "three": [
+        385.50343060465667,
+        87.15469299374436
+      ],
+      "blender": [
+        385.50343060465667,
+        87.15469299374436
+      ],
+      "deviationPixels": 0
+    },
+    {
+      "id": "upper-se",
+      "source": [
+        10.8,
+        6.55,
+        5.4
+      ],
+      "three": [
+        525.1637331129285,
+        96.12587010766805
+      ],
+      "blender": [
+        525.1637331129284,
+        96.12587010766806
+      ],
+      "deviationPixels": 1.1457157353758233e-13
+    },
+    {
+      "id": "upper-sw",
+      "source": [
+        -4.2,
+        6.55,
+        5.4
+      ],
+      "three": [
+        341.650483750169,
+        119.10611709050173
+      ],
+      "blender": [
+        341.650483750169,
+        119.10611709050173
+      ],
+      "deviationPixels": 0
+    },
+    {
+      "id": "footprint-nw",
+      "source": [
+        -8,
+        0,
+        -4.5
+      ],
+      "three": [
+        136.77010154915942,
+        243.7278656963995
+      ],
+      "blender": [
+        136.77010154915942,
+        243.7278656963995
+      ],
+      "deviationPixels": 0
+    },
+    {
+      "id": "footprint-ne",
+      "source": [
+        8,
+        0,
+        -4.5
+      ],
+      "three": [
+        357.50349365456606,
+        189.46495595092512
+      ],
+      "blender": [
+        357.50349365456606,
+        189.46495595092512
+      ],
+      "deviationPixels": 0
+    },
+    {
+      "id": "footprint-se",
+      "source": [
+        8,
+        0,
+        4.5
+      ],
+      "three": [
+        477.82140323547026,
+        215.75523311389065
+      ],
+      "blender": [
+        477.82140323547026,
+        215.75523311389065
+      ],
+      "deviationPixels": 0
+    },
+    {
+      "id": "footprint-sw",
+      "source": [
+        -8,
+        0,
+        4.5
+      ],
+      "three": [
+        255.30393959306252,
+        296.38190753007603
+      ],
+      "blender": [
+        255.30393959306252,
+        296.38190753007603
+      ],
+      "deviationPixels": 0
+    }
+  ]
+}

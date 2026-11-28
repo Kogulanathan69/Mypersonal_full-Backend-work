@@ -1,0 +1,17 @@
+{
+  "png": {
+    "requested": "image/png",
+    "actual": "image/png",
+    "encodedBytesApprox": 17967
+  },
+  "jpeg": {
+    "requested": "image/jpeg",
+    "actual": "image/jpeg",
+    "encodedBytesApprox": 5106
+  },
+  "webp": {
+    "requested": "image/webp",
+    "actual": "image/webp",
+    "encodedBytesApprox": 3228
+  }
+}

@@ -1,0 +1,154 @@
+/*
+ * BuildMind design tokens — Dark Navy + Gold.
+ * Owner: F — Foundation. This is the ONLY file allowed to contain raw colour values
+ * (enforced by `npm run check:tokens`). Everything else uses these tokens through
+ * Tailwind utilities (e.g. `bg-surface`, `text-muted`, `border-border`) or `var(--color-…)`.
+ *
+ * Colours were sampled from the 28 reference screens (see docs/design-tokens.md) and
+ * adjusted only where needed to meet WCAG 2.2 AA contrast (verified by `npm run check:contrast`).
+ */
+@theme {
+  /* Remove Tailwind's default palette so only BuildMind tokens can be used. */
+  --color-*: initial;
+
+  /* Brand scale */
+  --color-navy-975: #030c1c;
+  --color-navy-950: #04142c;
+  --color-navy-900: #0a1e38;
+  --color-navy-800: #102843;
+  --color-navy-700: #1e3858;
+  --color-navy-500: #647c9f;
+  --color-gold-300: #fdd86a;
+  --color-gold-400: #fdcb3a;
+  --color-gold-500: #fcbc04;
+  --color-gold-600: #d99f00;
+  --color-ivory-50: #f5f5f2;
+  --color-slate-300: #bcc0cb;
+  --color-slate-400: #97a0b2;
+
+  /* Semantic roles — use these in components */
+  --color-bg: var(--color-navy-950);
+  --color-bg-deep: var(--color-navy-975);
+  --color-surface: var(--color-navy-900);
+  --color-surface-raised: var(--color-navy-800);
+  --color-border: var(--color-navy-700);
+  --color-border-strong: var(--color-navy-500);
+  --color-accent: var(--color-gold-500);
+  --color-accent-hover: var(--color-gold-400);
+  --color-accent-soft: var(--color-gold-300);
+  --color-accent-strong: var(--color-gold-600);
+  --color-on-accent: var(--color-navy-950);
+  --color-text: var(--color-ivory-50);
+  --color-muted: var(--color-slate-300);
+  --color-subtle: var(--color-slate-400);
+  --color-focus: var(--color-gold-300);
+
+  /* Status */
+  --color-success: #22c17a;
+  --color-warning: #f59a3c;
+  --color-danger: #f26b61;
+  --color-info: #7ea8f0;
+
+  /* 2D drawing surface (plan paper) */
+  --color-paper: #f7f4ee;
+  --color-ink: #0b1626;
+
+  /* Utility */
+  --color-transparent: transparent;
+  --color-current: currentColor;
+  --color-black: #000000;
+  --color-white: #ffffff;
+
+  /* Typography */
+  --font-sans:
+    'Poppins', ui-sans-serif, system-ui, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+  --font-mono: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+
+  /* Radius */
+  --radius-sm: 0.375rem;
+  --radius-md: 0.625rem;
+  --radius-lg: 0.875rem;
+  --radius-xl: 1.25rem;
+  --radius-pill: 9999px;
+
+  /* Elevation (colour derived from tokens, no raw values) */
+  --shadow-card:
+    0 1px 2px color-mix(in srgb, var(--color-black) 40%, transparent),
+    0 8px 24px color-mix(in srgb, var(--color-black) 35%, transparent);
+  --shadow-glow:
+    0 0 0 1px color-mix(in srgb, var(--color-gold-500) 55%, transparent),
+    0 0 24px color-mix(in srgb, var(--color-gold-500) 22%, transparent);
+
+  /* Motion */
+  --ease-standard: cubic-bezier(0.2, 0, 0, 1);
+  --duration-fast: 120ms;
+  --duration-base: 200ms;
+
+  /* Breakpoints (mobile-first) */
+  --breakpoint-sm: 40rem; /* 640px */
+  --breakpoint-md: 48rem; /* 768px */
+  --breakpoint-lg: 64rem; /* 1024px */
+  --breakpoint-xl: 80rem; /* 1280px */
+}
+
+/*
+ * Cinematic marketing theme — PUBLIC HOME PAGE ONLY (scoped via the `mk-` prefix).
+ * The authenticated portals keep the Dark Navy + Gold roles above.
+ * `static` makes Tailwind always emit these variables, because the Three.js scene reads them
+ * at runtime with getComputedStyle (so no colour values are hard-coded in TypeScript).
+ */
+@theme static {
+  /* Cinematic V2: Survey Nocturne */
+  --color-mk-cinema: #071015;
+  --color-mk-mineral: #10232a;
+  --color-mk-blueprint: #83c5e5;
+  --color-mk-limestone: #d9d2c5;
+  --color-mk-aperture: #e8b66a;
+
+  /* Cinematic V2: Tropical Material Journal */
+  --color-mk-paper: #f3eee7;
+  --color-mk-paper-raised: #fbf8f1;
+  --color-mk-ink: #222321;
+  --color-mk-ink-muted: #62645f;
+  --color-mk-paper-line: #c8c1b5;
+  --color-mk-charcoal: #101719;
+  --color-mk-charcoal-2: #151d1f;
+  --color-mk-charcoal-surface: #1c2426;
+  --color-mk-champagne: #e8b66a;
+  --color-mk-chalk: #f5f1e8;
+  --color-mk-silver: #b5bcbc;
+  --color-mk-charcoal-line: #303a3c;
+
+  /* Existing public utility aliases. These can be remapped inside an editorial section. */
+  --color-mk-navy: var(--color-mk-cinema);
+  --color-mk-surface: var(--color-mk-mineral);
+  --color-mk-surface-2: #0d1e24;
+  --color-mk-line: color-mix(in srgb, var(--color-mk-blueprint) 24%, var(--color-mk-mineral));
+  --color-mk-cyan: var(--color-mk-blueprint);
+  --color-mk-white: var(--color-ivory-50);
+  --color-mk-muted: var(--color-slate-300);
+  --color-mk-gold: var(--color-mk-aperture);
+
+  /* Marketing type: an editorial serif for the public story, Poppins for controls and copy. */
+  --font-mk-display: 'Iowan Old Style', 'Baskerville', 'Times New Roman', serif;
+  --font-mk-body: 'Poppins', ui-sans-serif, system-ui, sans-serif;
+  --spacing-mk-gutter: clamp(1.25rem, 4vw, 4rem);
+  --spacing-mk-section: clamp(5rem, 10vw, 9rem);
+  --container-mk-copy: 42rem;
+  --container-mk-content: 80rem;
+  --container-mk-wide: 96rem;
+
+  /* 3D scene materials (illustrative house model) */
+  --color-scene-ground: #26362c;
+  --color-scene-platform: #1a2530;
+  --color-scene-concrete: #d4d0c8;
+  --color-scene-concrete-dark: #8f8b85;
+  --color-scene-wood: #a38b72;
+  --color-scene-glass: #8fb8c8;
+  --color-scene-foliage: #3f6e4b;
+  --color-scene-foliage-light: #5c8f62;
+  --color-scene-trunk: #5a4030;
+  --color-scene-water: #3c8ea6;
+  --color-scene-warm-light: #ffd9a0;
+  --color-scene-stone: #b9b2a5;
+}

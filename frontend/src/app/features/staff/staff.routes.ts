@@ -1,0 +1,1 @@
+import{Routes}from'@angular/router';export const STAFF_ROUTES:Routes=[{path:'',loadComponent:()=>import('./staff-page').then(m=>m.StaffPage),data:{section:'overview'}},{path:'tasks',loadComponent:()=>import('./staff-page').then(m=>m.StaffPage),data:{section:'tasks'}},{path:'proposals',loadComponent:()=>import('./staff-page').then(m=>m.StaffPage),data:{section:'proposals'}}];

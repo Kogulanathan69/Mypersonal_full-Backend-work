@@ -1,0 +1,15 @@
+{
+  "schemaVersion": 1,
+  "geometryVersion": "BM-CV2-RES-001",
+  "shots": [
+    {"id":"SHOT-01","name":"Survey registration","position":[-6,35,35],"target":[-13,0,3],"lensMm":38,"aspect":"16:9","master":[1920,1080],"scene":1,"lighting":"technical-neutral","crop":"Keep parcel vertices inside central 80%."},
+    {"id":"SHOT-02","name":"Blueprint registration","position":[1,33,7],"target":[0,0,0],"lensMm":45,"aspect":"16:9","master":[1920,1080],"scene":2,"lighting":"technical-neutral","crop":"Footprint centered; retain dimension space."},
+    {"id":"SHOT-03","name":"Wireframe registration","position":[25,15,24],"target":[0,2.2,0],"lensMm":38,"aspect":"16:9","master":[1920,1080],"scene":3,"lighting":"technical-neutral","crop":"Preserve roof and parcel contact."},
+    {"id":"SHOT-04","name":"Material threshold","position":[-22,9.5,22],"target":[0,2.6,0],"lensMm":35,"aspect":"16:9","master":[1920,1080],"scene":4,"lighting":"late-afternoon","crop":"Locked transform shared by wireframe and material passes."},
+    {"id":"SHOT-05","name":"Exterior hero","position":[-13,4.6,21],"target":[0.5,2.8,0],"lensMm":32,"aspect":"16:9","master":[2400,1350],"scene":5,"lighting":"late-afternoon-to-blue-hour","crop":"16:9 desktop and 4:5 mobile safe around verandah and upper screen."},
+    {"id":"SHOT-06","name":"Exterior approach","position":[2.5,1.65,13],"target":[2.5,1.8,3.2],"lensMm":35,"aspect":"16:9","master":[1920,1080],"scene":5,"lighting":"late-afternoon","crop":"Path and entrance remain legible in portrait crop."},
+    {"id":"SHOT-07","name":"Interior reveal","position":[-4.8,1.5,-2.6],"target":[-4.2,1.45,2.2],"lensMm":26,"aspect":"16:9","master":[1920,1080],"scene":6,"lighting":"warm-interior-plus-daylight","crop":"Living room glazing and verandah establish continuity."},
+    {"id":"SHOT-08","name":"Interior spatial journey","position":[-6.2,1.5,-2.7],"target":[-3.8,1.45,2.0],"endPosition":[-3.8,1.5,-1.4],"endTarget":[-3.0,1.45,2.4],"lensMm":26,"aspect":"16:9","master":[1920,1080],"scene":6,"lighting":"warm-interior-plus-blue-hour","crop":"Forward move only; no free-look."},
+    {"id":"SHOT-09","name":"Editorial transition","position":[-10,3.4,8],"target":[-3,2.5,1],"lensMm":50,"aspect":"16:9","master":[1920,1080],"scene":7,"lighting":"soft-material-detail","crop":"Roof edge or timber screen forms the transition line."}
+  ]
+}
