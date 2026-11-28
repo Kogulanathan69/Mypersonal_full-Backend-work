@@ -14,7 +14,7 @@ command -v docker >/dev/null 2>&1 || {
     exit 1
 }
 
-docker compose version
+docker compose version >&2
 
 sample_file="$(find "$ROOT" -type f \
     -name requirement-catalogue.synthetic.json \
@@ -36,7 +36,7 @@ do
         echo "REQUIRED_SAMPLE_MISSING: $file" >&2
         exit 1
     }
-    echo "SAMPLE_FOUND: $file"
+    echo "SAMPLE_FOUND: $file" >&2
 done
 
 docker compose \
